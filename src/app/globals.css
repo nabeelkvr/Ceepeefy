@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: #0b1326;
+    color: #dae2fd;
+    font-family: 'Inter', sans-serif;
+  }
+  body {
+    overscroll-behavior: none;
+  }
+}
+
+/* Slim Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(134, 147, 151, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(134, 147, 151, 0.45);
+}
+
+/* Glassmorphism Classes directly from Stitch */
+.glass-panel {
+  background: linear-gradient(135deg, rgba(23, 31, 51, 0.75) 0%, rgba(11, 19, 38, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.glass-card {
+  background: linear-gradient(145deg, rgba(34, 42, 61, 0.5) 0%, rgba(19, 27, 46, 0.75) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Material Symbols Outlined settings */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}
+.material-symbols-outlined.fill-current {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+@keyframes slideUpFade {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUpFade 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes soundBar1 {
+  0%, 100% { height: 6px; }
+  50% { height: 20px; }
+}
+@keyframes soundBar2 {
+  0%, 100% { height: 16px; }
+  50% { height: 8px; }
+}
+@keyframes soundBar3 {
+  0%, 100% { height: 10px; }
+  50% { height: 24px; }
+}
+@keyframes soundBar4 {
+  0%, 100% { height: 22px; }
+  50% { height: 12px; }
+}
+@keyframes soundBar5 {
+  0%, 100% { height: 8px; }
+  50% { height: 18px; }
+}
+
+.animate-sound-bar-1 {
+  animation: soundBar1 0.75s ease-in-out infinite;
+}
+.animate-sound-bar-2 {
+  animation: soundBar2 0.55s ease-in-out infinite;
+}
+.animate-sound-bar-3 {
+  animation: soundBar3 0.85s ease-in-out infinite;
+}
+.animate-sound-bar-4 {
+  animation: soundBar4 0.65s ease-in-out infinite;
+}
+.animate-sound-bar-5 {
+  animation: soundBar5 0.9s ease-in-out infinite;
+}
+
