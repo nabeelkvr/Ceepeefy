@@ -3,13 +3,35 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useMusic } from "../context/MusicContext";
+import ProfileDropdown from "./ProfileDropdown";
 
 export default function Header({ onToggleMobileMenu }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { searchQuery, setSearchQuery, addRecentSearch } = useMusic();
+  const {
+    searchQuery,
+    setSearchQuery,
+    addRecentSearch,
+    user,
+    setIsSettingsModalOpen,
+  } = useMusic();
   const [localQuery, setLocalQuery] = useState(searchQuery || "");
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const inputRef = useRef(null);
+  const notificationsRef = useRef(null);
+
+  // Close notifications on outside click
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+    const handleClick = (e) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target)) {
+        setIsNotificationsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [isNotificationsOpen]);
 
   // Keep localQuery in sync with context searchQuery (e.g. if updated from Search page)
   useEffect(() => {
@@ -151,29 +173,98 @@ export default function Header({ onToggleMobileMenu }) {
       )}
 
       {/* Right: Actions and Avatar */}
-      <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-        <button
-          className="relative w-8 h-8 md:w-9 md:h-9 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/5 flex items-center justify-center text-on-surface-variant hover:text-white transition-colors"
-          title="Notifications"
-        >
-          <span className="material-symbols-outlined text-[19px]">notifications</span>
-          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary shadow-[0_0_6px_#4cd7f6]" />
-        </button>
+      <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 relative">
+        {/* Notifications */}
+        <div className="relative" ref={notificationsRef}>
+          <button
+            type="button"
+            onClick={() => {
+              setIsNotificationsOpen((prev) => !prev);
+              setIsProfileOpen(false);
+            }}
+            className="relative w-8 h-8 md:w-9 md:h-9 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/5 flex items-center justify-center text-on-surface-variant hover:text-white transition-colors cursor-pointer"
+            title="Notifications"
+          >
+            <span className="material-symbols-outlined text-[19px]">notifications</span>
+            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary shadow-[0_0_6px_#4cd7f6]" />
+          </button>
 
+          {isNotificationsOpen && (
+            <div className="absolute top-12 right-0 w-72 sm:w-80 bg-[#11192b]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.65)] z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-[18px]">notifications</span>
+                  <span className="text-xs font-bold text-white">Notifications</span>
+                </div>
+                <span className="text-[10px] text-primary font-mono">3 New</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="p-2.5 rounded-xl bg-surface-container/70 border border-white/5 flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-primary text-[18px] mt-0.5">graphic_eq</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-white">Lossless Studio Audio Active</span>
+                    <span className="text-[10px] text-outline">Streaming at bit-perfect 24-bit/192kHz master quality.</span>
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-surface-container/70 border border-white/5 flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-secondary text-[18px] mt-0.5">queue_music</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-white">New Curated Mixes</span>
+                    <span className="text-[10px] text-outline">Ambient Cyberpunk & Nocturne Beats updated today.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Audio & App Settings */}
         <button
-          className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/5 flex items-center justify-center text-on-surface-variant hover:text-white transition-colors"
-          title="Audio Settings"
+          type="button"
+          onClick={() => {
+            setIsProfileOpen(false);
+            setIsNotificationsOpen(false);
+            setIsSettingsModalOpen(true);
+          }}
+          className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/5 flex items-center justify-center text-on-surface-variant hover:text-white transition-colors cursor-pointer"
+          title="Audio & App Settings"
         >
           <span className="material-symbols-outlined text-[19px]">settings</span>
         </button>
 
-        <div
-          className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-tr from-primary to-cyan-300 p-0.5 cursor-pointer shadow-[0_0_12px_rgba(6,182,212,0.4)] hover:scale-105 transition-transform"
-          title="Curator Profile (Raees)"
-        >
-          <div className="w-full h-full rounded-full bg-surface-container-lowest flex items-center justify-center text-primary font-bold text-xs">
-            <span className="material-symbols-outlined text-[19px]">person</span>
+        {/* Profile Avatar & Dropdown */}
+        <div className="relative">
+          <div
+            onClick={() => {
+              setIsNotificationsOpen(false);
+              setIsProfileOpen((prev) => !prev);
+            }}
+            className={`w-8 h-8 md:w-9 md:h-9 rounded-full p-0.5 cursor-pointer transition-all ${
+              user
+                ? "bg-gradient-to-tr from-primary via-cyan-300 to-secondary shadow-[0_0_14px_rgba(76,215,246,0.45)] hover:scale-105"
+                : "bg-gradient-to-tr from-primary to-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.4)] hover:scale-105"
+            }`}
+            title={user ? `Profile (${user.name})` : "Profile (New to Ceepeefy)"}
+          >
+            <div className="w-full h-full rounded-full bg-surface-container-lowest flex items-center justify-center text-primary font-bold text-xs">
+              {user?.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user.name}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : user?.name ? (
+                user.name[0].toUpperCase()
+              ) : (
+                <span className="material-symbols-outlined text-[19px]">person</span>
+              )}
+            </div>
           </div>
+
+          <ProfileDropdown
+            isOpen={isProfileOpen}
+            onClose={() => setIsProfileOpen(false)}
+          />
         </div>
       </div>
     </header>

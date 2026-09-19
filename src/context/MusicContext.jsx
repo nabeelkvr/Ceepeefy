@@ -71,6 +71,7 @@ export const normalizeTrack = (track) => {
     tier: track.tier || null,
     tierReason: track.tierReason || "",
     isLocal,
+    isCloud: Boolean(track.isCloud),
     source: track.source || (isLocal ? "local-upload" : "remote"),
     fileName: track.fileName || "",
     fileSize: track.fileSize || 0,
@@ -124,103 +125,258 @@ export const MusicProvider = ({ children }) => {
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
   const [currentDevice, setCurrentDevice] = useState("Studio Monitors (Analog DAC)");
 
+  // Modals for Settings & Auth
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState("signup"); // 'signup' | 'login'
+
+  const openAuthModal = (tab = "signup") => {
+    setAuthModalTab(tab);
+    setIsAuthModalOpen(true);
+  };
+
+  // User Authentication State (Strict Personal Instance: nabeeyl)
+  const [user, setUser] = useState(null);
+
+  const login = (userData) => {
+    const userObj = {
+      username: "nabeeyl",
+      name: userData?.name || "nabeeyl",
+      email: userData?.email || "nabeeyl@ceepeefy.audio",
+      plan: "Owner / Studio Master",
+      isLoggedIn: true,
+      activeUser: "nabeeyl",
+      joinedAt: userData?.joinedAt || "2024-01-15",
+    };
+    setUser(userObj);
+
+    try {
+      localStorage.setItem("isLoggedIn", "true");
+      localStorage.setItem("activeUser", "nabeeyl");
+      localStorage.setItem("ceepeefy_user", JSON.stringify(userObj));
+
+      // Restore or initialize account-bound storage userData_nabeeyl
+      const accountDataStr = localStorage.getItem("userData_nabeeyl");
+      if (accountDataStr) {
+        const accountData = JSON.parse(accountDataStr);
+        if (Array.isArray(accountData.likedSongIds)) setLikedSongIds(accountData.likedSongIds);
+        if (accountData.likedSongsMap && typeof accountData.likedSongsMap === "object") {
+          setLikedSongsMap(accountData.likedSongsMap);
+        }
+        if (Array.isArray(accountData.customPlaylists)) setCustomPlaylists(accountData.customPlaylists);
+        if (Array.isArray(accountData.recentlyPlayedTracks)) {
+          const valid = accountData.recentlyPlayedTracks.map(normalizeTrack).filter(Boolean);
+          setRecentlyPlayedTracks(valid);
+          setRecentlyPlayed(valid.map((t) => t.id));
+        }
+        if (Array.isArray(accountData.selfMixes)) setSelfMixes(accountData.selfMixes);
+      } else {
+        const legacyLiked = JSON.parse(localStorage.getItem("nocturne_liked") || "[]");
+        const legacyLikedMap = JSON.parse(localStorage.getItem("nocturne_liked_map") || "{}");
+        const legacyPlaylists = JSON.parse(localStorage.getItem("nocturne_custom_playlists") || "[]");
+        const legacyRecents = JSON.parse(localStorage.getItem("nocturne_recent_tracks") || "[]");
+
+        const initialAccountData = {
+          likedSongIds: Array.isArray(legacyLiked) && legacyLiked.length > 0
+            ? legacyLiked
+            : ["track-midnight-pulse", "track-shadows-in-blue"],
+          likedSongsMap: legacyLikedMap,
+          customPlaylists: Array.isArray(legacyPlaylists) ? legacyPlaylists : [],
+          recentlyPlayedTracks: Array.isArray(legacyRecents) && legacyRecents.length > 0
+            ? legacyRecents.map(normalizeTrack).filter(Boolean)
+            : NOCTURNE_TRACKS.slice(0, 5),
+          recentlyPlayed: Array.isArray(legacyRecents) && legacyRecents.length > 0
+            ? legacyRecents.map((t) => t.id)
+            : ["track-midnight-pulse", "track-shadows-in-blue"],
+          selfMixes: [],
+        };
+        localStorage.setItem("userData_nabeeyl", JSON.stringify(initialAccountData));
+        setLikedSongIds(initialAccountData.likedSongIds);
+        setLikedSongsMap(initialAccountData.likedSongsMap);
+        setCustomPlaylists(initialAccountData.customPlaylists);
+        setRecentlyPlayedTracks(initialAccountData.recentlyPlayedTracks);
+        setRecentlyPlayed(initialAccountData.recentlyPlayed);
+      }
+    } catch (e) {
+      console.warn("Login persistence error:", e);
+    }
+    return userObj;
+  };
+
+  const signUp = () => {
+    return null;
+  };
+
+  const logout = () => {
+    setUser(null);
+    setLikedSongIds([]);
+    setLikedSongsMap({});
+    setCustomPlaylists([]);
+    setRecentlyPlayedTracks([]);
+    setRecentlyPlayed([]);
+    try {
+      localStorage.removeItem("isLoggedIn");
+      localStorage.removeItem("activeUser");
+      localStorage.removeItem("ceepeefy_user");
+    } catch (e) {}
+  };
+
+  // Audiophile App & Playback Settings
+  const [settings, setSettings] = useState({
+    audioQuality: "lossless", // "lossless" | "high" | "normal" | "saver"
+    normalizeVolume: true,
+    spatialAudio: true,
+    bitPerfect: true,
+    crossfade: 4,
+    gapless: true,
+    automix: true,
+    themeAccent: "cyan",
+    showLiveLyrics: true,
+    ambientGlow: true,
+  });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ceepeefy_settings");
+      if (saved) {
+        setSettings((prev) => ({ ...prev, ...JSON.parse(saved) }));
+      }
+    } catch (e) {
+      console.warn("Could not load settings from localStorage", e);
+    }
+  }, []);
+
+  const updateSetting = (key, val) => {
+    setSettings((prev) => {
+      const updated = { ...prev, [key]: val };
+      try {
+        localStorage.setItem("ceepeefy_settings", JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
   // Queue & Tracklist
   const [queue, setQueue] = useState([]);
   const [currentTracklist, setCurrentTracklist] = useState(NOCTURNE_TRACKS);
 
-  // Liked songs persistence
-  const [likedSongIds, setLikedSongIds] = useState([
-    "track-midnight-pulse",
-    "track-shadows-in-blue"
-  ]);
-  const [likedSongsMap, setLikedSongsMap] = useState(() => {
-    const initial = {};
-    for (const t of NOCTURNE_TRACKS) {
-      initial[t.id] = t;
-    }
-    return initial;
-  });
-
-  // Recently played history persistence (full track objects + legacy ID list)
-  const [recentlyPlayedTracks, setRecentlyPlayedTracks] = useState(() => {
-    return NOCTURNE_TRACKS.slice(0, 10);
-  });
-
-  const [recentlyPlayed, setRecentlyPlayed] = useState([
-    "track-midnight-pulse",
-    "track-aether-resonance",
-    "track-shadows-in-blue",
-    "track-kuroshio-current",
-    "track-continuum-shift"
-  ]);
-
-  // Custom user-created playlists & self mixes persistence
+  // Account-bound features: accessible only when logged in
+  const [likedSongIds, setLikedSongIds] = useState([]);
+  const [likedSongsMap, setLikedSongsMap] = useState({});
+  const [recentlyPlayedTracks, setRecentlyPlayedTracks] = useState([]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState([]);
   const [customPlaylists, setCustomPlaylists] = useState([]);
   const [selfMixes, setSelfMixes] = useState([]);
   const hasLoadedStorageRef = useRef(false);
 
+  // Central Account-Bound Data Persister (userData_nabeeyl)
+  const persistAccountData = (overrides = {}) => {
+    if (typeof window === "undefined") return;
+    try {
+      const storedLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+      const storedActiveUser = localStorage.getItem("activeUser") || "nabeeyl";
+      if (!storedLoggedIn || storedActiveUser !== "nabeeyl") return;
+
+      const currentStored = JSON.parse(localStorage.getItem("userData_nabeeyl") || "{}");
+      const nextLikedIds = overrides.likedSongIds ?? likedSongIds;
+      const nextLikedMap = overrides.likedSongsMap ?? likedSongsMap;
+      const nextPlaylists = overrides.customPlaylists ?? customPlaylists;
+      const nextRecents = overrides.recentlyPlayedTracks ?? recentlyPlayedTracks;
+      const nextMixes = overrides.selfMixes ?? selfMixes;
+
+      const accountData = {
+        ...currentStored,
+        likedSongIds: nextLikedIds,
+        likedSongsMap: nextLikedMap,
+        customPlaylists: nextPlaylists,
+        recentlyPlayedTracks: nextRecents,
+        recentlyPlayed: nextRecents.map((t) => t.id),
+        selfMixes: nextMixes,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      localStorage.setItem("userData_nabeeyl", JSON.stringify(accountData));
+      // Also update legacy fallback keys
+      localStorage.setItem("nocturne_liked", JSON.stringify(nextLikedIds));
+      localStorage.setItem("nocturne_liked_map", JSON.stringify(nextLikedMap));
+      localStorage.setItem("nocturne_custom_playlists", JSON.stringify(nextPlaylists));
+      localStorage.setItem("nocturne_recent_tracks", JSON.stringify(nextRecents));
+    } catch (e) {
+      console.warn("Failed to write to userData_nabeeyl:", e);
+    }
+  };
+
   // Safely hydrate from localStorage on client mount (prevents SSR hydration mismatch)
   useEffect(() => {
     try {
-      const savedCustom = localStorage.getItem("nocturne_custom_playlists");
-      if (savedCustom) {
-        const parsed = JSON.parse(savedCustom);
-        if (Array.isArray(parsed)) setCustomPlaylists(parsed);
-      }
+      const storedLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+      const storedActiveUser = localStorage.getItem("activeUser") || "nabeeyl";
 
-      const savedMixes = localStorage.getItem("nocturne_self_mixes");
-      if (savedMixes) {
-        const parsed = JSON.parse(savedMixes);
-        if (Array.isArray(parsed)) setSelfMixes(parsed);
-      }
+      if (storedLoggedIn && storedActiveUser === "nabeeyl") {
+        const savedUserStr = localStorage.getItem("ceepeefy_user");
+        const userObj = savedUserStr
+          ? JSON.parse(savedUserStr)
+          : {
+              username: "nabeeyl",
+              name: "nabeeyl",
+              email: "nabeeyl@ceepeefy.audio",
+              plan: "Owner / Studio Master",
+              isLoggedIn: true,
+              activeUser: "nabeeyl",
+            };
+        setUser(userObj);
 
-      const savedLiked = localStorage.getItem("nocturne_liked");
-      if (savedLiked) {
-        const parsed = JSON.parse(savedLiked);
-        if (Array.isArray(parsed)) setLikedSongIds(parsed);
-      }
-
-      const savedLikedMap = localStorage.getItem("nocturne_liked_map");
-      if (savedLikedMap) {
-        const parsedMap = JSON.parse(savedLikedMap);
-        if (parsedMap && typeof parsedMap === "object") {
-          setLikedSongsMap((prev) => ({ ...prev, ...parsedMap }));
-        }
-      }
-
-      // Hydrate recently played tracks (full metadata)
-      const savedRecentTracks = localStorage.getItem("nocturne_recent_tracks");
-      if (savedRecentTracks) {
-        try {
-          const parsed = JSON.parse(savedRecentTracks);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const valid = parsed.map(normalizeTrack).filter(Boolean);
-            if (valid.length > 0) {
-              setRecentlyPlayedTracks(valid);
-              setRecentlyPlayed(valid.map((t) => t.id));
-            }
+        // Hydrate from userData_nabeeyl
+        const accountDataStr = localStorage.getItem(`userData_${storedActiveUser}`);
+        if (accountDataStr) {
+          const accountData = JSON.parse(accountDataStr);
+          if (Array.isArray(accountData.likedSongIds)) setLikedSongIds(accountData.likedSongIds);
+          if (accountData.likedSongsMap && typeof accountData.likedSongsMap === "object") {
+            setLikedSongsMap(accountData.likedSongsMap);
           }
-        } catch (e) {
-          console.warn("Failed to load saved recent tracks from localStorage:", e);
+          if (Array.isArray(accountData.customPlaylists)) setCustomPlaylists(accountData.customPlaylists);
+          if (Array.isArray(accountData.recentlyPlayedTracks)) {
+            const valid = accountData.recentlyPlayedTracks.map(normalizeTrack).filter(Boolean);
+            setRecentlyPlayedTracks(valid);
+            setRecentlyPlayed(valid.map((t) => t.id));
+          }
+          if (Array.isArray(accountData.selfMixes)) setSelfMixes(accountData.selfMixes);
+        } else {
+          // Migrate any existing unmigrated data so nothing is lost
+          const legacyLiked = JSON.parse(localStorage.getItem("nocturne_liked") || "[]");
+          const legacyLikedMap = JSON.parse(localStorage.getItem("nocturne_liked_map") || "{}");
+          const legacyPlaylists = JSON.parse(localStorage.getItem("nocturne_custom_playlists") || "[]");
+          const legacyRecents = JSON.parse(localStorage.getItem("nocturne_recent_tracks") || "[]");
+
+          const initialAccountData = {
+            likedSongIds: Array.isArray(legacyLiked) && legacyLiked.length > 0
+              ? legacyLiked
+              : ["track-midnight-pulse", "track-shadows-in-blue"],
+            likedSongsMap: legacyLikedMap,
+            customPlaylists: Array.isArray(legacyPlaylists) ? legacyPlaylists : [],
+            recentlyPlayedTracks: Array.isArray(legacyRecents) && legacyRecents.length > 0
+              ? legacyRecents.map(normalizeTrack).filter(Boolean)
+              : NOCTURNE_TRACKS.slice(0, 5),
+            recentlyPlayed: Array.isArray(legacyRecents) && legacyRecents.length > 0
+              ? legacyRecents.map((t) => t.id)
+              : ["track-midnight-pulse", "track-shadows-in-blue"],
+            selfMixes: [],
+          };
+          localStorage.setItem(`userData_${storedActiveUser}`, JSON.stringify(initialAccountData));
+          setLikedSongIds(initialAccountData.likedSongIds);
+          setLikedSongsMap(initialAccountData.likedSongsMap);
+          setCustomPlaylists(initialAccountData.customPlaylists);
+          setRecentlyPlayedTracks(initialAccountData.recentlyPlayedTracks);
+          setRecentlyPlayed(initialAccountData.recentlyPlayed);
         }
       } else {
-        const savedRecents = localStorage.getItem("nocturne_recents");
-        if (savedRecents) {
-          try {
-            const parsed = JSON.parse(savedRecents);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              const matched = parsed.map((item) => {
-                if (typeof item === "object" && item !== null) return normalizeTrack(item);
-                const found = NOCTURNE_TRACKS.find((t) => String(t.id) === String(item));
-                return found ? normalizeTrack(found) : null;
-              }).filter(Boolean);
-              if (matched.length > 0) {
-                setRecentlyPlayedTracks(matched);
-                setRecentlyPlayed(matched.map((t) => t.id));
-              }
-            }
-          } catch (e) { }
-        }
+        // Logged out: features are locked, personal arrays remain empty
+        setUser(null);
+        setLikedSongIds([]);
+        setLikedSongsMap({});
+        setCustomPlaylists([]);
+        setRecentlyPlayedTracks([]);
+        setRecentlyPlayed([]);
       }
 
       const savedSearches = localStorage.getItem("nocturne_recent_searches");
@@ -235,7 +391,7 @@ export const MusicProvider = ({ children }) => {
       if (savedAutoplay !== null) {
         try {
           setIsAutoplayEnabled(Boolean(JSON.parse(savedAutoplay)));
-        } catch { }
+        } catch {}
       }
     } catch (e) {
       console.warn("Failed to load saved state from localStorage:", e);
@@ -244,32 +400,19 @@ export const MusicProvider = ({ children }) => {
     }
   }, []);
 
-  // Persist custom playlists
+  // Automatically update persistent storage (userData_nabeeyl) whenever state changes while logged in
   useEffect(() => {
     if (!hasLoadedStorageRef.current || typeof window === "undefined") return;
-    try {
-      localStorage.setItem("nocturne_custom_playlists", JSON.stringify(customPlaylists));
-    } catch { }
-  }, [customPlaylists]);
+    if (!user || user.username !== "nabeeyl") return;
 
-  // Persist self mixes
-  useEffect(() => {
-    if (!hasLoadedStorageRef.current || typeof window === "undefined") return;
-    try {
-      localStorage.setItem("nocturne_self_mixes", JSON.stringify(selfMixes));
-    } catch { }
-  }, [selfMixes]);
-
-  // Persist recently played tracks
-  useEffect(() => {
-    if (!hasLoadedStorageRef.current || typeof window === "undefined") return;
-    try {
-      localStorage.setItem("nocturne_recent_tracks", JSON.stringify(recentlyPlayedTracks));
-      localStorage.setItem("nocturne_recents", JSON.stringify(recentlyPlayedTracks.map((t) => t.id)));
-    } catch { }
-  }, [recentlyPlayedTracks]);
+    persistAccountData();
+  }, [likedSongIds, likedSongsMap, customPlaylists, recentlyPlayedTracks, selfMixes, user]);
 
   const createPlaylist = (title) => {
+    if (!user || user.username !== "nabeeyl") {
+      openAuthModal("login");
+      return null;
+    }
     const count = customPlaylists.length + 1;
     const cleanTitle = title?.trim() || `My Playlist #${count}`;
     const id = `playlist-custom-${Date.now()}`;
@@ -1243,6 +1386,10 @@ export const MusicProvider = ({ children }) => {
 
   // Toggle Like (Accepts track object or trackId)
   const toggleLike = (trackOrId, optionalTrackObj) => {
+    if (!user || user.username !== "nabeeyl") {
+      openAuthModal("login");
+      return;
+    }
     let targetId = null;
     let trackObj = null;
 
@@ -1340,6 +1487,19 @@ export const MusicProvider = ({ children }) => {
         lyricsError,
         isDeviceModalOpen,
         currentDevice,
+        isSettingsModalOpen,
+        setIsSettingsModalOpen,
+        isAuthModalOpen,
+        setIsAuthModalOpen,
+        authModalTab,
+        setAuthModalTab,
+        openAuthModal,
+        user,
+        login,
+        signUp,
+        logout,
+        settings,
+        updateSetting,
         queue,
         currentTracklist,
         likedSongIds,

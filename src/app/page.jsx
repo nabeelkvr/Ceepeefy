@@ -31,6 +31,8 @@ export default function HomePage() {
     recentlyPlayedTracks,
     customPlaylists,
     selfMixes,
+    user,
+    openAuthModal,
   } = useMusic();
 
   const filterChips = [
@@ -264,6 +266,28 @@ export default function HomePage() {
           </Link>
         </div>
 
+        {!user ? (
+          <div className="p-6 rounded-2xl glass-card border border-white/5 bg-surface-container/60 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 text-center sm:text-left">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                <span className="material-symbols-outlined text-[20px]">lock</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-white">Recently Played History Locked</span>
+                <span className="text-xs text-outline">
+                  Personal listening history is preserved under your account. Log in to track and access recently played master tracks.
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => openAuthModal("login")}
+              className="px-5 py-2 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_12px_rgba(76,215,246,0.3)] hover:brightness-110 active:scale-95 transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]">login</span>
+              Log In
+            </button>
+          </div>
+        ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
           {displayRecentlyPlayed.slice(0, 5).map((track) => {
             const isCurrent = currentTrack?.id === track.id;
@@ -321,6 +345,7 @@ export default function HomePage() {
             );
           })}
         </div>
+        )}
       </section>
 
       {/* Section 2: Featured Playlists */}
@@ -347,9 +372,9 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Playlists Grid - User created playlists & self mixes displayed first */}
+        {/* Playlists Grid - User created playlists & self mixes displayed first when logged in */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
-          {[...(selfMixes || []), ...(customPlaylists || []), ...NOCTURNE_PLAYLISTS]
+          {[...(user ? (selfMixes || []) : []), ...(user ? (customPlaylists || []) : []), ...NOCTURNE_PLAYLISTS]
             .slice(0, Math.max(5, (selfMixes?.length || 0) + (customPlaylists?.length || 0) + 5))
             .map((pl) => {
               const tracks = pl.tracks || NOCTURNE_TRACKS;

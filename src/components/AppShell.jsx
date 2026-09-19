@@ -7,6 +7,8 @@ import Player from "./Player";
 import QueueDrawer from "./QueueDrawer";
 import FullLyricsPanel from "./FullLyricsPanel";
 import DeviceModal from "./DeviceModal";
+import SettingsModal from "./SettingsModal";
+import AuthModal from "./AuthModal";
 import { useMusic } from "../context/MusicContext";
 
 export default function AppShell({ children }) {
@@ -59,6 +61,8 @@ export default function AppShell({ children }) {
 
       {/* Floating Modals */}
       <DeviceModal />
+      <SettingsModal />
+      <AuthModal />
     </div>
   );
 }

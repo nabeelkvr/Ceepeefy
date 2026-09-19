@@ -16,6 +16,8 @@ export default function PlaylistsPage() {
     customPlaylists,
     createPlaylist,
     deleteCustomPlaylist,
+    user,
+    openAuthModal,
   } = useMusic();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -124,16 +126,35 @@ export default function PlaylistsPage() {
         </div>
       </div>
 
-      {/* Playlists Container: First displays 'Create New Playlist' box, then displays playlists flex left */}
+      {/* Playlists Container */}
       <div className="flex flex-wrap items-start justify-start gap-4 sm:gap-5">
-        {/* 1. First Card: 'Create New Playlist' Box */}
-        <div
-          onClick={() => {
-            setNewTitle("");
-            setShowCreateModal(true);
-          }}
-          className="w-48 sm:w-56 p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/50 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
-        >
+        {!user ? (
+          <div className="w-full py-16 flex flex-col items-center justify-center text-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-primary shadow-[0_0_20px_rgba(76,215,246,0.2)]">
+              <span className="material-symbols-outlined text-[32px]">lock</span>
+            </div>
+            <h3 className="text-lg font-bold text-white">Custom Playlists are Locked</h3>
+            <p className="text-xs text-outline max-w-sm">
+              Personal playlists and custom mixes are tied directly to your account. Please log in with your credentials to access or create playlists.
+            </p>
+            <button
+              onClick={() => openAuthModal("login")}
+              className="mt-2 px-6 py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-lg hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[16px]">login</span>
+              Log In as Owner
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* 1. First Card: 'Create New Playlist' Box */}
+            <div
+              onClick={() => {
+                setNewTitle("");
+                setShowCreateModal(true);
+              }}
+              className="w-48 sm:w-56 p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/50 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
+            >
           <div>
             {/* Aspect Square Area matching playlist cover box */}
             <div className="relative aspect-square w-full rounded-xl overflow-hidden border-2 border-dashed border-white/15 group-hover:border-primary/60 bg-surface-container-high/40 group-hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1.5 mb-3">
@@ -251,6 +272,8 @@ export default function PlaylistsPage() {
             </Link>
           );
         })}
+          </>
+        )}
       </div>
 
       {/* Creation Modal */}
