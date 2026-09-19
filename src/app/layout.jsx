@@ -1,6 +1,7 @@
 import "./globals.css";
 import { MusicProvider } from "../context/MusicContext";
 import AppShell from "../components/AppShell";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata = {
   title: "Ceepeefy — Studio Mode | Nocturne Audio",
@@ -29,6 +30,7 @@ export default function RootLayout({ children }) {
         <MusicProvider>
           <AppShell>{children}</AppShell>
         </MusicProvider>
+        <Analytics />
       </body>
     </html>
   );
