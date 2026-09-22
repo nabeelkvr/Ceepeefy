@@ -310,22 +310,7 @@ export default function Sidebar({ className = "", onClose }) {
 
           <div className="flex flex-col gap-1">
             {/* Custom User-Created Playlists */}
-            {!user ? (
-              <div
-                onClick={() => openAuthModal("login")}
-                className="flex flex-col items-center justify-center py-4 px-3 rounded-xl border border-dashed border-white/10 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-center group cursor-pointer"
-              >
-                <div className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-1.5 shadow-[0_0_12px_rgba(76,215,246,0.2)]">
-                  <span className="material-symbols-outlined text-[18px]">lock</span>
-                </div>
-                <span className="text-xs font-semibold text-white/90 group-hover:text-primary transition-colors">
-                  Log In to View Playlists
-                </span>
-                <span className="text-[10px] text-outline mt-0.5">
-                  Personal library locked
-                </span>
-              </div>
-            ) : mounted && customPlaylists && customPlaylists.length > 0 ? (
+            {mounted && customPlaylists && customPlaylists.length > 0 ? (
               customPlaylists.map((pl) => (
                 <Link
                   key={pl.id}

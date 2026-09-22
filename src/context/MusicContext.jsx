@@ -34,6 +34,14 @@ import {
   migrateLocalDataToSupabase,
 } from "../services/cloudStorageService";
 
+export const DEFAULT_MOCK_TRACK_IDS = new Set([
+  "track-midnight-pulse",
+  "track-aether-resonance",
+  "track-shadows-in-blue",
+  "track-kuroshio-current",
+  "track-continuum-shift",
+]);
+
 export const normalizeTrack = (track) => {
   if (!track) return null;
   const rawId = track.id || track._id || track.trackId;
@@ -177,8 +185,10 @@ export const MusicProvider = ({ children }) => {
         setLikedSongIds(cloudLiked.likedSongIds || []);
         setLikedSongsMap(cloudLiked.likedSongsMap || {});
       }
-      if (cloudRecents !== null && cloudRecents.length > 0) {
-        const valid = cloudRecents.map(normalizeTrack).filter(Boolean);
+      if (cloudRecents !== null) {
+        const valid = cloudRecents
+          .map(normalizeTrack)
+          .filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)));
         setRecentlyPlayedTracks(valid);
         setRecentlyPlayed(valid.map((t) => t.id));
       }
@@ -215,12 +225,15 @@ export const MusicProvider = ({ children }) => {
         }
         if (Array.isArray(accountData.customPlaylists)) setCustomPlaylists(accountData.customPlaylists);
         if (Array.isArray(accountData.recentlyPlayedTracks)) {
-          const valid = accountData.recentlyPlayedTracks.map(normalizeTrack).filter(Boolean);
+          const valid = accountData.recentlyPlayedTracks
+            .map(normalizeTrack)
+            .filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)));
           setRecentlyPlayedTracks(valid);
           setRecentlyPlayed(valid.map((t) => t.id));
         }
         if (Array.isArray(accountData.selfMixes)) setSelfMixes(accountData.selfMixes);
       } else {
+
         const legacyLiked = JSON.parse(localStorage.getItem("nocturne_liked") || "[]");
         const legacyLikedMap = JSON.parse(localStorage.getItem("nocturne_liked_map") || "{}");
         const legacyPlaylists = JSON.parse(localStorage.getItem("nocturne_custom_playlists") || "[]");
@@ -233,11 +246,11 @@ export const MusicProvider = ({ children }) => {
           likedSongsMap: legacyLikedMap,
           customPlaylists: Array.isArray(legacyPlaylists) ? legacyPlaylists : [],
           recentlyPlayedTracks: Array.isArray(legacyRecents) && legacyRecents.length > 0
-            ? legacyRecents.map(normalizeTrack).filter(Boolean)
-            : NOCTURNE_TRACKS.slice(0, 5),
+            ? legacyRecents.map(normalizeTrack).filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)))
+            : [],
           recentlyPlayed: Array.isArray(legacyRecents) && legacyRecents.length > 0
-            ? legacyRecents.map((t) => t.id)
-            : ["track-midnight-pulse", "track-shadows-in-blue"],
+            ? legacyRecents.map((t) => t.id).filter((id) => !DEFAULT_MOCK_TRACK_IDS.has(String(id)))
+            : [],
           selfMixes: [],
         };
         localStorage.setItem(accountStorageKey, JSON.stringify(initialAccountData));
@@ -391,7 +404,9 @@ export const MusicProvider = ({ children }) => {
           }
           if (Array.isArray(accountData.customPlaylists)) setCustomPlaylists(accountData.customPlaylists);
           if (Array.isArray(accountData.recentlyPlayedTracks)) {
-            const valid = accountData.recentlyPlayedTracks.map(normalizeTrack).filter(Boolean);
+            const valid = accountData.recentlyPlayedTracks
+              .map(normalizeTrack)
+              .filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)));
             setRecentlyPlayedTracks(valid);
             setRecentlyPlayed(valid.map((t) => t.id));
           }
@@ -410,11 +425,11 @@ export const MusicProvider = ({ children }) => {
             likedSongsMap: legacyLikedMap,
             customPlaylists: Array.isArray(legacyPlaylists) ? legacyPlaylists : [],
             recentlyPlayedTracks: Array.isArray(legacyRecents) && legacyRecents.length > 0
-              ? legacyRecents.map(normalizeTrack).filter(Boolean)
-              : NOCTURNE_TRACKS.slice(0, 5),
+              ? legacyRecents.map(normalizeTrack).filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)))
+              : [],
             recentlyPlayed: Array.isArray(legacyRecents) && legacyRecents.length > 0
-              ? legacyRecents.map((t) => t.id)
-              : ["track-midnight-pulse", "track-shadows-in-blue"],
+              ? legacyRecents.map((t) => t.id).filter((id) => !DEFAULT_MOCK_TRACK_IDS.has(String(id)))
+              : [],
             selfMixes: [],
           };
           localStorage.setItem(accountStorageKey, JSON.stringify(initialAccountData));
@@ -1265,6 +1280,11 @@ export const MusicProvider = ({ children }) => {
   const playTrack = async (track, tracklist = null) => {
     if (!track) return;
 
+    if (!user) {
+      openAuthModal("login");
+      return;
+    }
+
     // If clicking current track while paused, simply resume playback
     if (currentTrack?.id === track.id && !isPlaying && audioRef.current && audioRef.current.src) {
       try {
@@ -1386,6 +1406,11 @@ export const MusicProvider = ({ children }) => {
 
   // Toggle Play/Pause bound to audioRef.current.play() and audioRef.current.pause()
   const togglePlay = () => {
+    if (!user) {
+      openAuthModal("login");
+      return;
+    }
+
     if (!currentTrack) {
       if (NOCTURNE_TRACKS.length > 0) {
         playTrack(NOCTURNE_TRACKS[0]);

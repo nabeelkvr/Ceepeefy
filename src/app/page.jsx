@@ -81,8 +81,12 @@ export default function HomePage() {
   const handlePlaylistPlay = (playlist, e) => {
     e.preventDefault();
     e.stopPropagation();
-    const tracks = playlist.tracks && playlist.tracks.length > 0 ? playlist.tracks : NOCTURNE_TRACKS;
-    const firstTrack = tracks[0] || NOCTURNE_TRACKS[0];
+    const tracks = playlist.tracks && playlist.tracks.length > 0 ? playlist.tracks : [];
+    if (tracks.length === 0) {
+      router.push(`/playlist/${playlist.id}`);
+      return;
+    }
+    const firstTrack = tracks[0];
     if (currentTrack?.id === firstTrack.id) {
       togglePlay();
     } else {
@@ -90,31 +94,25 @@ export default function HomePage() {
     }
   };
 
-  // Dynamic recently played tracks: prioritizes tracks played from anywhere (search, albums, playlists)
+  // Dynamic recently played tracks: ONLY songs the user actually played
   const displayRecentlyPlayed = useMemo(() => {
-    const recents = Array.isArray(recentlyPlayedTracks) && recentlyPlayedTracks.length > 0
-      ? recentlyPlayedTracks
+    const DEFAULT_MOCK_TRACK_IDS = new Set([
+      "track-midnight-pulse",
+      "track-aether-resonance",
+      "track-shadows-in-blue",
+      "track-kuroshio-current",
+      "track-continuum-shift",
+    ]);
+
+    const recents = Array.isArray(recentlyPlayedTracks)
+      ? recentlyPlayedTracks.filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)))
       : [];
 
-    // Fallback/fill with master selection NOCTURNE_TRACKS so section is never empty
-    const seenIds = new Set(recents.map((t) => String(t.id)));
-    const seenTitles = new Set(
-      recents.map((t) => `${(t.title || "").toLowerCase().trim()}:::${(t.artist || "").toLowerCase().trim()}`)
-    );
-    const combined = [...recents];
-
-    for (const defTrack of NOCTURNE_TRACKS) {
-      const key = `${(defTrack.title || "").toLowerCase().trim()}:::${(defTrack.artist || "").toLowerCase().trim()}`;
-      if (!seenIds.has(String(defTrack.id)) && !seenTitles.has(key)) {
-        combined.push(defTrack);
-      }
-    }
-
     if (activeFilter === "All songs" || activeFilter === "Music") {
-      return combined;
+      return recents;
     }
     if (activeFilter === "Rap songs") {
-      const filtered = combined.filter((track) => {
+      const filtered = recents.filter((track) => {
         const g = (track.genre || "").toLowerCase();
         const a = (track.artist || "").toLowerCase();
         return (
@@ -126,10 +124,10 @@ export default function HomePage() {
           a.includes("eminem")
         );
       });
-      return filtered.length > 0 ? filtered : combined;
+      return filtered;
     }
     if (activeFilter === "Feel goods") {
-      const filtered = combined.filter((track) => {
+      const filtered = recents.filter((track) => {
         const g = (track.genre || "").toLowerCase();
         return (
           g === "synthwave" ||
@@ -140,17 +138,17 @@ export default function HomePage() {
           track.badge === "Master"
         );
       });
-      return filtered.length > 0 ? filtered : combined;
+      return filtered;
     }
     if (activeFilter === "Self mixes") {
-      const filtered = combined.filter((track) => {
+      const filtered = recents.filter((track) => {
         const t = (track.title || "").toLowerCase();
         const g = (track.genre || "").toLowerCase();
         return t.includes("midnight") || g === "electronic" || g === "synthwave" || track.badge === "Master";
       });
-      return filtered.length > 0 ? filtered : combined;
+      return filtered;
     }
-    return combined;
+    return recents;
   }, [recentlyPlayedTracks, activeFilter]);
 
   const artistCategories = ["Trending Now", "Malayalam", "Rap", "Hindi", "Tamil"];
@@ -255,96 +253,90 @@ export default function HomePage() {
               Recently played songs
             </h2>
           </div>
-          <Link
-            href="/playlist/midnight-reverie"
-            className="hidden sm:flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold group"
-          >
-            <span>Explore Archives</span>
-            <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
-              arrow_forward
-            </span>
-          </Link>
+          {displayRecentlyPlayed.length > 0 && (
+            <Link
+              href="/playlist/midnight-reverie"
+              className="hidden sm:flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold group"
+            >
+              <span>Explore Archives</span>
+              <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+                arrow_forward
+              </span>
+            </Link>
+          )}
         </div>
 
-        {!user ? (
-          <div className="p-6 rounded-2xl glass-card border border-white/5 bg-surface-container/60 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5 text-center sm:text-left">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
-                <span className="material-symbols-outlined text-[20px]">lock</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold text-white">Recently Played History Locked</span>
-                <span className="text-xs text-outline">
-                  Personal listening history is preserved under your account. Log in to track and access recently played master tracks.
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={() => openAuthModal("login")}
-              className="px-5 py-2 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_12px_rgba(76,215,246,0.3)] hover:brightness-110 active:scale-95 transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5"
-            >
-              <span className="material-symbols-outlined text-[16px]">login</span>
-              Log In
-            </button>
-          </div>
-        ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
-          {displayRecentlyPlayed.slice(0, 5).map((track) => {
-            const isCurrent = currentTrack?.id === track.id;
-            const isCurrentPlaying = isCurrent && isPlaying;
+        {displayRecentlyPlayed.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
+            {displayRecentlyPlayed.slice(0, 10).map((track) => {
+              const isCurrent = currentTrack?.id === track.id;
+              const isCurrentPlaying = isCurrent && isPlaying;
 
-            return (
-              <div
-                key={track.id}
-                onClick={() => handleTrackClick(track)}
-                className={`group flex flex-col gap-3 glass-card p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none ${isCurrent
-                    ? "border-primary/60 bg-surface-container/95 shadow-[0_0_20px_rgba(76,215,246,0.25)]"
-                    : "border-white/5 hover:border-primary/40 hover:bg-surface-container/90"
+              return (
+                <div
+                  key={track.id}
+                  onClick={() => handleTrackClick(track)}
+                  className={`group flex flex-col gap-3 glass-card p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none ${
+                    isCurrent
+                      ? "border-primary/60 bg-surface-container/95 shadow-[0_0_20px_rgba(76,215,246,0.25)]"
+                      : "border-white/5 hover:border-primary/40 hover:bg-surface-container/90"
                   }`}
-              >
-                <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
-                  <img
-                    alt={track.title}
-                    src={track.coverUrl}
-                    onError={(e) => {
-                      e.currentTarget.src =
-                        "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
-                    }}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-3 transition-opacity ${isCurrentPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                >
+                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+                    <img
+                      alt={track.title}
+                      src={track.coverUrl}
+                      onError={(e) => {
+                        e.currentTarget.src =
+                          "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div
+                      className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-3 transition-opacity ${
+                        isCurrentPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                       }`}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-transform">
-                      <span className="material-symbols-outlined text-[24px]">
-                        {isCurrentPlaying ? "pause" : "play_arrow"}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-transform">
+                        <span className="material-symbols-outlined text-[24px]">
+                          {isCurrentPlaying ? "pause" : "play_arrow"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col min-w-0">
+                    <h3
+                      className={`text-sm font-semibold truncate transition-colors ${
+                        isCurrent ? "text-primary" : "text-white group-hover:text-primary"
+                      }`}
+                    >
+                      {track.title}
+                    </h3>
+                    <p className="text-xs text-on-surface-variant truncate mt-0.5">
+                      {track.artist}
+                    </p>
+                    <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/5">
+                      <span className="text-[11px] text-outline font-mono">
+                        {track.durationFormatted || "3:30"}
                       </span>
+                      <DownloadButton track={track} buttonSize="p-0.5" iconSize="text-[15px]" />
                     </div>
                   </div>
                 </div>
-
-                <div className="flex flex-col min-w-0">
-                  <h3
-                    className={`text-sm font-semibold truncate transition-colors ${isCurrent ? "text-primary" : "text-white group-hover:text-primary"
-                      }`}
-                  >
-                    {track.title}
-                  </h3>
-                  <p className="text-xs text-on-surface-variant truncate mt-0.5">
-                    {track.artist}
-                  </p>
-                  <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/5">
-                    <span className="text-[11px] text-outline font-mono">
-                      {track.durationFormatted}
-                    </span>
-                    <DownloadButton track={track} buttonSize="p-0.5" iconSize="text-[15px]" />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-8 rounded-2xl glass-card border border-white/5 flex flex-col items-center justify-center text-center gap-2.5 py-12">
+            <div className="w-12 h-12 rounded-full bg-surface-container-high border border-white/10 flex items-center justify-center text-outline">
+              <span className="material-symbols-outlined text-[24px]">history</span>
+            </div>
+            <p className="text-sm font-semibold text-white">No recently played songs</p>
+            <p className="text-xs text-on-surface-variant max-w-sm">
+              Songs you play from Search or Self Mix will automatically appear here.
+            </p>
+          </div>
         )}
       </section>
 
@@ -372,80 +364,110 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Playlists Grid - User created playlists & self mixes displayed first when logged in */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
-          {[...(user ? (selfMixes || []) : []), ...(user ? (customPlaylists || []) : []), ...NOCTURNE_PLAYLISTS]
-            .slice(0, Math.max(5, (selfMixes?.length || 0) + (customPlaylists?.length || 0) + 5))
-            .map((pl) => {
-              const tracks = pl.tracks || NOCTURNE_TRACKS;
-              const isPlaylistPlaying =
-                isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+        {/* Playlists Grid - Only user created playlists & self mixes (no default mock playlists) */}
+        {(() => {
+          const userPlaylists = [
+            ...(user ? (selfMixes || []) : []),
+            ...(user ? (customPlaylists || []) : []),
+          ];
 
-              return (
-                <div
-                  key={pl.id}
-                  className="group flex flex-col gap-3 glass-card p-3.5 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
+          if (userPlaylists.length === 0) {
+            return (
+              <div className="p-8 rounded-2xl glass-card border border-white/5 flex flex-col items-center justify-center text-center gap-3 py-12">
+                <div className="w-12 h-12 rounded-full bg-surface-container-high border border-white/10 flex items-center justify-center text-outline">
+                  <span className="material-symbols-outlined text-[24px]">queue_music</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">No playlists yet</p>
+                  <p className="text-xs text-on-surface-variant max-w-sm mt-0.5">
+                    Create a custom playlist or upload a track in Self Mix to see it here.
+                  </p>
+                </div>
+                <Link
+                  href="/playlists"
+                  className="mt-2 px-4 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-bold transition-all flex items-center gap-1.5"
                 >
-                  {/* Playlist Cover Image with Hover Play */}
-                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
-                    <img
-                      src={pl.coverUrl}
-                      alt={pl.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    {pl.isSelfMix ? (
-                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-cyan-950/80 backdrop-blur-md text-[9px] font-bold text-cyan-300 border border-cyan-700/60 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[12px]">equalizer</span>
-                        <span>SELF MIX</span>
-                      </div>
-                    ) : pl.isCustom ? (
-                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[12px]">person</span>
-                        <span>BY YOU</span>
-                      </div>
-                    ) : null}
-                    <div
-                      className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-3 transition-opacity duration-300 ${
-                        isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                      }`}
-                    >
-                      <button
-                        onClick={(e) => handlePlaylistPlay(pl, e)}
-                        className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95"
-                        title={isPlaylistPlaying ? "Pause" : "Play"}
+                  <span className="material-symbols-outlined text-[16px]">add</span>
+                  <span>Create Playlist</span>
+                </Link>
+              </div>
+            );
+          }
+
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
+              {userPlaylists.map((pl) => {
+                const tracks = pl.tracks || [];
+                const isPlaylistPlaying =
+                  isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+
+                return (
+                  <div
+                    key={pl.id}
+                    className="group flex flex-col gap-3 glass-card p-3.5 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
+                  >
+                    {/* Playlist Cover Image with Hover Play */}
+                    <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+                      <img
+                        src={pl.coverUrl}
+                        alt={pl.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                      {pl.isSelfMix ? (
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-cyan-950/80 backdrop-blur-md text-[9px] font-bold text-cyan-300 border border-cyan-700/60 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">equalizer</span>
+                          <span>SELF MIX</span>
+                        </div>
+                      ) : pl.isCustom ? (
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">person</span>
+                          <span>BY YOU</span>
+                        </div>
+                      ) : null}
+                      <div
+                        className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-3 transition-opacity duration-300 ${
+                          isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                        }`}
                       >
-                        <span className="material-symbols-outlined text-[24px]">
-                          {isPlaylistPlaying ? "pause" : "play_arrow"}
-                        </span>
-                      </button>
+                        <button
+                          onClick={(e) => handlePlaylistPlay(pl, e)}
+                          className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95"
+                          title={isPlaylistPlaying ? "Pause" : "Play"}
+                        >
+                          <span className="material-symbols-outlined text-[24px]">
+                            {isPlaylistPlaying ? "pause" : "play_arrow"}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Playlist Title & Curator */}
+                    <Link href={`/playlist/${pl.id}`} className="flex flex-col min-w-0">
+                      <h3 className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
+                        {pl.title}
+                      </h3>
+                      <p className="text-xs text-on-surface-variant truncate mt-0.5">
+                        {pl.subtitle || pl.description}
+                      </p>
+                    </Link>
+
+                    {/* Bottom Tags: Track count & Duration */}
+                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/5 text-[11px] font-mono text-outline">
+                      <span className="flex items-center gap-1 text-primary font-medium">
+                        <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
+                        {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[12px]">schedule</span>
+                        {formatPlaylistDuration(tracks)}
+                      </span>
                     </div>
                   </div>
-
-                  {/* Playlist Title & Curator */}
-                  <Link href={`/playlist/${pl.id}`} className="flex flex-col min-w-0">
-                    <h3 className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
-                      {pl.title}
-                    </h3>
-                    <p className="text-xs text-on-surface-variant truncate mt-0.5">
-                      {pl.subtitle || pl.description}
-                    </p>
-                  </Link>
-
-                  {/* Bottom Tags: Track count & Duration */}
-                  <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/5 text-[11px] font-mono text-outline">
-                    <span className="flex items-center gap-1 text-primary font-medium">
-                      <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
-                      {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[12px]">schedule</span>
-                      {formatPlaylistDuration(tracks)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-        </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </section>
 
       {/* Section 3: Dynamic & Categorized Popular Artists */}

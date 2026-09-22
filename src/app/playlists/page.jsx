@@ -128,26 +128,7 @@ export default function PlaylistsPage() {
 
       {/* Playlists Container */}
       <div className="flex flex-wrap items-start justify-start gap-4 sm:gap-5">
-        {!user ? (
-          <div className="w-full py-16 flex flex-col items-center justify-center text-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-primary shadow-[0_0_20px_rgba(76,215,246,0.2)]">
-              <span className="material-symbols-outlined text-[32px]">lock</span>
-            </div>
-            <h3 className="text-lg font-bold text-white">Custom Playlists are Locked</h3>
-            <p className="text-xs text-outline max-w-sm">
-              Personal playlists and custom mixes are tied directly to your account. Please log in with your credentials to access or create playlists.
-            </p>
-            <button
-              onClick={() => openAuthModal("login")}
-              className="mt-2 px-6 py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-lg hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[16px]">login</span>
-              Log In as Owner
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* 1. First Card: 'Create New Playlist' Box */}
+        {/* 1. First Card: 'Create New Playlist' Box */}
             <div
               onClick={() => {
                 setNewTitle("");
@@ -272,8 +253,6 @@ export default function PlaylistsPage() {
             </Link>
           );
         })}
-          </>
-        )}
       </div>
 
       {/* Creation Modal */}

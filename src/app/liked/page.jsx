@@ -98,24 +98,7 @@ export default function LikedSongsPage() {
 
       {/* Tracks Table */}
       <div className="px-4 md:px-8 pt-6 flex flex-col gap-2">
-        {!user ? (
-          <div className="py-20 flex flex-col items-center justify-center text-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-primary shadow-[0_0_20px_rgba(76,215,246,0.2)]">
-              <span className="material-symbols-outlined text-[32px]">lock</span>
-            </div>
-            <h3 className="text-lg font-bold text-white">Liked Songs are Locked</h3>
-            <p className="text-xs text-outline max-w-sm">
-              Your personal library and liked tracks are secured under your account. Please log in to view and play your liked songs.
-            </p>
-            <button
-              onClick={() => openAuthModal("login")}
-              className="mt-2 px-6 py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-lg hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[16px]">login</span>
-              Log In as Owner
-            </button>
-          </div>
-        ) : likedTracks.length === 0 ? (
+        {likedTracks.length === 0 ? (
           <div className="py-20 flex flex-col items-center justify-center text-center gap-4">
             <div className="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-outline">
               <span className="material-symbols-outlined text-[32px]">favorite_border</span>

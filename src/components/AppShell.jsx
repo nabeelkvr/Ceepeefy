@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import Player from "./Player";
@@ -12,11 +13,56 @@ import AuthModal from "./AuthModal";
 import { useMusic } from "../context/MusicContext";
 
 export default function AppShell({ children }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const { currentTrack, lyricsMode } = useMusic();
+  const { currentTrack, lyricsMode, user, openAuthModal } = useMusic();
+
+  const isUserAuthenticated = Boolean(user && user.isLoggedIn);
+
+  // Private instance protection: Intercepts all clicks on any button or interactive element when unauthenticated
+  const handleGlobalClickCapture = (e) => {
+    if (isUserAuthenticated) return;
+    if (pathname === "/login") return;
+
+    // Allow typing credentials or interacting inside AuthModal
+    if (e.target.closest("[data-auth-modal]") || e.target.closest("#auth-modal-container")) {
+      return;
+    }
+
+    // Intercept clicks on buttons, links, inputs, cards, or clickable elements
+    const targetElement = e.target.closest(
+      "button, a, input, select, textarea, [role='button'], [tabindex], .cursor-pointer, [data-clickable], .glass-card"
+    );
+
+    if (targetElement) {
+      e.preventDefault();
+      e.stopPropagation();
+      router.push("/login");
+      openAuthModal("login");
+    }
+  };
+
+  // Keyboard shortcut protection (Spacebar, ⌘K, etc.)
+  const handleGlobalKeyDownCapture = (e) => {
+    if (isUserAuthenticated) return;
+    if (pathname === "/login") return;
+    if (e.target.closest("[data-auth-modal]")) return;
+
+    if (e.code === "Space" || ((e.metaKey || e.ctrlKey) && e.key === "k")) {
+      e.preventDefault();
+      e.stopPropagation();
+      router.push("/login");
+      openAuthModal("login");
+    }
+  };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#0b1326] text-on-surface font-sans overflow-hidden selection:bg-primary-container selection:text-on-primary-container">
+    <div
+      onClickCapture={handleGlobalClickCapture}
+      onKeyDownCapture={handleGlobalKeyDownCapture}
+      className="h-screen w-screen flex flex-col bg-[#0b1326] text-on-surface font-sans overflow-hidden selection:bg-primary-container selection:text-on-primary-container"
+    >
       {/* Upper area: Sidebar + Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Desktop Sidebar */}
