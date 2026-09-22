@@ -15,6 +15,24 @@ import {
   deleteLocalAudioFiles
 } from "../services/localAudioStorage";
 import { formatPlaylistDuration } from "../utils/playlistUtils";
+import {
+  DEFAULT_USER_ID,
+  getAccountUserId,
+  getAccountStorageKey,
+} from "../config/authConfig";
+import {
+  fetchUserPlaylistsFromCloud,
+  savePlaylistToCloud,
+  deletePlaylistFromCloud,
+  addTrackToPlaylistCloud,
+  removeTrackFromPlaylistCloud,
+  fetchLikedSongsFromCloud,
+  saveLikedSongToCloud,
+  removeLikedSongFromCloud,
+  fetchRecentlyPlayedFromCloud,
+  recordRecentlyPlayedToCloud,
+  migrateLocalDataToSupabase,
+} from "../services/cloudStorageService";
 
 export const normalizeTrack = (track) => {
   if (!track) return null;
@@ -135,28 +153,60 @@ export const MusicProvider = ({ children }) => {
     setIsAuthModalOpen(true);
   };
 
-  // User Authentication State (Strict Personal Instance: nabeeyl)
+  // User Authentication State (Strict Personal Instance: centralized account identity)
   const [user, setUser] = useState(null);
+
+  // Cloud sync helper to refresh playlists, liked songs, and recently played from Supabase
+  const syncAccountDataWithCloud = async (userId = DEFAULT_USER_ID) => {
+    try {
+      // 1. Run one-time migration if not yet completed
+      await migrateLocalDataToSupabase(userId);
+
+      // 2. Query fresh cloud data from Supabase
+      const [cloudPlaylists, cloudLiked, cloudRecents] = await Promise.all([
+        fetchUserPlaylistsFromCloud(userId),
+        fetchLikedSongsFromCloud(userId),
+        fetchRecentlyPlayedFromCloud(userId),
+      ]);
+
+      // 3. Apply state updates if queries were successful
+      if (cloudPlaylists !== null) {
+        setCustomPlaylists(cloudPlaylists);
+      }
+      if (cloudLiked !== null) {
+        setLikedSongIds(cloudLiked.likedSongIds || []);
+        setLikedSongsMap(cloudLiked.likedSongsMap || {});
+      }
+      if (cloudRecents !== null && cloudRecents.length > 0) {
+        const valid = cloudRecents.map(normalizeTrack).filter(Boolean);
+        setRecentlyPlayedTracks(valid);
+        setRecentlyPlayed(valid.map((t) => t.id));
+      }
+    } catch (err) {
+      console.error("[MusicContext] Cloud sync error:", err);
+    }
+  };
 
   const login = (userData) => {
     const userObj = {
-      username: "nabeeyl",
-      name: userData?.name || "nabeeyl",
-      email: userData?.email || "nabeeyl@ceepeefy.audio",
+      username: DEFAULT_USER_ID,
+      name: userData?.name || DEFAULT_USER_ID,
+      email: userData?.email || `${DEFAULT_USER_ID}@ceepeefy.audio`,
       plan: "Owner / Studio Master",
       isLoggedIn: true,
-      activeUser: "nabeeyl",
+      activeUser: DEFAULT_USER_ID,
       joinedAt: userData?.joinedAt || "2024-01-15",
     };
     setUser(userObj);
 
     try {
       localStorage.setItem("isLoggedIn", "true");
-      localStorage.setItem("activeUser", "nabeeyl");
+      localStorage.setItem("activeUser", DEFAULT_USER_ID);
       localStorage.setItem("ceepeefy_user", JSON.stringify(userObj));
 
-      // Restore or initialize account-bound storage userData_nabeeyl
-      const accountDataStr = localStorage.getItem("userData_nabeeyl");
+      // Restore or initialize account-bound storage
+      const accountStorageKey = getAccountStorageKey("userData", DEFAULT_USER_ID);
+      const accountDataStr = localStorage.getItem(accountStorageKey);
       if (accountDataStr) {
         const accountData = JSON.parse(accountDataStr);
         if (Array.isArray(accountData.likedSongIds)) setLikedSongIds(accountData.likedSongIds);
@@ -190,13 +240,16 @@ export const MusicProvider = ({ children }) => {
             : ["track-midnight-pulse", "track-shadows-in-blue"],
           selfMixes: [],
         };
-        localStorage.setItem("userData_nabeeyl", JSON.stringify(initialAccountData));
+        localStorage.setItem(accountStorageKey, JSON.stringify(initialAccountData));
         setLikedSongIds(initialAccountData.likedSongIds);
         setLikedSongsMap(initialAccountData.likedSongsMap);
         setCustomPlaylists(initialAccountData.customPlaylists);
         setRecentlyPlayedTracks(initialAccountData.recentlyPlayedTracks);
         setRecentlyPlayed(initialAccountData.recentlyPlayed);
       }
+
+      // Sync cloud state in the background immediately on login
+      syncAccountDataWithCloud(DEFAULT_USER_ID);
     } catch (e) {
       console.warn("Login persistence error:", e);
     }
@@ -269,15 +322,16 @@ export const MusicProvider = ({ children }) => {
   const [selfMixes, setSelfMixes] = useState([]);
   const hasLoadedStorageRef = useRef(false);
 
-  // Central Account-Bound Data Persister (userData_nabeeyl)
+  // Central Account-Bound Data Persister (localStorage cache)
   const persistAccountData = (overrides = {}) => {
     if (typeof window === "undefined") return;
     try {
       const storedLoggedIn = localStorage.getItem("isLoggedIn") === "true";
-      const storedActiveUser = localStorage.getItem("activeUser") || "nabeeyl";
-      if (!storedLoggedIn || storedActiveUser !== "nabeeyl") return;
+      const storedActiveUser = localStorage.getItem("activeUser") || DEFAULT_USER_ID;
+      if (!storedLoggedIn || storedActiveUser !== DEFAULT_USER_ID) return;
 
-      const currentStored = JSON.parse(localStorage.getItem("userData_nabeeyl") || "{}");
+      const accountStorageKey = getAccountStorageKey("userData", DEFAULT_USER_ID);
+      const currentStored = JSON.parse(localStorage.getItem(accountStorageKey) || "{}");
       const nextLikedIds = overrides.likedSongIds ?? likedSongIds;
       const nextLikedMap = overrides.likedSongsMap ?? likedSongsMap;
       const nextPlaylists = overrides.customPlaylists ?? customPlaylists;
@@ -295,39 +349,40 @@ export const MusicProvider = ({ children }) => {
         lastUpdated: new Date().toISOString(),
       };
 
-      localStorage.setItem("userData_nabeeyl", JSON.stringify(accountData));
+      localStorage.setItem(accountStorageKey, JSON.stringify(accountData));
       // Also update legacy fallback keys
       localStorage.setItem("nocturne_liked", JSON.stringify(nextLikedIds));
       localStorage.setItem("nocturne_liked_map", JSON.stringify(nextLikedMap));
       localStorage.setItem("nocturne_custom_playlists", JSON.stringify(nextPlaylists));
       localStorage.setItem("nocturne_recent_tracks", JSON.stringify(nextRecents));
     } catch (e) {
-      console.warn("Failed to write to userData_nabeeyl:", e);
+      console.warn("Failed to write account data to localStorage:", e);
     }
   };
 
-  // Safely hydrate from localStorage on client mount (prevents SSR hydration mismatch)
+  // Safely hydrate from localStorage on client mount, then fetch fresh data from Supabase cloud
   useEffect(() => {
     try {
       const storedLoggedIn = localStorage.getItem("isLoggedIn") === "true";
-      const storedActiveUser = localStorage.getItem("activeUser") || "nabeeyl";
+      const storedActiveUser = localStorage.getItem("activeUser") || DEFAULT_USER_ID;
 
-      if (storedLoggedIn && storedActiveUser === "nabeeyl") {
+      if (storedLoggedIn && storedActiveUser === DEFAULT_USER_ID) {
         const savedUserStr = localStorage.getItem("ceepeefy_user");
         const userObj = savedUserStr
           ? JSON.parse(savedUserStr)
           : {
-              username: "nabeeyl",
-              name: "nabeeyl",
-              email: "nabeeyl@ceepeefy.audio",
+              username: DEFAULT_USER_ID,
+              name: DEFAULT_USER_ID,
+              email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
               plan: "Owner / Studio Master",
               isLoggedIn: true,
-              activeUser: "nabeeyl",
+              activeUser: DEFAULT_USER_ID,
             };
         setUser(userObj);
 
-        // Hydrate from userData_nabeeyl
-        const accountDataStr = localStorage.getItem(`userData_${storedActiveUser}`);
+        // Instant local cache hydration for zero UI flicker
+        const accountStorageKey = getAccountStorageKey("userData", storedActiveUser);
+        const accountDataStr = localStorage.getItem(accountStorageKey);
         if (accountDataStr) {
           const accountData = JSON.parse(accountDataStr);
           if (Array.isArray(accountData.likedSongIds)) setLikedSongIds(accountData.likedSongIds);
@@ -342,7 +397,7 @@ export const MusicProvider = ({ children }) => {
           }
           if (Array.isArray(accountData.selfMixes)) setSelfMixes(accountData.selfMixes);
         } else {
-          // Migrate any existing unmigrated data so nothing is lost
+          // Fallback to legacy keys
           const legacyLiked = JSON.parse(localStorage.getItem("nocturne_liked") || "[]");
           const legacyLikedMap = JSON.parse(localStorage.getItem("nocturne_liked_map") || "{}");
           const legacyPlaylists = JSON.parse(localStorage.getItem("nocturne_custom_playlists") || "[]");
@@ -362,13 +417,16 @@ export const MusicProvider = ({ children }) => {
               : ["track-midnight-pulse", "track-shadows-in-blue"],
             selfMixes: [],
           };
-          localStorage.setItem(`userData_${storedActiveUser}`, JSON.stringify(initialAccountData));
+          localStorage.setItem(accountStorageKey, JSON.stringify(initialAccountData));
           setLikedSongIds(initialAccountData.likedSongIds);
           setLikedSongsMap(initialAccountData.likedSongsMap);
           setCustomPlaylists(initialAccountData.customPlaylists);
           setRecentlyPlayedTracks(initialAccountData.recentlyPlayedTracks);
           setRecentlyPlayed(initialAccountData.recentlyPlayed);
         }
+
+        // Fresh cloud state fetch from Supabase (cross-device sync)
+        syncAccountDataWithCloud(DEFAULT_USER_ID);
       } else {
         // Logged out: features are locked, personal arrays remain empty
         setUser(null);
@@ -400,16 +458,17 @@ export const MusicProvider = ({ children }) => {
     }
   }, []);
 
-  // Automatically update persistent storage (userData_nabeeyl) whenever state changes while logged in
+  // Automatically update persistent storage whenever state changes while logged in
   useEffect(() => {
     if (!hasLoadedStorageRef.current || typeof window === "undefined") return;
-    if (!user || user.username !== "nabeeyl") return;
+    if (!user || user.username !== DEFAULT_USER_ID) return;
 
     persistAccountData();
   }, [likedSongIds, likedSongsMap, customPlaylists, recentlyPlayedTracks, selfMixes, user]);
 
   const createPlaylist = (title) => {
-    if (!user || user.username !== "nabeeyl") {
+    const currentUserId = getAccountUserId(user);
+    if (!user || currentUserId !== DEFAULT_USER_ID) {
       openAuthModal("login");
       return null;
     }
@@ -446,11 +505,23 @@ export const MusicProvider = ({ children }) => {
     };
 
     setCustomPlaylists((prev) => [newPlaylist, ...prev]);
+
+    // Persist to Supabase cloud
+    savePlaylistToCloud(newPlaylist, currentUserId).catch((err) => {
+      console.error("[MusicContext] Failed to persist playlist to Supabase:", err);
+    });
+
     return newPlaylist;
   };
 
   const deleteCustomPlaylist = (id) => {
+    const currentUserId = getAccountUserId(user);
     setCustomPlaylists((prev) => prev.filter((p) => p.id !== id));
+
+    // Delete from Supabase cloud
+    deletePlaylistFromCloud(id, currentUserId).catch((err) => {
+      console.error("[MusicContext] Failed to delete playlist from Supabase:", err);
+    });
   };
 
   const createSelfMix = (title, initialTracks = []) => {
@@ -539,11 +610,16 @@ export const MusicProvider = ({ children }) => {
     const norm = normalizeTrack(track);
     if (!norm) return;
 
+    let isCustom = false;
+    let targetIndex = 0;
+
     setCustomPlaylists((prev) =>
       prev.map((pl) => {
         if (pl.id !== playlistId) return pl;
+        isCustom = true;
         const existing = pl.tracks || [];
         if (existing.some((t) => String(t.id) === String(norm.id))) return pl;
+        targetIndex = existing.length;
         const updated = [...existing, norm];
         return {
           ...pl,
@@ -569,6 +645,12 @@ export const MusicProvider = ({ children }) => {
         };
       })
     );
+
+    if (isCustom) {
+      addTrackToPlaylistCloud(playlistId, norm, targetIndex).catch((err) => {
+        console.error("[MusicContext] Failed to add track to playlist in Supabase:", err);
+      });
+    }
   };
 
   const removeTrackFromPlaylist = (playlistId, trackId) => {
@@ -578,9 +660,11 @@ export const MusicProvider = ({ children }) => {
         console.warn("Failed to delete local audio file:", e)
       );
     }
+    let isCustom = false;
     setCustomPlaylists((prev) =>
       prev.map((pl) => {
         if (pl.id !== playlistId) return pl;
+        isCustom = true;
         const updated = (pl.tracks || []).filter((t) => String(t.id) !== String(trackId));
         return {
           ...pl,
@@ -604,6 +688,12 @@ export const MusicProvider = ({ children }) => {
         };
       })
     );
+
+    if (isCustom) {
+      removeTrackFromPlaylistCloud(playlistId, trackId).catch((err) => {
+        console.error("[MusicContext] Failed to remove track from playlist in Supabase:", err);
+      });
+    }
   };
 
   // HTML5 Audio Reference & State
@@ -1245,6 +1335,14 @@ export const MusicProvider = ({ children }) => {
         const filtered = prev.filter((id) => (typeof id === "object" ? id.id : id) !== norm.id);
         return [norm.id, ...filtered].slice(0, 25);
       });
+
+      // Cloud persistence for recently played
+      const currentUserId = getAccountUserId(user);
+      if (user && currentUserId === DEFAULT_USER_ID) {
+        recordRecentlyPlayedToCloud(norm, currentUserId).catch((err) => {
+          console.error("[MusicContext] Failed to record recently played track to Supabase:", err);
+        });
+      }
     }
 
     try {
@@ -1386,7 +1484,8 @@ export const MusicProvider = ({ children }) => {
 
   // Toggle Like (Accepts track object or trackId)
   const toggleLike = (trackOrId, optionalTrackObj) => {
-    if (!user || user.username !== "nabeeyl") {
+    const currentUserId = getAccountUserId(user);
+    if (!user || currentUserId !== DEFAULT_USER_ID) {
       openAuthModal("login");
       return;
     }
@@ -1411,6 +1510,8 @@ export const MusicProvider = ({ children }) => {
         likedSongsMap[targetId];
     }
 
+    const isCurrentlyLiked = likedSongIds.includes(targetId);
+
     setLikedSongIds((prev) => {
       if (prev.includes(targetId)) {
         return prev.filter((id) => id !== targetId);
@@ -1419,8 +1520,9 @@ export const MusicProvider = ({ children }) => {
       }
     });
 
+    let normalizedTrack = null;
     if (trackObj) {
-      const normalizedTrack = {
+      normalizedTrack = {
         ...trackObj,
         coverUrl: trackObj.coverUrl || trackObj.image || trackObj.thumbnail,
       };
@@ -1428,6 +1530,18 @@ export const MusicProvider = ({ children }) => {
         ...prev,
         [targetId]: normalizedTrack,
       }));
+    }
+
+    // Cloud persistence
+    if (!isCurrentlyLiked) {
+      const trackToSave = normalizedTrack || trackObj || { id: targetId, title: "Liked Song" };
+      saveLikedSongToCloud(trackToSave, currentUserId).catch((err) => {
+        console.error("[MusicContext] Failed to save liked song to Supabase:", err);
+      });
+    } else {
+      removeLikedSongFromCloud(targetId, currentUserId).catch((err) => {
+        console.error("[MusicContext] Failed to remove liked song from Supabase:", err);
+      });
     }
   };
 

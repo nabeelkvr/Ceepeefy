@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { DEFAULT_USER_ID } from "../config/authConfig";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -20,10 +21,10 @@ const BUCKET_NAME = "self-mixes";
 /**
  * Uploads an audio file (.mp3 or .wav) directly to the Supabase cloud storage bucket
  * @param {File} file - Audio file (.mp3 or .wav)
- * @param {string} owner - Account handle (default 'nabeeyl')
+ * @param {string} owner - Account handle (default DEFAULT_USER_ID)
  * @returns {Promise<{ publicUrl: string, filePath: string }>}
  */
-export const uploadAudioToCloud = async (file, owner = "nabeeyl") => {
+export const uploadAudioToCloud = async (file, owner = DEFAULT_USER_ID) => {
   if (!supabase || !isSupabaseConfigured()) {
     throw new Error("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
   }
@@ -85,7 +86,7 @@ export const saveSelfMixToCloud = async (mixData) => {
     id: mixData.id || `cloud-mix-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     title: mixData.title || "Untitled Self Mix",
     audio_url: mixData.audioUrl || mixData.audio_url,
-    owner: mixData.owner || "nabeeyl",
+    owner: mixData.owner || DEFAULT_USER_ID,
     duration: typeof mixData.duration === "number" ? Math.round(mixData.duration) : 180,
     duration_formatted: mixData.durationFormatted || mixData.duration_formatted || "3:00",
     file_name: mixData.fileName || mixData.file_name || "",
@@ -113,10 +114,10 @@ export const saveSelfMixToCloud = async (mixData) => {
 
 /**
  * Fetches all Self Mix tracks for the account from Supabase
- * @param {string} owner - Account handle (default 'nabeeyl')
+ * @param {string} owner - Account handle (default DEFAULT_USER_ID)
  * @returns {Promise<Array>}
  */
-export const fetchSelfMixesFromCloud = async (owner = "nabeeyl") => {
+export const fetchSelfMixesFromCloud = async (owner = DEFAULT_USER_ID) => {
   if (!supabase || !isSupabaseConfigured()) {
     return [];
   }

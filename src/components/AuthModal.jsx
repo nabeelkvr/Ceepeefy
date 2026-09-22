@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useMusic } from "../context/MusicContext";
+import { DEFAULT_USER_ID } from "../config/authConfig";
 
 export default function AuthModal() {
   const {
@@ -19,10 +20,8 @@ export default function AuthModal() {
 
   useEffect(() => {
     if (isAuthModalOpen) {
-      setName("");
-      setEmail("");
-      setPassword("");
       setFeedback(null);
+      setPassword("");
     }
   }, [isAuthModalOpen, authModalTab]);
 
@@ -39,13 +38,28 @@ export default function AuthModal() {
   if (!isAuthModalOpen) return null;
 
   const handleSubmit = (e) => {
+    if (authModalTab === "signup") {
+      handleSignUp(e);
+    } else {
+      handleLogin(e);
+    }
+  };
+
+  const handleSignUp = (e) => {
+    e.preventDefault();
+    setFeedback({
+      type: "error",
+      message: "Personal Instance: Sign-ups are closed. Please log in as the owner.",
+    });
+  };
+
+  const handleLogin = (e) => {
     e.preventDefault();
 
-    // Block any Sign Up attempt on personal instance
-    if (authModalTab === "signup") {
+    if (!email.trim() || !password.trim()) {
       setFeedback({
         type: "error",
-        message: "Access Denied: Personal instance only.",
+        message: "Please enter both username/email and access key.",
       });
       return;
     }
@@ -53,28 +67,28 @@ export default function AuthModal() {
     const trimmedIdent = (email || "").trim().toLowerCase();
     const trimmedPass = (password || "").trim();
 
-    // Check if the entered credentials exactly match: Username: nabeeyl and Password: 3603
+    // Check if the entered credentials exactly match: Username: DEFAULT_USER_ID and Password: 3603
     const isUserMatch =
-      trimmedIdent === "nabeeyl" ||
-      trimmedIdent === "nabeeyl@ceepeefy.audio" ||
-      trimmedIdent === "nabeeyl@gmail.com";
+      trimmedIdent === DEFAULT_USER_ID ||
+      trimmedIdent === `${DEFAULT_USER_ID}@ceepeefy.audio` ||
+      trimmedIdent === `${DEFAULT_USER_ID}@gmail.com`;
     const isPassMatch = trimmedPass === "3603";
 
     if (isUserMatch && isPassMatch) {
       const userObj = {
-        username: "nabeeyl",
-        name: "nabeeyl",
-        email: "nabeeyl@ceepeefy.audio",
+        username: DEFAULT_USER_ID,
+        name: DEFAULT_USER_ID,
+        email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
         plan: "Owner / Studio Master",
         isLoggedIn: true,
-        activeUser: "nabeeyl",
+        activeUser: DEFAULT_USER_ID,
       };
 
       login(userObj);
 
       setFeedback({
         type: "success",
-        message: "Welcome back, nabeeyl! Authenticated successfully.",
+        message: `Welcome back, ${DEFAULT_USER_ID}! Authenticated successfully.`,
       });
 
       setTimeout(() => {
@@ -90,20 +104,20 @@ export default function AuthModal() {
   };
 
   const handleQuickOwnerSignIn = () => {
-    setEmail("nabeeyl");
+    setEmail(DEFAULT_USER_ID);
     setPassword("3603");
     const userObj = {
-      username: "nabeeyl",
-      name: "nabeeyl",
-      email: "nabeeyl@ceepeefy.audio",
+      username: DEFAULT_USER_ID,
+      name: DEFAULT_USER_ID,
+      email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
       plan: "Owner / Studio Master",
       isLoggedIn: true,
-      activeUser: "nabeeyl",
+      activeUser: DEFAULT_USER_ID,
     };
     login(userObj);
     setFeedback({
       type: "success",
-      message: "Authenticated as Owner (nabeeyl)!",
+      message: `Authenticated as Owner (${DEFAULT_USER_ID})!`,
     });
     setTimeout(() => {
       setIsAuthModalOpen(false);
