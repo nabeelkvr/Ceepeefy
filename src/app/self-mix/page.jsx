@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMusic } from "../../context/MusicContext";
 import { formatPlaylistDuration } from "../../utils/playlistUtils";
 import DownloadButton from "../../components/DownloadButton";
+import SongOptionsMenu from "../../components/SongOptionsMenu";
 import {
   saveLocalAudioFile,
   getAudioFileDuration,
@@ -177,7 +178,7 @@ function SelfMixContent() {
     setPendingFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
-  // Upload pending audio files to Supabase Cloud Storage & save to DB
+  // Upload pending audio files & create Self Mix Playlist
   const handleCreateSubmit = async (e) => {
     e?.preventDefault();
     if (isSavingMix || pendingFiles.length === 0) return;
@@ -185,92 +186,88 @@ function SelfMixContent() {
     setIsSavingMix(true);
     setUploadError(null);
 
+    const playlistTitle = newTitle.trim() || `Self Mix #${(selfMixes?.length || 0) + 1}`;
+
     try {
-      if (isSupabaseConfigured()) {
-        const newlyUploaded = [];
+      const tracks = [];
+      const hasCloud = isSupabaseConfigured();
 
-        for (let i = 0; i < pendingFiles.length; i++) {
-          const item = pendingFiles[i];
-          const displayTitle =
-            pendingFiles.length === 1 && newTitle.trim()
-              ? newTitle.trim()
-              : item.title;
+      for (let i = 0; i < pendingFiles.length; i++) {
+        const item = pendingFiles[i];
+        const trackId = `${hasCloud ? "cloud" : "local"}-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 6)}`;
 
-          setCloudUploadProgress(
-            `Uploading ${item.file.name} to cloud (${i + 1}/${pendingFiles.length})...`
-          );
+        setCloudUploadProgress(
+          `Processing ${item.file.name} (${i + 1}/${pendingFiles.length})...`
+        );
 
-          // 1. Upload audio file directly to Supabase Storage bucket 'self-mixes'
-          const { publicUrl } = await uploadAudioToCloud(item.file, "nabeeyl");
+        let audioUrl = "";
+        let isCloud = false;
 
-          setCloudUploadProgress(
-            `Saving ${displayTitle} to cloud database...`
-          );
+        if (hasCloud) {
+          try {
+            setCloudUploadProgress(
+              `Uploading ${item.file.name} to cloud storage (${i + 1}/${pendingFiles.length})...`
+            );
+            const { publicUrl } = await uploadAudioToCloud(item.file, "nabeeyl");
+            audioUrl = publicUrl;
+            isCloud = true;
 
-          // 2. Insert record into Supabase 'self_mixes' table
-          const record = await saveSelfMixToCloud({
-            id: `cloud-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 6)}`,
-            title: displayTitle,
-            audioUrl: publicUrl,
-            owner: "nabeeyl",
-            duration: item.duration || 180,
-            durationFormatted: item.durationFormatted || "3:00",
-            fileName: item.file.name,
-            fileSize: item.file.size,
-            coverUrl: selectedCover,
-          });
-
-          newlyUploaded.push(record);
+            await saveSelfMixToCloud({
+              id: trackId,
+              title: item.title,
+              audioUrl: publicUrl,
+              owner: "nabeeyl",
+              duration: item.duration || 180,
+              durationFormatted: item.durationFormatted || "3:00",
+              fileName: item.file.name,
+              fileSize: item.file.size,
+              coverUrl: selectedCover,
+            }).catch((e) => console.warn("Supabase record insert warning:", e));
+          } catch (cloudErr) {
+            console.warn("Cloud upload failed, falling back to local storage:", cloudErr);
+          }
         }
 
-        // Prepend new records to cloudMixes
-        setCloudMixes((prev) => [...newlyUploaded, ...prev]);
-        setPendingFiles([]);
-        setNewTitle("");
-        setShowCreateModal(false);
-      } else {
-        // Fallback to local storage if Supabase credentials are not configured yet
-        const initialTracks = [];
-        for (let i = 0; i < pendingFiles.length; i++) {
-          const item = pendingFiles[i];
-          const trackId = `local-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 6)}`;
-
+        if (!audioUrl) {
           await saveLocalAudioFile(trackId, item.file, {
             fileName: item.file.name,
             fileType: item.file.type || "audio/mpeg",
             fileSize: item.file.size,
           });
-
-          initialTracks.push({
-            id: trackId,
-            title: item.title,
-            artist: "Self Mix Upload",
-            album: newTitle?.trim() || "Personal Self Mix",
-            duration: item.duration || 180,
-            durationFormatted: item.durationFormatted || "3:00",
-            coverUrl: selectedCover,
-            isLocal: true,
-            source: "local-upload",
-            fileName: item.file.name,
-            fileSize: item.file.size,
-            badge: "Self Mix",
-            badgeType: "cyan",
-          });
         }
 
-        const created = createSelfMix(newTitle, initialTracks);
-        setNewTitle("");
-        setPendingFiles([]);
-        setShowCreateModal(false);
+        tracks.push({
+          id: trackId,
+          title: item.title,
+          artist: "Self Mix Upload",
+          album: playlistTitle,
+          duration: item.duration || 180,
+          durationFormatted: item.durationFormatted || "3:00",
+          coverUrl: selectedCover,
+          audioUrl: audioUrl || null,
+          isLocal: !isCloud,
+          isCloud: isCloud,
+          source: isCloud ? "supabase-cloud" : "local-upload",
+          fileName: item.file.name,
+          fileSize: item.file.size,
+          badge: "Self Mix",
+          badgeType: "cyan",
+        });
+      }
 
-        if (created?.id) {
-          setSelectedMixId(created.id);
-          router.push(`/self-mix?id=${created.id}`);
-        }
+      // Create Self Mix Playlist with the selected cover art and playlist title
+      const created = createSelfMix(playlistTitle, tracks, selectedCover);
+      setNewTitle("");
+      setPendingFiles([]);
+      setShowCreateModal(false);
+
+      if (created?.id) {
+        setSelectedMixId(created.id);
+        router.push(`/self-mix?id=${created.id}`);
       }
     } catch (err) {
-      console.error("[SelfMix] Failed to upload or save audio track:", err);
-      setUploadError(err.message || "Upload failed. Please try again.");
+      console.error("[SelfMix] Failed to create self mix playlist:", err);
+      setUploadError(err.message || "Failed to create self mix playlist.");
     } finally {
       setIsSavingMix(false);
       setCloudUploadProgress("");
@@ -476,6 +473,15 @@ function SelfMixContent() {
 
               <button
                 type="button"
+                onClick={() => detailFileInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-surface-container-high/80 hover:bg-surface-container-highest border border-white/10 hover:border-primary/40 text-xs font-semibold text-white transition-all cursor-pointer shadow-md"
+              >
+                <span className="material-symbols-outlined text-[17px] text-primary">add</span>
+                <span>Add Songs</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => {
                   if (confirm(`Delete "${activeMix.title}"?`)) {
                     deleteSelfMix(activeMix.id);
@@ -492,6 +498,66 @@ function SelfMixContent() {
           </div>
         </div>
 
+        {/* Hidden input for adding songs to existing playlist */}
+        <input
+          ref={detailFileInputRef}
+          type="file"
+          multiple
+          accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav"
+          className="hidden"
+          onChange={async (e) => {
+            if (e.target.files && activeMix) {
+              const valid = filterAudioFiles(e.target.files);
+              const newTracks = [];
+              for (let i = 0; i < valid.length; i++) {
+                const file = valid[i];
+                const cleanTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[_]+/g, " ");
+                const durationSecs = await getAudioFileDuration(file);
+                const mins = Math.floor(durationSecs / 60);
+                const secs = durationSecs % 60;
+                const formatted = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+                const trackId = `track-${Date.now()}-${i}`;
+                let audioUrl = "";
+                let isCloud = false;
+                if (isSupabaseConfigured()) {
+                  try {
+                    const { publicUrl } = await uploadAudioToCloud(file, "nabeeyl");
+                    audioUrl = publicUrl;
+                    isCloud = true;
+                  } catch (err) {
+                    console.warn(err);
+                  }
+                }
+                if (!audioUrl) {
+                  await saveLocalAudioFile(trackId, file, {
+                    fileName: file.name,
+                    fileType: file.type,
+                    fileSize: file.size,
+                  });
+                }
+                newTracks.push({
+                  id: trackId,
+                  title: cleanTitle,
+                  artist: "Self Mix Upload",
+                  album: activeMix.title,
+                  duration: durationSecs,
+                  durationFormatted: formatted,
+                  coverUrl: activeMix.coverUrl,
+                  audioUrl: audioUrl || null,
+                  isLocal: !isCloud,
+                  isCloud: isCloud,
+                  source: isCloud ? "supabase-cloud" : "local-upload",
+                  fileName: file.name,
+                  fileSize: file.size,
+                  badge: "Self Mix",
+                  badgeType: "cyan",
+                });
+              }
+              addLocalTracksToSelfMix(activeMix.id, newTracks);
+            }
+          }}
+        />
+
         {/* Local Tracklist */}
         <div className="flex flex-col gap-2">
           {tracks.map((track, idx) => {
@@ -502,7 +568,7 @@ function SelfMixContent() {
               <div
                 key={track.id || idx}
                 onClick={() => playTrack(track, tracks)}
-                className={`group grid grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_4.5rem] items-center px-4 py-2.5 rounded-xl transition-all cursor-pointer border ${
+                className={`group grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2.5 rounded-xl transition-all cursor-pointer border ${
                   isCurrent
                     ? "bg-white/10 border-primary/30"
                     : "hover:bg-white/5 border-transparent hover:border-white/5"
@@ -558,7 +624,7 @@ function SelfMixContent() {
                   </span>
                 </div>
 
-                <div className="text-right font-mono text-xs text-outline">
+                <div className="text-right font-mono text-xs text-outline pr-2">
                   {track.durationFormatted || formatTime(track.duration || 180)}
                 </div>
 
@@ -593,6 +659,7 @@ function SelfMixContent() {
                   >
                     <span className="material-symbols-outlined text-[17px]">close</span>
                   </button>
+                  <SongOptionsMenu track={track} playlistId={activeMix?.id} />
                 </div>
               </div>
             );
@@ -605,67 +672,58 @@ function SelfMixContent() {
   // -------------------------------------------------------------
   // VIEW 2: Grid of all Self Mixes (Cloud First)
   // -------------------------------------------------------------
+  // -------------------------------------------------------------
+  // VIEW 2: Grid of all Self Mix Playlists
+  // -------------------------------------------------------------
+  const allPlaylists = [...(selfMixes || [])];
+  if (cloudMixes && cloudMixes.length > 0) {
+    const existingTrackIds = new Set(
+      allPlaylists.flatMap((m) => (m.tracks || []).map((t) => String(t.id)))
+    );
+    const orphanCloudTracks = cloudMixes.filter(
+      (cm) => !existingTrackIds.has(String(cm.id))
+    );
+    if (orphanCloudTracks.length > 0 && !allPlaylists.some((m) => m.id === "cloud-archive-playlist")) {
+      allPlaylists.push({
+        id: "cloud-archive-playlist",
+        title: "Cloud Audio Tracks",
+        subtitle: `By You • ${orphanCloudTracks.length} tracks`,
+        description: "Audio tracks synced from Supabase cloud storage",
+        curator: "You",
+        coverUrl: orphanCloudTracks[0]?.cover_url || COVER_ART_OPTIONS[0],
+        tracks: orphanCloudTracks.map((cm) => ({
+          id: cm.id,
+          title: cm.title,
+          artist: `@${cm.owner || "nabeeyl"}`,
+          album: "Cloud Audio",
+          audioUrl: cm.audio_url,
+          duration: cm.duration || 180,
+          durationFormatted: cm.duration_formatted || "3:00",
+          coverUrl: cm.cover_url || COVER_ART_OPTIONS[0],
+          isCloud: true,
+          isLocal: false,
+          source: "supabase-cloud",
+          fileName: cm.file_name,
+          fileSize: cm.file_size,
+          badge: "Cloud Mix",
+          badgeType: "cyan",
+        })),
+        isSelfMix: true,
+      });
+    }
+  }
+
+  const filteredPlaylists = allPlaylists.filter((mix) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      mix.title?.toLowerCase().includes(q) ||
+      mix.description?.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="w-full px-4 md:px-8 py-8 flex flex-col gap-8 select-none">
-      {/* Cloud Status Banner */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-cyan-950/40 via-surface-container/60 to-surface-container/30 border border-cyan-700/30 shadow-lg">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center flex-shrink-0">
-            <span className="material-symbols-outlined text-cyan-400 text-[18px]">
-              cloud_done
-            </span>
-          </div>
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white truncate">
-                Cloud Sync Active
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-950 border border-cyan-600/50 text-cyan-300">
-                @nabeeyl
-              </span>
-              {isCloudConfigured ? (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" title="Connected to Supabase" />
-              ) : (
-                <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]" title="Credentials pending in .env.local" />
-              )}
-            </div>
-            <p className="text-[11px] text-on-surface-variant truncate">
-              {isCloudConfigured
-                ? "Audio files stored in Supabase bucket 'self-mixes' — accessible across all your devices."
-                : "Supabase credentials not detected in .env.local. Click 'Setup Instructions' to configure."}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-shrink-0 self-end md:self-auto">
-          {!isCloudConfigured && (
-            <button
-              onClick={() => setShowSetupModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-600/60 text-cyan-300 text-xs font-bold transition-all shadow-sm cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[16px]">help</span>
-              <span>Setup Instructions</span>
-            </button>
-          )}
-
-          <button
-            onClick={loadCloudTracks}
-            disabled={isLoadingCloud}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container-high/80 hover:bg-surface-container-highest border border-white/10 text-outline hover:text-white text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
-            title="Refresh cloud library"
-          >
-            <span
-              className={`material-symbols-outlined text-[15px] ${
-                isLoadingCloud ? "animate-spin" : ""
-              }`}
-            >
-              sync
-            </span>
-            <span>Refresh</span>
-          </button>
-        </div>
-      </div>
-
       {/* Upload Error / Warning Banner */}
       {uploadError && (
         <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs">
@@ -686,13 +744,13 @@ function SelfMixContent() {
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <span className="font-label-sm text-[11px] uppercase tracking-widest text-cyan-400 font-bold flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[16px]">equalizer</span>
-            Self Mix • Cross-Device Cloud
+            <span className="material-symbols-outlined text-[16px]">queue_music</span>
+            Self Mix Playlists
           </span>
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
           <span className="text-[11px] text-outline">
-            {filteredCloudMixes.length}{" "}
-            {filteredCloudMixes.length === 1 ? "Cloud Track" : "Cloud Tracks"}
+            {filteredPlaylists.length}{" "}
+            {filteredPlaylists.length === 1 ? "Playlist" : "Playlists"}
           </span>
         </div>
 
@@ -702,7 +760,7 @@ function SelfMixContent() {
               Self Mix
             </h1>
             <p className="text-xs md:text-sm text-on-surface-variant max-w-2xl mt-1">
-              Upload .mp3 and .wav files to your private cloud storage. Stream your tracks on any device when logged into your account.
+              Create and manage custom self-mix playlists with your personal .mp3 and .wav files. Stream seamlessly across devices.
             </p>
           </div>
 
@@ -714,7 +772,7 @@ function SelfMixContent() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter cloud tracks..."
+                placeholder="Filter playlists..."
                 className="bg-transparent border-none outline-none text-xs text-on-surface placeholder:text-outline/70 w-full"
               />
               {searchQuery && (
@@ -758,210 +816,301 @@ function SelfMixContent() {
         }}
       />
 
-      {/* Grid of Self Mixes: 1 Upload Box + Cloud Track Cards */}
-      <div className="flex flex-wrap items-start justify-start gap-4 sm:gap-5">
-        {/* 1. First Card: 'New Self Mix' Upload Box with Drag & Drop */}
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={(e) => {
-            e.preventDefault();
-            setIsDragging(false);
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            setIsDragging(false);
-            if (e.dataTransfer.files) {
-              handleFilesSelected(e.dataTransfer.files);
+      {/* Grid of Self Mixes: Mobile Horizontal Cards (< md) + Desktop Responsive Grid (md:) */}
+      <>
+        {/* 1. Mobile Horizontal List (< md) matching Image 2 */}
+        <div className="flex flex-col gap-2.5 md:hidden">
+          {/* Mobile 'New Self Mix' Card */}
+          <div
+            onClick={() => {
+              setNewTitle("");
+              setPendingFiles([]);
               setShowCreateModal(true);
-            }
-          }}
-          onClick={() => {
-            setNewTitle("");
-            setPendingFiles([]);
-            setShowCreateModal(true);
-          }}
-          className={`w-48 sm:w-56 p-3 sm:p-3.5 rounded-2xl glass-card border transition-all duration-300 hover:-translate-y-1.5 shadow-xl cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none ${
-            isDragging
-              ? "border-primary bg-primary/10 shadow-[0_0_24px_rgba(76,215,246,0.3)]"
-              : "border-white/10 hover:border-primary/50 hover:bg-surface-container/90"
-          }`}
-        >
-          <div>
-            {/* Aspect Square Area */}
-            <div className="relative aspect-square w-full rounded-xl overflow-hidden border-2 border-dashed border-white/15 group-hover:border-primary/60 bg-surface-container-high/40 group-hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1.5 mb-3">
-              <div className="w-11 h-11 rounded-full bg-primary/10 border border-primary/30 group-hover:scale-110 group-hover:bg-primary text-primary group-hover:text-surface-container-lowest flex items-center justify-center transition-all shadow-[0_0_20px_rgba(76,215,246,0.3)]">
-                <span className="material-symbols-outlined text-[24px]">cloud_upload</span>
-              </div>
-              <span className="text-xs font-bold text-white/90 group-hover:text-primary transition-colors">
-                New Self Mix
-              </span>
-              <span className="text-[10px] text-cyan-300 font-mono uppercase tracking-wider">
-                .MP3 / .WAV Drop
-              </span>
+            }}
+            className="flex items-center gap-3.5 p-3 rounded-2xl glass-card border border-dashed border-cyan-500/40 hover:border-cyan-400 active:scale-[0.98] transition-all cursor-pointer shadow-lg group"
+          >
+            <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 flex-shrink-0 group-hover:scale-105 group-hover:bg-primary group-hover:text-surface-container-lowest transition-all">
+              <span className="material-symbols-outlined text-[24px]">cloud_upload</span>
             </div>
-
-            {/* Title and metadata */}
-            <div className="flex flex-col">
-              <h3 className="text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
-                Upload to Cloud
-              </h3>
-              <p className="text-[11px] text-on-surface-variant mt-0.5">
-                Drop .mp3 or .wav audio files
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs sm:text-sm font-bold text-white group-hover:text-cyan-300 transition-colors truncate">
+                  New Self Mix
+                </span>
+                <span className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex-shrink-0">
+                  UPLOAD
+                </span>
+              </div>
+              <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                Upload &amp; create personal mixes
               </p>
             </div>
-          </div>
-
-          <div className="pt-2.5 border-t border-white/5 flex items-center justify-between text-xs text-outline mt-2.5">
-            <span className="flex items-center gap-1 font-mono text-[10px] text-cyan-400">
-              <span className="material-symbols-outlined text-[13px]">cloud</span>
-              Supabase Storage
-            </span>
-            <span className="font-mono text-[10px] text-outline">Cross-Device</span>
-          </div>
-        </div>
-
-        {/* 2. Loading State */}
-        {isLoadingCloud && cloudMixes.length === 0 && (
-          <div className="w-48 sm:w-56 p-6 rounded-2xl glass-card border border-white/5 flex flex-col items-center justify-center gap-3 text-center">
-            <span className="material-symbols-outlined text-primary text-[28px] animate-spin">
-              progress_activity
-            </span>
-            <span className="text-xs text-outline font-medium">
-              Fetching cloud mixes...
+            <span className="material-symbols-outlined text-outline text-[20px] mr-1">
+              chevron_right
             </span>
           </div>
-        )}
 
-        {/* 3. Cloud Self Mix Cards (Playable Track Cards) */}
-        {filteredCloudMixes.map((mix) => {
-          const isThisCurrent = currentTrack?.id === mix.id;
-          const isThisPlaying = isThisCurrent && isPlaying;
+          {/* Self Mix Playlist Horizontal Cards */}
+          {filteredPlaylists.map((mix) => {
+            const tracks = mix.tracks || [];
+            const isThisPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
 
-          return (
-            <div
-              key={mix.id}
-              onClick={(e) => handlePlayCloudTrack(mix, e)}
-              className={`w-48 sm:w-56 p-3 sm:p-3.5 rounded-2xl glass-card border transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none ${
-                isThisCurrent
-                  ? "border-primary/70 bg-surface-container/90 ring-1 ring-primary/40 shadow-[0_0_24px_rgba(76,215,246,0.2)]"
-                  : "border-white/5 hover:border-primary/40 hover:bg-surface-container/90"
-              }`}
-            >
-              <div>
-                {/* Cover Image with Play Overlay */}
-                <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-3">
+            return (
+              <div
+                key={mix.id}
+                onClick={() => {
+                  setSelectedMixId(mix.id);
+                  router.push(`/self-mix?id=${mix.id}`);
+                }}
+                className="flex items-center gap-3.5 p-3 rounded-2xl glass-card border border-white/5 hover:border-primary/40 active:scale-[0.98] transition-all cursor-pointer shadow-lg group"
+              >
+                <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-surface-container-highest flex-shrink-0 shadow border border-white/10">
                   <img
-                    src={
-                      mix.cover_url ||
-                      "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80"
-                    }
+                    src={mix.coverUrl || COVER_ART_OPTIONS[0]}
                     alt={mix.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-full object-cover"
                   />
-
-                  {/* Top-left Cloud Badge */}
-                  <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-                    <span className="text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/85 text-cyan-300 border-cyan-700/60 shadow-[0_0_12px_rgba(6,182,212,0.3)] flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[11px]">cloud_done</span>
-                      CLOUD MIX
-                    </span>
-                  </div>
-
-                  {/* Delete button top-right */}
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteCloudTrack(mix, e)}
-                    className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10"
-                    title="Delete track from cloud"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">delete</span>
-                  </button>
-
-                  {/* Play Button Overlay & Visualizer */}
-                  <div
-                    className={`absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center ${
-                      isThisPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={(e) => handlePlayCloudTrack(mix, e)}
-                      className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] hover:scale-110 active:scale-95 transition-all cursor-pointer"
-                      title={isThisPlaying ? "Pause Track" : "Play Track"}
-                    >
-                      <span className="material-symbols-outlined text-[26px]">
-                        {isThisPlaying ? "pause" : "play_arrow"}
+                  {isThisPlaying && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-primary text-[16px] animate-pulse">
+                        graphic_eq
                       </span>
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Track Details */}
-                <div className="flex flex-col">
+                <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <h3
-                      className={`text-sm font-bold truncate ${
-                        isThisCurrent
-                          ? "text-primary"
-                          : "text-white group-hover:text-primary transition-colors"
+                    <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
+                      {mix.title}
+                    </h3>
+                    <span className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-950/85 text-cyan-300 border border-cyan-700/60 flex-shrink-0">
+                      PLAYLIST
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                    {tracks.length} {tracks.length === 1 ? "track" : "tracks"} • @{mix.curator || "You"}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={(e) => handleLocalMixPlay(mix, e)}
+                    className="w-9 h-9 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_12px_rgba(76,215,246,0.5)] active:scale-90 transition-transform cursor-pointer"
+                    title={isThisPlaying ? "Pause Mix" : "Play Mix"}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {isThisPlaying ? "pause" : "play_arrow"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Delete playlist "${mix.title}"?`)) {
+                        deleteSelfMix(mix.id);
+                      }
+                    }}
+                    className="w-8 h-8 rounded-full text-outline hover:text-red-400 hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
+                    title="Delete Playlist"
+                  >
+                    <span className="material-symbols-outlined text-[17px]">delete</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 2. Desktop Grid (md:) */}
+        <div className="hidden md:flex md:flex-wrap items-start justify-start gap-5">
+          {/* 1. First Card: 'New Self Mix' Upload Box with Drag & Drop */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              if (e.dataTransfer.files) {
+                handleFilesSelected(e.dataTransfer.files);
+                setShowCreateModal(true);
+              }
+            }}
+            onClick={() => {
+              setNewTitle("");
+              setPendingFiles([]);
+              setShowCreateModal(true);
+            }}
+            className={`w-full sm:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border transition-all duration-300 hover:-translate-y-1.5 shadow-xl cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none ${
+              isDragging
+                ? "border-primary bg-primary/10 shadow-[0_0_24px_rgba(76,215,246,0.3)]"
+                : "border-white/10 hover:border-primary/50 hover:bg-surface-container/90"
+            }`}
+          >
+            <div>
+              {/* Dashed Drag/Drop Area */}
+              <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden border-2 border-dashed border-cyan-500/30 group-hover:border-cyan-400 bg-surface-container-high/40 group-hover:bg-cyan-500/5 transition-all flex flex-col items-center justify-center gap-1 sm:gap-1.5 mb-2.5 sm:mb-3">
+                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-cyan-500/10 border border-cyan-500/30 group-hover:scale-110 group-hover:bg-primary text-cyan-400 group-hover:text-surface-container-lowest flex items-center justify-center transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+                  <span className="material-symbols-outlined text-[20px] sm:text-[24px]">cloud_upload</span>
+                </div>
+                <span className="text-xs font-bold text-white/90 group-hover:text-cyan-300 transition-colors">
+                  New Self Mix
+                </span>
+                <span className="text-[9px] sm:text-[10px] text-outline font-mono uppercase tracking-wider text-center px-1">
+                  Drop audio or click
+                </span>
+              </div>
+
+              {/* Title & Description */}
+              <div className="flex flex-col">
+                <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
+                  Upload & Create
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-on-surface-variant mt-0.5 truncate">
+                  Build your stems & tracks
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-outline mt-2">
+              <span className="flex items-center gap-1 font-mono text-[9px] sm:text-[10px] text-primary">
+                <span className="material-symbols-outlined text-[12px] sm:text-[13px]">cloud_done</span>
+                Cloud Sync
+              </span>
+              <span className="font-mono text-[9px] sm:text-[10px] text-outline">Cross-Device</span>
+            </div>
+          </div>
+
+          {/* 2. Loading State */}
+          {isLoadingCloud && allPlaylists.length === 0 && (
+            <div className="w-full sm:w-56 p-6 rounded-xl sm:rounded-2xl glass-card border border-white/5 flex flex-col items-center justify-center gap-3 text-center">
+              <span className="material-symbols-outlined text-primary text-[28px] animate-spin">
+                progress_activity
+              </span>
+              <span className="text-xs text-outline font-medium">
+                Loading playlists...
+              </span>
+            </div>
+          )}
+
+          {/* 3. Self Mix Playlist Cards */}
+          {filteredPlaylists.map((mix) => {
+            const tracks = mix.tracks || [];
+            const isThisPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+            const totalDurationStr = formatPlaylistDuration(tracks);
+
+            return (
+              <div
+                key={mix.id}
+                onClick={() => {
+                  setSelectedMixId(mix.id);
+                  router.push(`/self-mix?id=${mix.id}`);
+                }}
+                className="w-full sm:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border border-white/10 hover:border-primary/50 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
+              >
+                <div>
+                  {/* Cover Image with Play Overlay */}
+                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-3">
+                    <img
+                      src={
+                        mix.coverUrl ||
+                        COVER_ART_OPTIONS[0]
+                      }
+                      alt={mix.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+
+                    {/* Top-left Playlist Badge */}
+                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                      <span className="text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/85 text-cyan-300 border-cyan-700/60 shadow-[0_0_12px_rgba(6,182,212,0.3)] flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[11px]">queue_music</span>
+                        PLAYLIST
+                      </span>
+                    </div>
+
+                    {/* Delete button top-right */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete playlist "${mix.title}"?`)) {
+                          deleteSelfMix(mix.id);
+                        }
+                      }}
+                      className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10"
+                      title="Delete Playlist"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">delete</span>
+                    </button>
+
+                    {/* Play Button Overlay */}
+                    <div
+                      className={`absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center ${
+                        isThisPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                       }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => handleLocalMixPlay(mix, e)}
+                        className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] hover:scale-110 active:scale-95 transition-all cursor-pointer"
+                        title={isThisPlaying ? "Pause Mix" : "Play Mix"}
+                      >
+                        <span className="material-symbols-outlined text-[26px]">
+                          {isThisPlaying ? "pause" : "play_arrow"}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Playlist Details */}
+                  <div className="flex flex-col">
+                    <h3
+                      className="text-sm font-bold text-white group-hover:text-primary transition-colors truncate"
                       title={mix.title}
                     >
                       {mix.title}
                     </h3>
-                  </div>
-
-                  <div className="flex items-center gap-1 mt-0.5 text-[11px] text-on-surface-variant">
-                    <span className="text-cyan-400 font-medium">@{mix.owner || "nabeeyl"}</span>
-                    <span>•</span>
-                    <span className="truncate">{mix.file_name || "Audio File"}</span>
+                    <div className="flex items-center gap-1 mt-0.5 text-[11px] text-on-surface-variant">
+                      <span className="text-cyan-400 font-medium">@{mix.curator || "You"}</span>
+                      <span>•</span>
+                      <span>{tracks.length} {tracks.length === 1 ? "song" : "songs"}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Card Footer */}
-              <div className="pt-2.5 border-t border-white/5 flex items-center justify-between text-xs text-outline mt-2.5">
-                <span className="flex items-center gap-1 font-mono text-[10px] text-cyan-300">
-                  <span className="material-symbols-outlined text-[12px]">graphic_eq</span>
-                  {mix.duration_formatted || "3:00"}
-                </span>
-
-                <div className="flex items-center gap-2">
-                  {mix.file_size ? (
-                    <span className="font-mono text-[10px] text-outline">
-                      {formatFileSize(mix.file_size)}
-                    </span>
-                  ) : null}
-                  <DownloadButton
-                    track={{
-                      id: mix.id,
-                      title: mix.title,
-                      artist: `@${mix.owner || "nabeeyl"}`,
-                      audioUrl: mix.audio_url,
-                      fileName: mix.file_name,
-                    }}
-                  />
+                {/* Card Footer */}
+                <div className="pt-2.5 border-t border-white/5 flex items-center justify-between text-xs text-outline mt-2.5">
+                  <span className="flex items-center gap-1 font-mono text-[10px] text-cyan-300">
+                    <span className="material-symbols-outlined text-[12px]">schedule</span>
+                    {totalDurationStr || "0:00"}
+                  </span>
+                  <span className="font-mono text-[10px] text-outline">
+                    Self Mix
+                  </span>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      </>
 
-      {/* Empty State when no tracks in Cloud */}
-      {!isLoadingCloud && cloudMixes.length === 0 && (
+      {/* Empty State when no playlists */}
+      {!isLoadingCloud && allPlaylists.length === 0 && (
         <div className="p-8 rounded-2xl border border-dashed border-cyan-500/20 bg-cyan-950/20 text-center flex flex-col items-center justify-center gap-3">
           <div className="w-12 h-12 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-            <span className="material-symbols-outlined text-[28px]">cloud_upload</span>
+            <span className="material-symbols-outlined text-[28px]">queue_music</span>
           </div>
           <h3 className="text-base font-bold text-white">
-            No Cloud Tracks Yet
+            No Self Mix Playlists Yet
           </h3>
           <p className="text-xs text-outline max-w-md">
-            Click <strong>New Self Mix</strong> to upload your first .mp3 or .wav audio file to Supabase. Once uploaded, your music will be synced to all devices under your account (<strong>nabeeyl</strong>).
+            Click <strong>New Self Mix</strong> to create your first playlist. Add your .mp3 and .wav songs, pick custom cover artwork, and stream on any device.
           </p>
           <button
             onClick={() => {
@@ -971,65 +1120,8 @@ function SelfMixContent() {
             }}
             className="mt-1 px-4 py-2 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer"
           >
-            Upload First Mix
+            Create First Playlist
           </button>
-        </div>
-      )}
-
-      {/* Legacy Local Mixes (if any exist from offline usage) */}
-      {(selfMixes || []).length > 0 && (
-        <div className="mt-8 pt-8 border-t border-white/10 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-outline text-[18px]">
-                phonelink_ring
-              </span>
-              <h2 className="text-base font-bold text-white">
-                Local Device Mixes (Offline Storage)
-              </h2>
-              <span className="text-xs text-outline">
-                ({selfMixes.length})
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-start justify-start gap-4 sm:gap-5">
-            {selfMixes.map((mix) => {
-              const tracks = mix.tracks || [];
-              const isThisPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
-
-              return (
-                <div
-                  key={mix.id}
-                  onClick={() => {
-                    setSelectedMixId(mix.id);
-                    router.push(`/self-mix?id=${mix.id}`);
-                  }}
-                  className="w-48 sm:w-56 p-3 sm:p-3.5 rounded-2xl glass-card border border-white/5 hover:border-white/20 hover:bg-surface-container/90 transition-all cursor-pointer group flex flex-col justify-between"
-                >
-                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest mb-3">
-                    <img
-                      src={mix.coverUrl}
-                      alt={mix.title}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute top-2.5 left-2.5">
-                      <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-surface-container/90 text-outline border border-white/10">
-                        OFFLINE
-                      </span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-xs font-bold text-white truncate">{mix.title}</h4>
-                    <p className="text-[10px] text-outline mt-0.5">
-                      {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
 
@@ -1068,16 +1160,16 @@ function SelfMixContent() {
             </div>
 
             <form onSubmit={handleCreateSubmit} className="flex flex-col gap-4">
-              {/* Mix Title */}
+              {/* Playlist Title */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-outline uppercase tracking-wider">
-                  Track / Mix Title
+                  Playlist Title
                 </label>
                 <input
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="e.g. Midnight Synth Remix / Acoustic Mashup"
+                  placeholder="e.g. Midnight Beats / Studio Session"
                   autoFocus
                   maxLength={60}
                   className="w-full bg-surface-container-lowest border border-white/15 focus:border-primary focus:ring-1 focus:ring-primary/50 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-outline/60 outline-none transition-all"
@@ -1087,7 +1179,7 @@ function SelfMixContent() {
               {/* Cover Art Picker */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-outline uppercase tracking-wider">
-                  Select Cover Artwork
+                  Select Cover Artwork (Playlist Cover)
                 </label>
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
                   {COVER_ART_OPTIONS.map((url, idx) => (
@@ -1122,6 +1214,7 @@ function SelfMixContent() {
                 </div>
 
                 <div
+                  onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => {
                     e.preventDefault();
                     setIsDragging(true);
@@ -1137,10 +1230,10 @@ function SelfMixContent() {
                       handleFilesSelected(e.dataTransfer.files);
                     }
                   }}
-                  className={`border-2 border-dashed rounded-xl p-5 flex flex-col items-center justify-center gap-2.5 transition-all text-center ${
+                  className={`border-2 border-dashed rounded-xl p-5 flex flex-col items-center justify-center gap-2.5 transition-all text-center cursor-pointer select-none ${
                     isDragging
-                      ? "border-primary bg-primary/10"
-                      : "border-white/15 bg-surface-container-lowest/50 hover:border-white/30"
+                      ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(76,215,246,0.2)]"
+                      : "border-white/15 bg-surface-container-lowest/50 hover:border-primary/50 hover:bg-white/5"
                   }`}
                 >
                   <input
@@ -1161,13 +1254,9 @@ function SelfMixContent() {
                     </span>
                   </div>
                   <div>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="text-xs font-bold text-primary hover:underline cursor-pointer"
-                    >
+                    <span className="text-xs font-bold text-primary hover:underline">
                       Click to select .mp3 or .wav files
-                    </button>
+                    </span>
                     <span className="text-xs text-outline"> or drag and drop</span>
                   </div>
                   <p className="text-[10px] text-outline">
@@ -1196,7 +1285,10 @@ function SelfMixContent() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => removePendingFile(pf.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removePendingFile(pf.id);
+                            }}
                             className="text-outline hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
                             title="Remove file"
                           >
@@ -1249,12 +1341,12 @@ function SelfMixContent() {
                       <span className="material-symbols-outlined text-[16px] animate-spin">
                         progress_activity
                       </span>
-                      <span>Uploading to Cloud...</span>
+                      <span>Creating Playlist...</span>
                     </>
                   ) : (
                     <>
-                      <span>Upload & Save to Cloud</span>
-                      <span className="material-symbols-outlined text-[16px]">cloud_upload</span>
+                      <span>Create Self Mix Playlist</span>
+                      <span className="material-symbols-outlined text-[16px]">library_add</span>
                     </>
                   )}
                 </button>

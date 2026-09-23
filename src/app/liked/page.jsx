@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMusic } from "../../context/MusicContext";
 import { NOCTURNE_TRACKS } from "../../data/nocturneData";
 import DownloadButton from "../../components/DownloadButton";
+import SongOptionsMenu from "../../components/SongOptionsMenu";
 
 export default function LikedSongsPage() {
   const {
@@ -19,6 +20,7 @@ export default function LikedSongsPage() {
     formatTime,
     user,
     openAuthModal,
+    offlineTrackIds,
   } = useMusic();
 
   const likedTracks = contextLikedTracks || [];
@@ -46,12 +48,12 @@ export default function LikedSongsPage() {
   return (
     <div className="w-full flex flex-col pb-12 select-none">
       {/* Hero Header */}
-      <div className="relative w-full p-6 md:p-8 bg-gradient-to-b from-secondary-container/50 via-surface-container-low/40 to-transparent border-b border-white/5">
-        <div className="flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-8 max-w-6xl">
+      <div className="relative w-full p-4 sm:p-6 md:p-8 bg-gradient-to-b from-secondary-container/50 via-surface-container-low/40 to-transparent border-b border-white/5">
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-8 max-w-6xl">
           {/* Cover Art Heart Box */}
-          <div className="w-48 h-48 md:w-56 md:h-56 rounded-2xl bg-gradient-to-br from-secondary-container via-purple-600 to-primary flex items-center justify-center shadow-[0_20px_40px_rgba(87,27,193,0.4)] flex-shrink-0 border border-white/10">
+          <div className="w-36 h-36 sm:w-48 sm:h-48 md:w-56 md:h-56 rounded-2xl bg-gradient-to-br from-secondary-container via-purple-600 to-primary flex items-center justify-center shadow-[0_20px_40px_rgba(87,27,193,0.4)] flex-shrink-0 border border-white/10">
             <span
-              className="material-symbols-outlined text-white text-[72px]"
+              className="material-symbols-outlined text-white text-[52px] sm:text-[72px]"
               style={{ fontVariationSettings: "'FILL' 1" }}
             >
               favorite
@@ -117,14 +119,14 @@ export default function LikedSongsPage() {
         ) : (
           <>
             {/* Table Header */}
-            <div className="grid grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_4.5rem] items-center px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
+            <div className="grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
               <span className="text-center">#</span>
               <span>Title</span>
               <span className="hidden md:block">Artist</span>
-              <span className="text-right flex items-center justify-end">
+              <span className="text-right flex items-center justify-end pr-1">
                 <span className="material-symbols-outlined text-[16px]">schedule</span>
               </span>
-              <span className="text-center" />
+              <span className="text-right hidden md:block pr-2">Actions</span>
             </div>
 
             {/* Tracks */}
@@ -137,7 +139,7 @@ export default function LikedSongsPage() {
                   <div
                     key={track.id}
                     onClick={() => handleRowClick(track)}
-                    className={`group grid grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_4.5rem] items-center px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+                    className={`group grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
                       isCurrent
                         ? "bg-surface-container-high/80 border border-primary/30"
                         : "hover:bg-surface-container/60 hover:border-white/5 border border-transparent"
@@ -171,13 +173,23 @@ export default function LikedSongsPage() {
                         />
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <span
-                          className={`text-sm font-semibold truncate transition-colors ${
-                            isCurrent ? "text-primary" : "text-white group-hover:text-primary"
-                          }`}
-                        >
-                          {track.title}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`text-sm font-semibold truncate transition-colors ${
+                              isCurrent ? "text-primary" : "text-white group-hover:text-primary"
+                            }`}
+                          >
+                            {track.title}
+                          </span>
+                          {offlineTrackIds?.has(String(track.id)) && (
+                            <span
+                              className="material-symbols-outlined text-primary text-[14px] flex-shrink-0"
+                              title="Available offline on this device"
+                            >
+                              download_done
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs text-on-surface-variant md:hidden truncate mt-0.5">
                           {track.artist}
                         </span>
@@ -190,12 +202,12 @@ export default function LikedSongsPage() {
                     </div>
 
                     {/* Duration */}
-                    <div className="text-right text-xs font-mono text-outline">
+                    <div className="text-right text-xs font-mono text-outline pr-2">
                       {formatTime(track.duration)}
                     </div>
 
-                    {/* Actions: Download & Like button */}
-                    <div className="flex items-center justify-center gap-1">
+                    {/* Actions: Download, Like button, & 3-dot options */}
+                    <div className="flex items-center justify-end gap-1 flex-shrink-0">
                       <DownloadButton track={track} buttonSize="p-1" iconSize="text-[18px]" />
                       <button
                         onClick={(e) => {
@@ -212,6 +224,7 @@ export default function LikedSongsPage() {
                           favorite
                         </span>
                       </button>
+                      <SongOptionsMenu track={track} />
                     </div>
                   </div>
                 );

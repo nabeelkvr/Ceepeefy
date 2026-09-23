@@ -4,15 +4,15 @@ import { useMusic } from "../context/MusicContext";
 import DownloadButton from "./DownloadButton";
 
 export default function SongRow({ song, index, tracklist }) {
-  const { 
-    currentSong, 
-    isPlaying, 
-    playSong, 
-    togglePlay, 
-    toggleLike, 
-    isLiked, 
+  const {
+    currentSong,
+    isPlaying,
+    playSong,
+    togglePlay,
+    toggleLike,
+    isLiked,
     addToQueue,
-    formatTime 
+    formatTime
   } = useMusic();
 
   const isCurrent = currentSong?.id === song.id;
@@ -30,9 +30,8 @@ export default function SongRow({ song, index, tracklist }) {
   return (
     <div
       onClick={handleRowClick}
-      className={`group flex items-center justify-between px-3 md:px-4 py-2.5 rounded-md hover:bg-white/10 cursor-pointer transition-colors text-sm ${
-        isCurrent ? "bg-white/10" : ""
-      }`}
+      className={`group flex items-center justify-between px-3 md:px-4 py-2.5 rounded-md hover:bg-white/10 cursor-pointer transition-colors text-sm ${isCurrent ? "bg-white/10" : ""
+        }`}
     >
       {/* Left: Index / Play Icon + Cover + Title & Artist */}
       <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
@@ -107,9 +106,8 @@ export default function SongRow({ song, index, tracklist }) {
             e.stopPropagation();
             toggleLike(song);
           }}
-          className={`p-1 transition-transform active:scale-125 ${
-            liked ? "text-spotify-green opacity-100" : "text-neutral-400 hover:text-white opacity-0 group-hover:opacity-100"
-          }`}
+          className={`p-1 transition-transform active:scale-125 ${liked ? "text-spotify-green opacity-100" : "text-neutral-400 hover:text-white opacity-0 group-hover:opacity-100"
+            }`}
           title={liked ? "Remove from Liked Songs" : "Save to Liked Songs"}
         >
           <Heart className={`w-4 h-4 ${liked ? "fill-spotify-green" : ""}`} />

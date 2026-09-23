@@ -12,6 +12,7 @@ export default function FullLyricsPanel() {
     isPlaying,
     lyricsMode,
     setLyricsMode,
+    minimizeLyricsToCard,
     syncedLyrics,
     isLoadingLyrics,
     lyricsError,
@@ -83,7 +84,7 @@ export default function FullLyricsPanel() {
         <div className="flex items-center gap-2">
           {/* Switch to Mini Card Mode */}
           <button
-            onClick={() => setLyricsMode("mini")}
+            onClick={() => minimizeLyricsToCard()}
             className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-white/10 text-xs font-medium text-outline hover:text-white transition-all shadow-sm"
             title="Switch to Mini-Player view"
           >
@@ -93,7 +94,7 @@ export default function FullLyricsPanel() {
 
           {/* Close Panel Button */}
           <button
-            onClick={() => setLyricsMode("hidden")}
+            onClick={() => minimizeLyricsToCard()}
             className="w-9 h-9 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 flex items-center justify-center text-outline hover:text-white transition-colors"
             title="Close lyrics view"
             aria-label="Close lyrics"

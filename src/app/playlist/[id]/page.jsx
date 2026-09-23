@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMusic } from "../../../context/MusicContext";
 import { NOCTURNE_PLAYLISTS, NOCTURNE_TRACKS, getPlaylistById } from "../../../data/nocturneData";
 import DownloadButton from "../../../components/DownloadButton";
+import SongOptionsMenu from "../../../components/SongOptionsMenu";
 import { formatPlaylistDuration } from "../../../utils/playlistUtils";
 import {
   saveLocalAudioFile,
@@ -29,6 +30,10 @@ export default function PlaylistPage() {
     isLiked,
     isShuffle,
     setIsShuffle,
+    toggleShuffle,
+    pinnedPlaylistIds,
+    togglePinPlaylist,
+    isPlaylistPinned,
     formatTime,
     customPlaylists,
     deleteCustomPlaylist,
@@ -37,6 +42,9 @@ export default function PlaylistPage() {
     addTrackToPlaylist,
     addLocalTracksToSelfMix,
     removeTrackFromPlaylist,
+    offlineTrackIds,
+    downloadPlaylist,
+    removePlaylistOffline,
   } = useMusic();
 
   const fileInputRef = useRef(null);
@@ -44,6 +52,13 @@ export default function PlaylistPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [remotePlaylist, setRemotePlaylist] = useState(null);
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  // Playlist Offline Download States
+  const [isDownloadingOffline, setIsDownloadingOffline] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
+  const [downloadStatusMsg, setDownloadStatusMsg] = useState(null);
+  const [isOfflineMenuOpen, setIsOfflineMenuOpen] = useState(false);
 
   const localMatch =
     customPlaylists?.find((p) => String(p.id) === String(playlistId)) ||
@@ -106,6 +121,55 @@ export default function PlaylistPage() {
       togglePlay();
     } else {
       playTrack(track, tracks);
+    }
+  };
+
+  // Offline Download Handlers
+  const totalTrackCount = tracks?.length || 0;
+  const downloadedTrackCount = tracks?.filter((t) => offlineTrackIds?.has(String(t.id)))?.length || 0;
+  const isPlaylistFullyOffline = totalTrackCount > 0 && downloadedTrackCount === totalTrackCount;
+  const isPlaylistPartiallyOffline = downloadedTrackCount > 0 && downloadedTrackCount < totalTrackCount;
+
+  const handleDownloadPlaylist = async () => {
+    if (!tracks || tracks.length === 0 || isDownloadingOffline) return;
+    setIsDownloadingOffline(true);
+    setDownloadProgress({ current: 0, total: tracks.length });
+    setDownloadStatusMsg(null);
+    setIsOfflineMenuOpen(false);
+
+    try {
+      const res = await downloadPlaylist(
+        {
+          id: playlist.id,
+          title: playlist.title,
+          coverUrl: playlist.coverUrl,
+          tracks,
+        },
+        ({ current, total }) => {
+          setDownloadProgress({ current, total });
+        }
+      );
+
+      if (res.failedCount > 0) {
+        setDownloadStatusMsg(`⚠ ${res.failedCount} songs could not be downloaded`);
+      } else {
+        setDownloadStatusMsg(`✓ ${res.successCount} songs available offline`);
+      }
+    } catch (err) {
+      console.error("Playlist offline download error:", err);
+      setDownloadStatusMsg("Download encountered an error");
+    } finally {
+      setIsDownloadingOffline(false);
+    }
+  };
+
+  const handleRemoveOffline = async () => {
+    try {
+      await removePlaylistOffline(playlist.id, tracks);
+      setIsOfflineMenuOpen(false);
+      setDownloadStatusMsg(null);
+    } catch (err) {
+      console.warn("Remove playlist offline error:", err);
     }
   };
 
@@ -174,10 +238,10 @@ export default function PlaylistPage() {
   return (
     <div className="w-full flex flex-col pb-12 select-none">
       {/* Dynamic Hero Banner */}
-      <div className="relative w-full p-6 md:p-8 bg-gradient-to-b from-surface-container-high/60 via-surface-container-low/40 to-transparent border-b border-white/5">
-        <div className="flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-8 max-w-6xl">
+      <div className="relative w-full p-4 sm:p-6 md:p-8 bg-gradient-to-b from-surface-container-high/60 via-surface-container-low/40 to-transparent border-b border-white/5">
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-8 max-w-6xl">
           {/* Cover Art */}
-          <div className="relative w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group">
+          <div className="relative w-36 h-36 sm:w-44 sm:h-44 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group">
             <img
               src={playlist.coverUrl}
               alt={playlist.title}
@@ -187,23 +251,22 @@ export default function PlaylistPage() {
           </div>
 
           {/* Metadata info */}
-          <div className="flex flex-col gap-2.5 text-center md:text-left flex-1 min-w-0">
+          <div className="flex flex-col gap-2 sm:gap-2.5 text-center md:text-left flex-1 min-w-0">
             <div className="flex items-center justify-center md:justify-start gap-2">
               <span
-                className={`px-2.5 py-0.5 rounded-full border text-[11px] font-bold tracking-wider uppercase ${
-                  isSelfMix
-                    ? "bg-cyan-950/80 text-cyan-300 border-cyan-700/60"
-                    : "bg-primary/15 border-primary/30 text-primary"
-                }`}
+                className={`px-2.5 py-0.5 rounded-full border text-[10px] sm:text-[11px] font-bold tracking-wider uppercase ${isSelfMix
+                  ? "bg-cyan-950/80 text-cyan-300 border-cyan-700/60"
+                  : "bg-primary/15 border-primary/30 text-primary"
+                  }`}
               >
                 {isSelfMix ? "Self Mix • Hi-Res Lossless" : (playlist.fidelity || "Public Playlist • Hi-Res Lossless")}
               </span>
-              <span className="px-2 py-0.5 rounded-md bg-tertiary/15 text-tertiary text-[10px] font-mono font-bold">
+              <span className="px-2 py-0.5 rounded-md bg-tertiary/15 text-tertiary text-[9px] sm:text-[10px] font-mono font-bold">
                 {playlist.spec || "24-Bit • 192kHz"}
               </span>
             </div>
 
-            <h1 className="text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight">
+            <h1 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight">
               {playlist.title}
             </h1>
 
@@ -211,12 +274,12 @@ export default function PlaylistPage() {
               {playlist.description}
             </p>
 
-            <div className="flex items-center justify-center md:justify-start gap-3 text-xs text-outline pt-2">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3 text-xs text-outline pt-1 sm:pt-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <img
                   src={playlist.curatorAvatar || "https://lh3.googleusercontent.com/aida-public/AB6AXuB0776cuJDNwyUTJA-rmqEC0bmxGrVq2yheMO1LRRjEKa8X3Cf3UEDu0hJn4mdmjyKKeTpXvIjAXGckcnVAnrz3t0pLZyIHxk3oSWIBKnTAewK0vZY8jNgt5WWU1mB33uzQZJtQJNQfehNFMnRCim5JQVgBeDcIsQ21sOVpfHhvACpeifEiQ9VMkYu25PbaQ5RDOCGsSjDtlsMuC8kifyPcZ62qnvBUyplbvUNIWKL7azjlQ_ONJ0ZS"}
                   alt="Curator"
-                  className="w-5 h-5 rounded-full object-cover"
+                  className="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover"
                 />
                 <span className="text-white font-medium">{playlist.curator}</span>
               </div>
@@ -233,30 +296,47 @@ export default function PlaylistPage() {
         </div>
 
         {/* Action Controls Bar */}
-        <div className="flex items-center gap-4 mt-8 flex-wrap">
+        <div className="flex items-center gap-2.5 sm:gap-4 mt-5 sm:mt-8 flex-wrap">
           {/* Master Play Button */}
           <button
             onClick={handleMasterPlay}
             disabled={tracks.length === 0}
-            className="w-14 h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             title={isCurrentPlaylistPlaying ? "Pause playlist" : "Play playlist"}
           >
-            <span className="material-symbols-outlined text-[32px]">
+            <span className="material-symbols-outlined text-[26px] sm:text-[32px]">
               {isCurrentPlaylistPlaying ? "pause" : "play_arrow"}
             </span>
           </button>
 
-          {/* Shuffle Button */}
+          {/* Shuffle Button matching Image 3 */}
           <button
-            onClick={() => setIsShuffle((prev) => !prev)}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-              isShuffle
-                ? "text-primary bg-primary/10 border border-primary/30"
-                : "text-outline hover:text-white bg-surface-container/60 hover:bg-surface-container"
-            }`}
-            title="Toggle Shuffle"
+            type="button"
+            onClick={() => toggleShuffle(tracks)}
+            className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full border flex items-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${isShuffle
+                ? "bg-primary/15 text-primary border-primary/40 shadow-[0_0_15px_rgba(76,215,246,0.3)]"
+                : "bg-surface-container/60 text-outline hover:text-white border-white/10 hover:border-white/20"
+              }`}
+            title={isShuffle ? "Shuffle is ON" : "Shuffle is OFF"}
           >
-            <span className="material-symbols-outlined text-[22px]">shuffle</span>
+            <span className="material-symbols-outlined text-[17px] sm:text-[19px]">shuffle</span>
+            <span>Shuffle</span>
+          </button>
+
+          {/* Pin to Library Button matching Image 3 */}
+          <button
+            type="button"
+            onClick={() => togglePinPlaylist(playlist.id, playlist)}
+            className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full border flex items-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${isPlaylistPinned(playlist.id)
+                ? "bg-primary/15 text-primary border-primary/40 shadow-[0_0_15px_rgba(76,215,246,0.3)]"
+                : "bg-surface-container/60 text-outline hover:text-white border-white/10 hover:border-white/20"
+              }`}
+            title={isPlaylistPinned(playlist.id) ? "Unpin from library" : "Pin to library"}
+          >
+            <span className={`material-symbols-outlined text-[17px] sm:text-[19px] ${isPlaylistPinned(playlist.id) ? "rotate-45" : ""}`}>
+              push_pin
+            </span>
+            <span>{isPlaylistPinned(playlist.id) ? "Pinned" : "Pin to Library"}</span>
           </button>
 
           {/* Like Playlist */}
@@ -267,13 +347,97 @@ export default function PlaylistPage() {
             <span className="material-symbols-outlined text-[22px]">favorite_border</span>
           </button>
 
-          {/* Download offline */}
-          <button
-            className="w-10 h-10 rounded-full flex items-center justify-center text-outline hover:text-white bg-surface-container/60 hover:bg-surface-container transition-all cursor-pointer"
-            title="Download for offline playback"
-          >
-            <span className="material-symbols-outlined text-[22px]">download_for_offline</span>
-          </button>
+          {/* Offline Download Control */}
+          <div className="relative">
+            {isDownloadingOffline ? (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/15 text-primary border border-primary/40 text-xs font-bold shadow-[0_0_15px_rgba(76,215,246,0.3)] animate-pulse select-none">
+                <span className="material-symbols-outlined text-[17px] animate-spin">
+                  progress_activity
+                </span>
+                <span>
+                  Downloading {downloadProgress.current} / {downloadProgress.total} songs
+                </span>
+              </div>
+            ) : isPlaylistFullyOffline ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsOfflineMenuOpen((prev) => !prev)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/25 text-xs font-bold shadow-[0_0_16px_rgba(16,185,129,0.25)] active:scale-95 transition-all cursor-pointer group"
+                  title="Available for offline playback on this device (click for options)"
+                >
+                  <span className="material-symbols-outlined text-emerald-400 text-[18px]">
+                    check_circle
+                  </span>
+                  <span>✓ Available Offline</span>
+                  <span className="material-symbols-outlined text-[15px] text-emerald-400/80 group-hover:translate-y-0.5 transition-transform">
+                    expand_more
+                  </span>
+                </button>
+
+                {isOfflineMenuOpen && (
+                  <div className="absolute top-full left-0 mt-2 w-52 bg-[#0d172e]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 text-[11px] text-outline border-b border-white/10 mb-1">
+                      {downloadedTrackCount} of {totalTrackCount} songs offline
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDownloadPlaylist}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[17px] text-primary">
+                        refresh
+                      </span>
+                      <span>Update / Re-download</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveOffline}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[17px]">
+                        delete
+                      </span>
+                      <span>Remove from offline</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : isPlaylistPartiallyOffline ? (
+              <button
+                type="button"
+                onClick={handleDownloadPlaylist}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/25 text-xs font-bold active:scale-95 transition-all cursor-pointer"
+                title="Download missing tracks to make playlist fully offline"
+              >
+                <span className="material-symbols-outlined text-[18px] text-cyan-400">
+                  downloading
+                </span>
+                <span>
+                  {downloadedTrackCount} / {totalTrackCount} Available Offline
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleDownloadPlaylist}
+                disabled={totalTrackCount === 0}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container/80 text-white hover:text-primary hover:border-primary/40 border border-white/10 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
+                title="Download all songs in playlist to this device for offline playback"
+              >
+                <span className="material-symbols-outlined text-[18px] text-outline group-hover:text-primary transition-colors">
+                  download_for_offline
+                </span>
+                <span>Download for Offline</span>
+              </button>
+            )}
+          </div>
+
+          {downloadStatusMsg && (
+            <span className="text-xs font-medium text-on-surface-variant flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10">
+              {downloadStatusMsg}
+            </span>
+          )}
 
           {/* Upload Tracks Button (Only for Self Mix) */}
           {isSelfMix && (
@@ -304,39 +468,76 @@ export default function PlaylistPage() {
             </>
           )}
 
-          {/* Delete Playlist Button (if custom or self mix) */}
+          {/* Delete Playlist Button (icon-only matching Image 2) */}
           {isCustomPlaylist && (
             <button
-              onClick={() => {
-                if (isSelfMix) {
-                  deleteSelfMix(playlist.id);
-                  router.push("/self-mix");
-                } else {
-                  deleteCustomPlaylist(playlist.id);
-                  router.push("/playlists");
-                }
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 text-xs font-bold transition-all shadow-sm active:scale-95 ml-auto sm:ml-2 cursor-pointer"
-              title="Delete this playlist"
+              type="button"
+              onClick={() => setIsDeleteModalOpen(true)}
+              aria-label={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
+              title={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 transition-all shadow-sm active:scale-95 ml-auto sm:ml-2 cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[18px]">delete</span>
-              <span>{isSelfMix ? "Delete Self Mix" : "Delete Playlist"}</span>
+              <span className="material-symbols-outlined text-[20px]">delete</span>
             </button>
           )}
         </div>
       </div>
 
+      {/* Delete Confirmation Modal Dialog */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-sm bg-[#0d172e] border border-red-500/30 rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex flex-col gap-4">
+            <div className="w-12 h-12 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto">
+              <span className="material-symbols-outlined text-[26px]">delete</span>
+            </div>
+            <div className="flex flex-col text-center gap-1.5">
+              <h3 className="text-lg font-bold text-white">
+                Delete {isSelfMix ? "Self Mix" : "Playlist"}?
+              </h3>
+              <p className="text-xs text-outline leading-relaxed">
+                Are you sure you want to delete <span className="text-white font-semibold">"{playlist.title}"</span>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 mt-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-white/10 text-outline hover:text-white hover:bg-white/5 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  if (isSelfMix) {
+                    deleteSelfMix(playlist.id);
+                    router.push("/self-mix");
+                  } else {
+                    deleteCustomPlaylist(playlist.id);
+                    router.push("/playlists");
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold shadow-[0_0_15px_rgba(239,68,68,0.4)] transition-all cursor-pointer"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tracklist Table */}
       <div className="px-4 md:px-8 pt-6 flex flex-col gap-2">
         {/* Table Header */}
-        <div className="grid grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_4.5rem] items-center px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
+        <div className="grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
           <span className="text-center">#</span>
           <span>Title</span>
           <span className="hidden md:block">Artist</span>
-          <span className="text-right flex items-center justify-end">
+          <span className="text-right flex items-center justify-end pr-1">
             <span className="material-symbols-outlined text-[16px]">schedule</span>
           </span>
-          <span className="text-center" />
+          <span className="text-right hidden md:block pr-2">Actions</span>
         </div>
 
         {/* Tracks List */}
@@ -361,11 +562,10 @@ export default function PlaylistPage() {
                   }
                 }}
                 onClick={() => fileInputRef.current?.click()}
-                className={`flex flex-col items-center justify-center py-16 text-center gap-3 rounded-2xl border-2 border-dashed transition-all my-4 cursor-pointer ${
-                  isDragging
-                    ? "border-primary bg-primary/10"
-                    : "border-white/15 hover:border-primary/50 bg-surface-container-high/40 hover:bg-surface-container-high/60"
-                }`}
+                className={`flex flex-col items-center justify-center py-16 text-center gap-3 rounded-2xl border-2 border-dashed transition-all my-4 cursor-pointer ${isDragging
+                  ? "border-primary bg-primary/10"
+                  : "border-white/15 hover:border-primary/50 bg-surface-container-high/40 hover:bg-surface-container-high/60"
+                  }`}
               >
                 <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/30 text-primary flex items-center justify-center shadow-lg">
                   <span className="material-symbols-outlined text-3xl">upload_file</span>
@@ -396,11 +596,10 @@ export default function PlaylistPage() {
                 <div
                   key={track.id}
                   onClick={() => handleRowClick(track)}
-                  className={`group grid grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_4.5rem] items-center px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
-                    isCurrent
-                      ? "bg-surface-container-high/80 border border-primary/30"
-                      : "hover:bg-surface-container/60 hover:border-white/5 border border-transparent"
-                  }`}
+                  className={`group grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2.5 rounded-xl transition-all cursor-pointer ${isCurrent
+                    ? "bg-surface-container-high/80 border border-primary/30"
+                    : "hover:bg-surface-container/60 hover:border-white/5 border border-transparent"
+                    }`}
                 >
                   {/* Index / Play status */}
                   <div className="flex items-center justify-center w-full">
@@ -487,13 +686,22 @@ export default function PlaylistPage() {
                       />
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span
-                        className={`text-sm font-semibold truncate transition-colors ${
-                          isCurrent ? "text-primary" : "text-white group-hover:text-primary"
-                        }`}
-                      >
-                        {track.title}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-sm font-semibold truncate transition-colors ${isCurrent ? "text-primary" : "text-white group-hover:text-primary"
+                            }`}
+                        >
+                          {track.title}
+                        </span>
+                        {offlineTrackIds?.has(String(track.id)) && (
+                          <span
+                            className="material-symbols-outlined text-primary text-[14px] flex-shrink-0"
+                            title="Available offline on this device"
+                          >
+                            download_done
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-on-surface-variant md:hidden truncate mt-0.5">
                         {track.artist}
                       </span>
@@ -506,12 +714,12 @@ export default function PlaylistPage() {
                   </div>
 
                   {/* Duration */}
-                  <div className="text-right text-xs font-mono text-outline">
+                  <div className="text-right text-xs font-mono text-outline pr-2">
                     {track.durationFormatted || formatTime(track.duration)}
                   </div>
 
                   {/* Actions: Download, Like, & Remove from playlist */}
-                  <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-end gap-1 flex-shrink-0">
                     {!track.isLocal && (
                       <DownloadButton track={track} buttonSize="p-1" iconSize="text-[18px]" />
                     )}
@@ -520,9 +728,8 @@ export default function PlaylistPage() {
                         e.stopPropagation();
                         toggleLike(track.id);
                       }}
-                      className={`p-1 hover:scale-110 transition-transform ${
-                        isLiked(track.id) ? "text-primary" : "text-outline hover:text-white"
-                      }`}
+                      className={`p-1 hover:scale-110 transition-transform ${isLiked(track.id) ? "text-primary" : "text-outline hover:text-white"
+                        }`}
                     >
                       <span
                         className="material-symbols-outlined text-[18px]"
@@ -543,6 +750,7 @@ export default function PlaylistPage() {
                         <span className="material-symbols-outlined text-[18px]">close</span>
                       </button>
                     )}
+                    <SongOptionsMenu track={track} playlistId={isCustomPlaylist ? playlist.id : null} />
                   </div>
                 </div>
               );
@@ -569,11 +777,10 @@ export default function PlaylistPage() {
               }
             }}
             onClick={() => fileInputRef.current?.click()}
-            className={`mt-6 p-4 rounded-xl border border-dashed transition-all flex items-center justify-between gap-4 cursor-pointer ${
-              isDragging
-                ? "border-primary bg-primary/10"
-                : "border-white/15 hover:border-primary/40 bg-surface-container/40 hover:bg-surface-container/70"
-            }`}
+            className={`mt-6 p-4 rounded-xl border border-dashed transition-all flex items-center justify-between gap-4 cursor-pointer ${isDragging
+              ? "border-primary bg-primary/10"
+              : "border-white/15 hover:border-primary/40 bg-surface-container/40 hover:bg-surface-container/70"
+              }`}
           >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">

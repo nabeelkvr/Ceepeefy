@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMusic } from "../context/MusicContext";
 import {
   NOCTURNE_ARTISTS,
@@ -15,9 +16,11 @@ import {
 import { searchMusicTracks } from "../services/audioService";
 import ArtistAvatar from "../components/ArtistAvatar";
 import DownloadButton from "../components/DownloadButton";
+import SongOptionsMenu from "../components/SongOptionsMenu";
 import { formatPlaylistDuration } from "../utils/playlistUtils";
 
 export default function HomePage() {
+  const router = useRouter();
   const {
     currentTrack,
     isPlaying,
@@ -44,8 +47,16 @@ export default function HomePage() {
     "Playlists",
   ];
   const mixesContainerRef = useRef(null);
+  const recentsContainerRef = useRef(null);
   const selfMixesSectionRef = useRef(null);
   const playlistsSectionRef = useRef(null);
+
+  const scrollRecents = (direction) => {
+    if (recentsContainerRef.current) {
+      const scrollAmount = direction === "left" ? -420 : 420;
+      recentsContainerRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    }
+  };
 
   const scrollMixes = (direction) => {
     if (mixesContainerRef.current) {
@@ -66,9 +77,14 @@ export default function HomePage() {
   const handleMixPlay = (mix, e) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
-    const playlist = getPlaylistById(mix.id) || NOCTURNE_PLAYLISTS.find((p) => p.id === mix.id);
-    const tracks = playlist?.tracks || NOCTURNE_TRACKS;
-    const firstTrack = tracks[0] || NOCTURNE_TRACKS[0];
+    const tracks = (mix.tracks && mix.tracks.length > 0)
+      ? mix.tracks
+      : getPlaylistById(mix.id)?.tracks || NOCTURNE_TRACKS;
+    if (!tracks || tracks.length === 0) {
+      router.push(`/self-mix?id=${mix.id}`);
+      return;
+    }
+    const firstTrack = tracks[0];
 
     const isThisPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
     if (isThisPlaying) {
@@ -235,40 +251,65 @@ export default function HomePage() {
   };
 
   return (
-    <div className="relative w-full overflow-hidden px-4 md:px-8 flex flex-col gap-10 pt-6">
+    <div className="relative w-full overflow-hidden px-3 sm:px-6 md:px-8 flex flex-col gap-6 md:gap-10 pt-3 md:pt-6">
       {/* Ambient Glowing Backdrops */}
       <div className="absolute -top-40 right-10 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[150px] pointer-events-none -z-10" />
       <div className="absolute top-96 -left-20 w-[500px] h-[500px] bg-secondary-container/15 rounded-full blur-[160px] pointer-events-none -z-10" />
       <div className="absolute bottom-40 right-1/4 w-[450px] h-[450px] bg-tertiary/5 rounded-full blur-[140px] pointer-events-none -z-10" />
 
-      {/* Section 1: Recently played songs (Master Tier Selection) */}
-      <section className="flex flex-col gap-5">
+      {/* Section 1: Recently played songs (Master Tier Selection) - Single Horizontal Row */}
+      <section className="flex flex-col gap-3.5 md:gap-5">
         <div className="flex items-end justify-between">
           <div>
-            <span className="font-label-sm text-[11px] uppercase tracking-widest text-primary font-bold flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[14px]">graphic_eq</span>
+            <span className="font-label-sm text-[10px] md:text-[11px] uppercase tracking-widest text-primary font-bold flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[13px] md:text-[14px]">graphic_eq</span>
               Master Tier Selection
             </span>
-            <h2 className="font-headline-lg text-xl md:text-2xl font-bold text-white tracking-tight">
+            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
               Recently played songs
             </h2>
           </div>
-          {displayRecentlyPlayed.length > 0 && (
-            <Link
-              href="/playlist/midnight-reverie"
-              className="hidden sm:flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold group"
-            >
-              <span>Explore Archives</span>
-              <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
-                arrow_forward
-              </span>
-            </Link>
-          )}
+          <div className="flex items-center gap-3">
+            {displayRecentlyPlayed.length > 3 && (
+              <div className="hidden sm:flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => scrollRecents("left")}
+                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 text-outline hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                  title="Scroll left"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollRecents("right")}
+                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 text-outline hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                  title="Scroll right"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                </button>
+              </div>
+            )}
+            {displayRecentlyPlayed.length > 0 && (
+              <Link
+                href="/playlist/midnight-reverie"
+                className="hidden sm:flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold group"
+              >
+                <span>Explore Archives</span>
+                <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+                  arrow_forward
+                </span>
+              </Link>
+            )}
+          </div>
         </div>
 
         {displayRecentlyPlayed.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
-            {displayRecentlyPlayed.slice(0, 10).map((track) => {
+          <div
+            ref={recentsContainerRef}
+            className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-5 pb-3 pt-1 -mx-2 px-2"
+          >
+            {displayRecentlyPlayed.map((track) => {
               const isCurrent = currentTrack?.id === track.id;
               const isCurrentPlaying = isCurrent && isPlaying;
 
@@ -276,13 +317,13 @@ export default function HomePage() {
                 <div
                   key={track.id}
                   onClick={() => handleTrackClick(track)}
-                  className={`group flex flex-col gap-3 glass-card p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none ${
+                  className={`w-[145px] sm:w-[180px] md:w-[200px] flex-shrink-0 group flex flex-col gap-2 md:gap-3 glass-card p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none ${
                     isCurrent
                       ? "border-primary/60 bg-surface-container/95 shadow-[0_0_20px_rgba(76,215,246,0.25)]"
                       : "border-white/5 hover:border-primary/40 hover:bg-surface-container/90"
                   }`}
                 >
-                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+                  <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
                     <img
                       alt={track.title}
                       src={track.coverUrl}
@@ -293,12 +334,12 @@ export default function HomePage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div
-                      className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-3 transition-opacity ${
+                      className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 sm:p-3 transition-opacity ${
                         isCurrentPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                       }`}
                     >
-                      <div className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-transform">
-                        <span className="material-symbols-outlined text-[24px]">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-transform">
+                        <span className="material-symbols-outlined text-[20px] sm:text-[24px]">
                           {isCurrentPlaying ? "pause" : "play_arrow"}
                         </span>
                       </div>
@@ -307,7 +348,7 @@ export default function HomePage() {
 
                   <div className="flex flex-col min-w-0">
                     <h3
-                      className={`text-sm font-semibold truncate transition-colors ${
+                      className={`text-xs sm:text-sm font-semibold truncate transition-colors ${
                         isCurrent ? "text-primary" : "text-white group-hover:text-primary"
                       }`}
                     >
@@ -320,7 +361,14 @@ export default function HomePage() {
                       <span className="text-[11px] text-outline font-mono">
                         {track.durationFormatted || "3:30"}
                       </span>
-                      <DownloadButton track={track} buttonSize="p-0.5" iconSize="text-[15px]" />
+                      <div className="flex items-center gap-0.5">
+                        <DownloadButton track={track} buttonSize="p-0.5" iconSize="text-[15px]" />
+                        <SongOptionsMenu
+                          track={track}
+                          iconClassName="text-[16px]"
+                          buttonClassName="p-0.5 text-outline hover:text-white"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -328,27 +376,29 @@ export default function HomePage() {
             })}
           </div>
         ) : (
-          <div className="p-8 rounded-2xl glass-card border border-white/5 flex flex-col items-center justify-center text-center gap-2.5 py-12">
-            <div className="w-12 h-12 rounded-full bg-surface-container-high border border-white/10 flex items-center justify-center text-outline">
-              <span className="material-symbols-outlined text-[24px]">history</span>
+          <div className="p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl glass-card border border-white/5 flex items-center sm:flex-col sm:justify-center sm:text-center gap-3.5 py-4 sm:py-8 md:py-12">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-surface-container-high border border-white/10 flex items-center justify-center text-outline flex-shrink-0">
+              <span className="material-symbols-outlined text-[20px] sm:text-[24px]">history</span>
             </div>
-            <p className="text-sm font-semibold text-white">No recently played songs</p>
-            <p className="text-xs text-on-surface-variant max-w-sm">
-              Songs you play from Search or Self Mix will automatically appear here.
-            </p>
+            <div>
+              <p className="text-xs sm:text-sm font-semibold text-white">No recently played songs</p>
+              <p className="text-[11px] sm:text-xs text-on-surface-variant max-w-sm mt-0.5">
+                Songs you play from Search or Self Mix will appear here automatically.
+              </p>
+            </div>
           </div>
         )}
       </section>
 
       {/* Section 2: Featured Playlists */}
-      <section ref={playlistsSectionRef} id="featured-playlists" className="flex flex-col gap-5 scroll-mt-6">
+      <section ref={playlistsSectionRef} id="featured-playlists" className="flex flex-col gap-4 sm:gap-5 scroll-mt-6">
         <div className="flex items-end justify-between">
           <div>
             <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-widest text-primary font-bold">
               <span className="material-symbols-outlined text-[15px]">queue_music</span>
               <span>Curated Selections</span>
             </div>
-            <h2 className="font-headline-lg text-xl md:text-2xl font-bold text-white tracking-tight mt-1">
+            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight mt-1">
               Featured Playlists
             </h2>
           </div>
@@ -373,21 +423,23 @@ export default function HomePage() {
 
           if (userPlaylists.length === 0) {
             return (
-              <div className="p-8 rounded-2xl glass-card border border-white/5 flex flex-col items-center justify-center text-center gap-3 py-12">
-                <div className="w-12 h-12 rounded-full bg-surface-container-high border border-white/10 flex items-center justify-center text-outline">
-                  <span className="material-symbols-outlined text-[24px]">queue_music</span>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">No playlists yet</p>
-                  <p className="text-xs text-on-surface-variant max-w-sm mt-0.5">
-                    Create a custom playlist or upload a track in Self Mix to see it here.
-                  </p>
+              <div className="p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl glass-card border border-white/5 flex items-center justify-between sm:flex-col sm:justify-center sm:text-center gap-3 py-4 sm:py-8 md:py-12">
+                <div className="flex items-center gap-3 sm:flex-col">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-surface-container-high border border-white/10 flex items-center justify-center text-outline flex-shrink-0">
+                    <span className="material-symbols-outlined text-[20px] sm:text-[24px]">queue_music</span>
+                  </div>
+                  <div>
+                    <p className="text-xs sm:text-sm font-semibold text-white">No playlists yet</p>
+                    <p className="text-[11px] sm:text-xs text-on-surface-variant max-w-sm mt-0.5">
+                      Create a custom playlist to see it here.
+                    </p>
+                  </div>
                 </div>
                 <Link
                   href="/playlists"
-                  className="mt-2 px-4 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-bold transition-all flex items-center gap-1.5 flex-shrink-0"
                 >
-                  <span className="material-symbols-outlined text-[16px]">add</span>
+                  <span className="material-symbols-outlined text-[15px] sm:text-[16px]">add</span>
                   <span>Create Playlist</span>
                 </Link>
               </div>
@@ -544,8 +596,8 @@ export default function HomePage() {
           ))}
         </div>
 
-        {/* Dynamic Artist Avatars Grid */}
-        <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-5 transition-all duration-300 ${isRefreshing ? "opacity-40 scale-[0.99]" : "opacity-100 scale-100"}`}>
+        {/* Dynamic Artist Avatars Grid / Horizontal Scroll on mobile */}
+        <div className={`flex flex-row overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-5 sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 pb-2 -mx-2 px-2 transition-all duration-300 ${isRefreshing ? "opacity-40 scale-[0.99]" : "opacity-100 scale-100"}`}>
           {displayedArtists.map((artist) => {
             const isArtistPlaying =
               isPlaying &&
@@ -555,32 +607,33 @@ export default function HomePage() {
               <Link
                 key={artist.id}
                 href={`/artist/${artist.id}`}
-                className="group flex flex-col items-center text-center gap-3 p-4 rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/80 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none relative"
+                className="w-28 sm:w-auto flex-shrink-0 sm:flex-shrink group flex flex-col items-center text-center gap-2 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/80 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none relative"
               >
-                <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden bg-surface-container-highest shadow-md p-1 ring-2 ring-primary/20 group-hover:ring-primary group-hover:shadow-[0_0_20px_rgba(76,215,246,0.3)] transition-all">
-                  <ArtistAvatar
-                    name={artist.name}
-                    avatar={artist.avatar}
-                    className="w-full h-full"
-                  />
-                  <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                    <button
-                      onClick={(e) => handleArtistPlay(artist, e)}
-                      className="pointer-events-auto w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform hover:scale-110"
-                      title={isArtistPlaying ? "Pause audio" : `Play ${artist.name}`}
-                    >
-                      <span className="material-symbols-outlined text-[24px]">
-                        {isArtistPlaying ? "pause" : "play_arrow"}
-                      </span>
-                    </button>
+                <div className="relative w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full bg-surface-container-highest shadow-md p-0.5 sm:p-1 ring-2 ring-primary/20 group-hover:ring-primary group-hover:shadow-[0_0_20px_rgba(76,215,246,0.3)] transition-all">
+                  <div className="w-full h-full rounded-full overflow-hidden">
+                    <ArtistAvatar
+                      name={artist.name}
+                      avatar={artist.avatar}
+                      className="w-full h-full"
+                    />
                   </div>
+                  {/* Persistent Mini Play Badge on bottom right of Avatar (Matches Image 1 & 2) */}
+                  <button
+                    onClick={(e) => handleArtistPlay(artist, e)}
+                    className="absolute bottom-0 right-0 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_10px_rgba(76,215,246,0.6)] hover:scale-110 active:scale-95 transition-all z-10"
+                    title={isArtistPlaying ? "Pause audio" : `Play ${artist.name}`}
+                  >
+                    <span className="material-symbols-outlined text-[15px] sm:text-[18px]">
+                      {isArtistPlaying ? "pause" : "play_arrow"}
+                    </span>
+                  </button>
                 </div>
 
                 <div className="flex flex-col items-center min-w-0 w-full">
-                  <span className="text-sm font-semibold truncate transition-colors w-full text-white group-hover:text-primary">
+                  <span className="text-xs sm:text-sm font-semibold truncate transition-colors w-full text-white group-hover:text-primary">
                     {artist.name}
                   </span>
-                  <span className="text-xs text-outline truncate">{artist.genre || artist.role}</span>
+                  <span className="text-[10px] sm:text-xs text-outline truncate w-full">{artist.genre || artist.role}</span>
                 </div>
               </Link>
             );
@@ -598,7 +651,7 @@ export default function HomePage() {
                 <span>Personal Archive &amp; Offline Rips</span>
               </div>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-secondary-container/70 text-secondary border border-secondary/30 font-semibold">
-                4 Sets
+                {selfMixes?.length || 0} {selfMixes?.length === 1 ? "Mix" : "Mixes"}
               </span>
             </div>
             <h2 className="font-headline-lg text-xl md:text-2xl font-bold text-white tracking-tight mt-1">
@@ -606,18 +659,25 @@ export default function HomePage() {
             </h2>
           </div>
 
-          {/* Carousel Arrows */}
+          {/* Carousel Controls */}
           <div className="flex items-center gap-2">
+            <Link
+              href="/self-mix"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 text-xs font-semibold text-outline hover:text-white transition-all mr-1"
+            >
+              <span className="material-symbols-outlined text-[16px] text-primary">add</span>
+              <span>New Mix</span>
+            </Link>
             <button
               onClick={() => scrollMixes("left")}
-              className="w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 flex items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md"
+              className="w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 flex items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md cursor-pointer"
               title="Scroll left"
             >
               <span className="material-symbols-outlined text-[18px]">chevron_left</span>
             </button>
             <button
               onClick={() => scrollMixes("right")}
-              className="w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 flex items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md"
+              className="w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 flex items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md cursor-pointer"
               title="Scroll right"
             >
               <span className="material-symbols-outlined text-[18px]">chevron_right</span>
@@ -625,93 +685,168 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Mixes Grid / Horizontal Carousel */}
-        <div
-          ref={mixesContainerRef}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 overflow-x-auto no-scrollbar scroll-smooth pb-1"
-        >
-          {NOCTURNE_MIXES.map((mix) => {
-            const playlist = getPlaylistById(mix.id) || NOCTURNE_PLAYLISTS.find((p) => p.id === mix.id);
-            const tracks = playlist?.tracks || NOCTURNE_TRACKS;
-            const isMixPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+        {/* Mixes Section: Mobile Sleek Horizontal List + Desktop Responsive Grid */}
+        {(() => {
+          const displayedMixes = (selfMixes && selfMixes.length > 0) ? selfMixes : NOCTURNE_MIXES;
 
-            return (
-              <Link
-                key={mix.id}
-                href={`/playlist/${mix.id}`}
-                className="group flex flex-col justify-between p-3.5 rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
-              >
-                <div>
-                  {/* Top Image Box with floating badges */}
-                  <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-3.5">
-                    <img
-                      src={mix.image}
-                      alt={mix.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
+          return (
+            <>
+              {/* 1. Mobile Horizontal Cards (< md) matching Image 2 */}
+              <div className="flex flex-col gap-2.5 md:hidden">
+                {displayedMixes.map((mix, idx) => {
+                  const tracks = mix.tracks || [];
+                  const isMixPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+                  const specBadge =
+                    mix.spec || (idx === 0 ? "HI-FI" : idx === 1 ? "SPATIAL 360" : idx === 2 ? "32-BIT" : "FLAC");
 
-                    {/* Left floating badge */}
-                    <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black/65 backdrop-blur-md border border-white/10 text-[10px] font-medium text-white flex items-center gap-1.5 shadow-md">
-                      <span className="material-symbols-outlined text-[13px] text-primary">
-                        {mix.tagIcon || "smart_display"}
-                      </span>
-                      <span>{mix.tag}</span>
-                    </div>
-
-                    {/* Right floating badge */}
-                    <div className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase border border-tertiary/40 bg-tertiary/20 text-tertiary backdrop-blur-md shadow-md">
-                      {mix.badge}
-                    </div>
-                  </div>
-
-                  {/* Title, Playing Indicator, and Icon */}
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-bold text-base text-white group-hover:text-primary transition-colors truncate">
-                      {mix.title}
-                    </h3>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {isMixPlaying && (
-                        <div className="flex items-center gap-0.5 mr-1">
-                          <span className="w-1 h-3 bg-primary rounded-full animate-pulse" />
-                          <span className="w-1 h-4 bg-primary rounded-full animate-pulse delay-75" />
-                          <span className="w-1 h-2.5 bg-primary rounded-full animate-pulse delay-150" />
+                  return (
+                    <div
+                      key={mix.id}
+                      onClick={() => router.push(`/self-mix?id=${mix.id}`)}
+                      className="p-3 rounded-2xl glass-card border border-white/5 hover:border-primary/40 active:scale-[0.98] transition-all flex items-center justify-between gap-3 cursor-pointer group shadow-lg"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-surface-container-highest flex-shrink-0 shadow border border-white/10">
+                          <img
+                            src={
+                              mix.coverUrl ||
+                              "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80"
+                            }
+                            alt={mix.title}
+                            className="w-full h-full object-cover"
+                          />
+                          {isMixPlaying && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                              <span className="material-symbols-outlined text-primary text-[16px] animate-pulse">
+                                graphic_eq
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                      <span className="material-symbols-outlined text-outline text-[17px] group-hover:text-primary transition-colors">
-                        {mix.icon || "diamond"}
-                      </span>
+
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <h3 className="font-bold text-xs sm:text-sm text-white group-hover:text-primary transition-colors truncate">
+                              {mix.title}
+                            </h3>
+                            <span className="text-[8px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex-shrink-0">
+                              {specBadge}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                            {tracks.length > 0 ? `${tracks.length} tracks • ` : ""}
+                            {mix.subtitle || mix.description || `Self mix by ${mix.curator || "You"}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => handleMixPlay(mix, e)}
+                        className="w-9 h-9 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center flex-shrink-0 transition-all shadow-[0_0_12px_rgba(76,215,246,0.5)] active:scale-90 cursor-pointer"
+                        title={isMixPlaying ? "Pause Mix" : "Play Mix"}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">
+                          {isMixPlaying ? "pause" : "play_arrow"}
+                        </span>
+                      </button>
                     </div>
-                  </div>
+                  );
+                })}
+              </div>
 
-                  {/* Subtitle */}
-                  <p className="text-xs text-on-surface-variant line-clamp-2 mt-1.5 leading-relaxed">
-                    {mix.subtitle}
-                  </p>
-                </div>
+              {/* 2. Desktop Grid (md:) */}
+              <div
+                ref={mixesContainerRef}
+                className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-5 overflow-x-auto no-scrollbar scroll-smooth pb-1"
+              >
+                {displayedMixes.map((mix) => {
+                  const tracks = mix.tracks || [];
+                  const isMixPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
 
-                {/* Footer: Metadata + Play Button */}
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/5">
-                  <div className="flex items-center gap-1.5 text-[11px] font-mono text-outline">
-                    <span className="material-symbols-outlined text-[14px]">schedule</span>
-                    <span>
-                      {mix.tracksCount} • {mix.duration}
-                    </span>
-                  </div>
+                  return (
+                    <Link
+                      key={mix.id}
+                      href={`/self-mix?id=${mix.id}`}
+                      className="group flex flex-col justify-between p-3.5 rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
+                    >
+                      <div>
+                        {/* Top Image Box with floating badges */}
+                        <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-3.5">
+                          <img
+                            src={
+                              mix.coverUrl ||
+                              "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80"
+                            }
+                            alt={mix.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
 
-                  <button
-                    onClick={(e) => handleMixPlay(mix, e)}
-                    className="w-9 h-9 rounded-full bg-primary/20 hover:bg-primary text-primary hover:text-surface-container-lowest border border-primary/40 hover:border-primary flex items-center justify-center shadow-md transform group-hover:scale-105 active:scale-90 transition-all duration-300"
-                    title={isMixPlaying ? "Pause Playlist" : "Play Playlist"}
-                  >
-                    <span className="material-symbols-outlined text-[20px]">
-                      {isMixPlaying ? "pause" : "play_arrow"}
-                    </span>
-                  </button>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+                          {/* Left floating badge */}
+                          <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black/65 backdrop-blur-md border border-white/10 text-[10px] font-medium text-white flex items-center gap-1.5 shadow-md">
+                            <span className="material-symbols-outlined text-[13px] text-primary">
+                              queue_music
+                            </span>
+                            <span>SELF MIX</span>
+                          </div>
+
+                          {/* Right floating badge */}
+                          <div className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase border border-cyan-500/40 bg-cyan-950/70 text-cyan-300 backdrop-blur-md shadow-md">
+                            {tracks.length} {tracks.length === 1 ? "TRACK" : "TRACKS"}
+                          </div>
+                        </div>
+
+                        {/* Title, Playing Indicator, and Icon */}
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-bold text-base text-white group-hover:text-primary transition-colors truncate">
+                            {mix.title}
+                          </h3>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {isMixPlaying && (
+                              <div className="flex items-center gap-0.5 mr-1">
+                                <span className="w-1 h-3 bg-primary rounded-full animate-pulse" />
+                                <span className="w-1 h-4 bg-primary rounded-full animate-pulse delay-75" />
+                                <span className="w-1 h-2.5 bg-primary rounded-full animate-pulse delay-150" />
+                              </div>
+                            )}
+                            <span className="material-symbols-outlined text-outline text-[17px] group-hover:text-primary transition-colors">
+                              equalizer
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Subtitle */}
+                        <p className="text-xs text-on-surface-variant line-clamp-2 mt-1.5 leading-relaxed">
+                          {mix.subtitle || mix.description || `Self mix by ${mix.curator || "You"}`}
+                        </p>
+                      </div>
+
+                      {/* Footer: Metadata + Play Button */}
+                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/5">
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-outline">
+                          <span className="material-symbols-outlined text-[14px]">schedule</span>
+                          <span>
+                            {tracks.length} tracks • {mix.duration || "Self Mix"}
+                          </span>
+                        </div>
+
+                        <button
+                          onClick={(e) => handleMixPlay(mix, e)}
+                          className="w-9 h-9 rounded-full bg-primary/20 hover:bg-primary text-primary hover:text-surface-container-lowest border border-primary/40 hover:border-primary flex items-center justify-center shadow-md transform group-hover:scale-105 active:scale-90 transition-all duration-300 cursor-pointer"
+                          title={isMixPlaying ? "Pause Playlist" : "Play Playlist"}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">
+                            {isMixPlaying ? "pause" : "play_arrow"}
+                          </span>
+                        </button>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </section>
     </div>
   );

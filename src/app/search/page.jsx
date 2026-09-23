@@ -15,6 +15,7 @@ import { NOCTURNE_GENRES, NOCTURNE_PLAYLISTS } from "../../data/nocturneData";
 import { CURATED_GENRES, getGenreById, getGenreByName } from "../../data/genreData";
 import DownloadButton from "../../components/DownloadButton";
 import ArtistAvatar from "../../components/ArtistAvatar";
+import SongOptionsMenu from "../../components/SongOptionsMenu";
 import { formatPlaylistDuration } from "../../utils/playlistUtils";
 
 function SearchContent() {
@@ -187,9 +188,9 @@ function SearchContent() {
     return result;
   }, [debouncedQuery, customPlaylists, selfMixes, playlists]);
 
-  // Combined all playlists for Browse Catalog featured section
+  // Combined user playlists for Browse Catalog featured section (default playlists removed)
   const allPlaylists = useMemo(
-    () => [...(customPlaylists || []), ...(NOCTURNE_PLAYLISTS || [])],
+    () => customPlaylists || [],
     [customPlaylists]
   );
 
@@ -217,13 +218,13 @@ function SearchContent() {
     });
   }, [allArtists, spotlightArtist]);
 
-  // Left playlists (matching first, fallback to curated)
+  // Left playlists (matching first, fallback to user created playlists)
   const leftPlaylists = useMemo(() => {
     if (mergedPlaylists && mergedPlaylists.length > 0) {
       return mergedPlaylists;
     }
-    return allPlaylists || [];
-  }, [mergedPlaylists, allPlaylists]);
+    return customPlaylists || [];
+  }, [mergedPlaylists, customPlaylists]);
 
   // Fallback synthesis if rawAlbums is empty but liveTracks has tracks with album
   useEffect(() => {
@@ -451,7 +452,7 @@ function SearchContent() {
   }, [extraArtists, matchedArtist]);
 
   // Lazy Audio Resolution: Click handler sends track ID to HTML5 audio service for direct 320kbps stream
-  const handleTrackClick = (track, list = liveTracks) => {
+  const handleTrackClick = (track) => {
     if (!track) return;
     if (searchQuery.trim()) {
       addRecentSearch(searchQuery.trim(), "search");
@@ -459,7 +460,8 @@ function SearchContent() {
     if (currentTrack?.id === track.id) {
       togglePlay();
     } else {
-      playTrack(track, list);
+      // Use played track as seed for intelligent recommendation queue, not the search results list
+      playTrack(track, null, { fromSearch: true });
     }
   };
 
@@ -487,7 +489,7 @@ function SearchContent() {
     if (tracksToPlay.length > 0) {
       playTrack(tracksToPlay[0], tracksToPlay);
     } else if (liveTracks.length > 0) {
-      playTrack(liveTracks[0], liveTracks);
+      playTrack(liveTracks[0], null, { fromSearch: true });
     }
 
     const albumId = movie.id || encodeURIComponent(movie.title);
@@ -518,7 +520,7 @@ function SearchContent() {
     if (tracksToPlay.length > 0) {
       playTrack(tracksToPlay[0], tracksToPlay);
     } else if (liveTracks.length > 0) {
-      playTrack(liveTracks[0], liveTracks);
+      playTrack(liveTracks[0], null, { fromSearch: true });
     }
 
     router.push(`/artists/${artist.id}`);
@@ -594,14 +596,14 @@ function SearchContent() {
   };
 
   // Reusable Tracklist Row Component (used in both 'All' and 'Songs' layouts)
-  const renderSongRow = (track, idx, list = liveTracks) => {
+  const renderSongRow = (track, idx) => {
     const isCurrent = currentTrack?.id === track.id;
     const isCurrentPlaying = isCurrent && isPlaying;
 
     return (
       <div
         key={track.id || idx}
-        onClick={() => handleTrackClick(track, list)}
+        onClick={() => handleTrackClick(track)}
         className={`group flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer border ${isCurrent
           ? "bg-white/10 border-primary/30"
           : "hover:bg-white/5 border-transparent hover:border-white/5"
@@ -694,6 +696,9 @@ function SearchContent() {
               {isLiked(track.id) ? "favorite" : "favorite_border"}
             </span>
           </button>
+
+          {/* 3-Dot Options Menu */}
+          <SongOptionsMenu track={track} />
         </div>
       </div>
     );
@@ -1353,10 +1358,10 @@ function SearchContent() {
   const hasQuery = Boolean(debouncedQuery.trim());
 
   return (
-    <div className="w-full px-4 md:px-8 py-6 flex flex-col gap-6 select-none max-w-7xl mx-auto">
+    <div className="w-full px-3 md:px-8 py-4 md:py-6 flex flex-col gap-4 md:gap-6 select-none max-w-7xl mx-auto">
       {/* Search Header Bar (Hidden when inside Genre Showcase) */}
       {!selectedGenre && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 md:gap-4">
           <div className="relative max-w-2xl w-full">
             <button
               type="button"
@@ -1365,10 +1370,10 @@ function SearchContent() {
                   addRecentSearch(searchQuery.trim(), "search");
                 }
               }}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-outline hover:text-primary transition-colors flex items-center justify-center p-1 rounded-full hover:bg-white/10 cursor-pointer"
+              className="absolute left-3 md:left-3.5 top-1/2 -translate-y-1/2 text-outline hover:text-primary transition-colors flex items-center justify-center p-1 rounded-full hover:bg-white/10 cursor-pointer"
               title="Search"
             >
-              <span className="material-symbols-outlined text-[20px]">
+              <span className="material-symbols-outlined text-[18px] md:text-[20px]">
                 search
               </span>
             </button>
@@ -1389,7 +1394,7 @@ function SearchContent() {
                 }
               }}
               placeholder="Search any song, artist, album, playlist (e.g. Asal, Hridayam, Anirudh, Arijit)..."
-              className="w-full bg-surface-container/90 border border-white/10 hover:border-white/20 focus:border-primary/50 text-white placeholder:text-outline text-sm md:text-base rounded-full pl-12 pr-12 py-3.5 shadow-inner outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              className="w-full bg-surface-container/90 border border-white/10 hover:border-white/20 focus:border-primary/50 text-white placeholder:text-outline text-xs md:text-base rounded-full pl-10 md:pl-12 pr-10 md:pr-12 py-2.5 md:py-3.5 shadow-inner outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               autoFocus
             />
             {searchQuery && (
@@ -1399,10 +1404,10 @@ function SearchContent() {
                   setSelectedGenre(null);
                   router.replace("/search", { scroll: false });
                 }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-surface-container-highest hover:bg-white/20 text-outline hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 md:w-6 md:h-6 rounded-full bg-surface-container-highest hover:bg-white/20 text-outline hover:text-white flex items-center justify-center transition-colors cursor-pointer"
                 title="Clear search"
               >
-                <span className="material-symbols-outlined text-[16px]">close</span>
+                <span className="material-symbols-outlined text-[14px] md:text-[16px]">close</span>
               </button>
             )}
           </div>
@@ -1416,7 +1421,7 @@ function SearchContent() {
                   key={cat}
                   type="button"
                   onClick={() => setActiveFilter(cat)}
-                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all select-none whitespace-nowrap cursor-pointer ${isSelected
+                  className={`px-3 md:px-4 py-1 md:py-1.5 rounded-full text-xs font-semibold transition-all select-none whitespace-nowrap cursor-pointer ${isSelected
                     ? "bg-white text-surface-container-lowest shadow-sm font-bold scale-105"
                     : "bg-surface-container/70 text-on-surface-variant hover:text-white hover:bg-surface-container-high border border-white/10"
                     }`}
@@ -1514,7 +1519,7 @@ function SearchContent() {
                       <div className="flex flex-col lg:flex-row gap-6 items-start w-full">
                         {/* Left Column: Big Spot Album -> Other Albums (Image 4 2-col grid) -> Big Spot Artists -> Other Artists -> Playlists */}
                         {(spotlightAlbum || spotlightArtist || otherAlbums.length > 0 || otherArtists.length > 0 || leftPlaylists.length > 0) && (
-                          <div className="w-full max-w-[280px] sm:max-w-[290px] lg:w-[275px] xl:w-[290px] flex-shrink-0 flex flex-col gap-5">
+                          <div className="w-full sm:max-w-[290px] lg:w-[275px] xl:w-[290px] flex-shrink-0 flex flex-col gap-5">
                             {/* 1. Big Card: Spot Album (Do NOT change size, exact Image 1) */}
                             {spotlightAlbum && (
                               <div className="flex flex-col gap-2">
@@ -1635,7 +1640,7 @@ function SearchContent() {
 
                           {liveTracks.length > 0 ? (
                             <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 border border-white/5">
-                              {liveTracks.slice(0, 25).map((track, idx) => renderSongRow(track, idx, liveTracks))}
+                              {liveTracks.slice(0, 25).map((track, idx) => renderSongRow(track, idx))}
                             </div>
                           ) : (
                             <div className="p-8 rounded-2xl bg-surface-container/40 border border-white/5 text-center text-outline text-xs">
@@ -1773,7 +1778,7 @@ function SearchContent() {
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 sm:p-3 border border-white/5">
-                      {liveTracks.map((track, idx) => renderSongRow(track, idx, liveTracks))}
+                      {liveTracks.map((track, idx) => renderSongRow(track, idx))}
                     </div>
                   )}
                 </div>
@@ -2125,6 +2130,8 @@ function SearchContent() {
                       <span className="text-xs text-outline font-medium w-10 text-right">
                         {track.durationFormatted}
                       </span>
+
+                      <SongOptionsMenu track={track} />
                     </div>
                   </div>
                 );
@@ -2178,7 +2185,7 @@ function SearchContent() {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-5">
             {CURATED_GENRES.map((genre) => {
               const isCurrentGenrePlaying =
                 isPlaying &&
@@ -2192,23 +2199,23 @@ function SearchContent() {
                     router.replace(`/search?genre=${genre.id}`, { scroll: false });
                   }}
                   style={{ background: genre.bgStyle }}
-                  className="group relative h-36 sm:h-44 p-4 sm:p-5 rounded-2xl border border-white/15 hover:border-white/40 overflow-hidden cursor-pointer shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1.5 active:scale-[0.98] select-none flex flex-col justify-between"
+                  className="group relative h-36 sm:h-44 p-3.5 sm:p-5 rounded-2xl sm:rounded-2xl border border-white/15 hover:border-white/40 overflow-hidden cursor-pointer shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1.5 active:scale-[0.98] select-none flex flex-col justify-between"
                 >
                   {/* Subtle top ambient specular shine */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-white/10 pointer-events-none" />
 
                   {/* Top content: Genre Title & Subtitle */}
                   <div className="relative z-10 flex flex-col gap-0.5">
-                    <span className="text-base sm:text-xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md group-hover:translate-x-0.5 transition-transform">
+                    <span className="text-sm sm:text-xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md group-hover:translate-x-0.5 transition-transform">
                       {genre.name}
                     </span>
-                    <span className="text-[11px] sm:text-xs text-white/85 font-medium line-clamp-1">
+                    <span className="text-[10px] sm:text-xs text-white/85 font-medium line-clamp-1">
                       {genre.subtitle}
                     </span>
                   </div>
 
-                  {/* Rotated High-Res Album Cover Preview at bottom-right */}
-                  <div className="absolute -bottom-3 -right-3 w-20 h-20 sm:w-24 sm:h-24 transform rotate-[16deg] group-hover:rotate-[8deg] group-hover:scale-110 transition-all duration-300 shadow-2xl rounded-xl overflow-hidden border border-white/20">
+                  {/* Glowing Circular Disc Album Cover Preview at bottom-right matching Image 1 */}
+                  <div className="absolute -bottom-2.5 -right-2.5 sm:-bottom-3 sm:-right-3 w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-white/25 shadow-[0_10px_25px_rgba(0,0,0,0.6)] transform group-hover:scale-110 transition-all duration-300">
                     <img
                       src={genre.image || genre.tracks?.[0]?.coverUrl}
                       alt={genre.name}
@@ -2265,105 +2272,105 @@ function SearchContent() {
             })}
           </div>
 
-          {/* Section: Playlists under Browse all */}
-          <div className="flex flex-col gap-4 pt-6 border-t border-white/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                  Featured Playlists
-                </h2>
-                <p className="text-xs text-on-surface-variant mt-0.5">
-                  Curated soundscapes and custom collections
-                </p>
+          {/* Section: Playlists under Browse all (Only shown if user has created playlists) */}
+          {allPlaylists && allPlaylists.length > 0 && (
+            <div className="flex flex-col gap-4 pt-6 border-t border-white/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                    Your Playlists
+                  </h2>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    Custom collections created by you
+                  </p>
+                </div>
+                <Link
+                  href="/playlists"
+                  className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline uppercase tracking-wider group"
+                >
+                  <span>See All</span>
+                  <span className="material-symbols-outlined text-[16px] group-hover:translate-x-0.5 transition-transform">
+                    arrow_forward
+                  </span>
+                </Link>
               </div>
-              <Link
-                href="/playlists"
-                className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline uppercase tracking-wider group"
-              >
-                <span>See All</span>
-                <span className="material-symbols-outlined text-[16px] group-hover:translate-x-0.5 transition-transform">
-                  arrow_forward
-                </span>
-              </Link>
-            </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
-              {allPlaylists.slice(0, 5).map((pl) => {
-                const tracks = pl.tracks || [];
-                const isPlaylistPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
+                {allPlaylists.slice(0, 5).map((pl) => {
+                  const tracks = pl.tracks || [];
+                  const isPlaylistPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
 
-                return (
-                  <div
-                    key={pl.id}
-                    className="group flex flex-col gap-3 glass-card p-3.5 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
-                  >
-                    {/* Cover image with hover play button */}
-                    <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
-                      <img
-                        src={pl.coverUrl}
-                        alt={pl.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        loading="lazy"
-                      />
-                      {pl.isCustom && (
+                  return (
+                    <div
+                      key={pl.id}
+                      className="group flex flex-col gap-3 glass-card p-3.5 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
+                    >
+                      {/* Cover image with hover play button */}
+                      <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+                        <img
+                          src={pl.coverUrl}
+                          alt={pl.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          loading="lazy"
+                        />
                         <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1">
                           <span className="material-symbols-outlined text-[12px]">person</span>
                           <span>BY YOU</span>
                         </div>
-                      )}
-                      <div
-                        className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-3 transition-opacity duration-300 ${isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                          }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (tracks.length > 0) {
-                              if (isPlaylistPlaying) {
-                                togglePlay();
-                              } else {
-                                playTrack(tracks[0], tracks);
-                              }
-                            }
-                          }}
-                          className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer"
-                          title={isPlaylistPlaying ? "Pause" : "Play"}
+                        <div
+                          className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-3 transition-opacity duration-300 ${isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                            }`}
                         >
-                          <span className="material-symbols-outlined text-[24px]">
-                            {isPlaylistPlaying ? "pause" : "play_arrow"}
-                          </span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (tracks.length > 0) {
+                                if (isPlaylistPlaying) {
+                                  togglePlay();
+                                } else {
+                                  playTrack(tracks[0], tracks);
+                                }
+                              }
+                            }}
+                            className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer"
+                            title={isPlaylistPlaying ? "Pause" : "Play"}
+                          >
+                            <span className="material-symbols-outlined text-[24px]">
+                              {isPlaylistPlaying ? "pause" : "play_arrow"}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Playlist details */}
+                      <Link href={`/playlist/${pl.id}`} className="flex flex-col min-w-0">
+                        <h3 className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
+                          {pl.title}
+                        </h3>
+                        <p className="text-xs text-on-surface-variant truncate mt-0.5">
+                          By You • {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+                        </p>
+                      </Link>
+
+                      {/* Bottom tag / stats: track count and total duration */}
+                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/5 text-[11px] font-mono text-outline">
+                        <span className="flex items-center gap-1 text-primary font-medium">
+                          <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
+                          {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">schedule</span>
+                          {formatPlaylistDuration(tracks)}
+                        </span>
                       </div>
                     </div>
-
-                    {/* Playlist details */}
-                    <Link href={`/playlist/${pl.id}`} className="flex flex-col min-w-0">
-                      <h3 className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
-                        {pl.title}
-                      </h3>
-                      <p className="text-xs text-on-surface-variant truncate mt-0.5">
-                        {pl.subtitle || (pl.isCustom ? `By You • ${tracks.length} tracks` : pl.description)}
-                      </p>
-                    </Link>
-
-                    {/* Bottom tag / stats: track count and total duration */}
-                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/5 text-[11px] font-mono text-outline">
-                      <span className="flex items-center gap-1 text-primary font-medium">
-                        <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
-                        {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[12px]">schedule</span>
-                        {formatPlaylistDuration(tracks)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

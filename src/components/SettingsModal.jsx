@@ -13,6 +13,7 @@ export default function SettingsModal() {
     setIsAutoplayEnabled,
     currentDevice,
     setIsDeviceModalOpen,
+    user,
   } = useMusic();
 
   const [activeTab, setActiveTab] = useState("audio");
@@ -33,38 +34,42 @@ export default function SettingsModal() {
   const qualityOptions = [
     {
       id: "lossless",
-      label: "Lossless Studio Master",
+      label: "Studio Master",
       spec: "24-Bit / 192kHz FLAC",
-      badge: "Hi-Res",
-      desc: "Uncompressed bit-perfect audiophile stream directly from master tapes.",
+      desc: "Pure lossless studio tape master fidelity",
+      icon: "graphic_eq",
     },
     {
       id: "high",
-      label: "High Quality",
+      label: "Hi-Fi Pro",
       spec: "320 kbps AAC",
-      badge: "Pro",
-      desc: "Crisp highs and punchy bass with low latency.",
+      desc: "Crisp highs and deep dynamic response",
+      icon: "headphones",
     },
     {
       id: "normal",
-      label: "Normal / Balanced",
+      label: "Balanced",
       spec: "160 kbps AAC",
-      badge: "Standard",
-      desc: "Great fidelity with modest network bandwidth consumption.",
+      desc: "Great clarity optimized for fast loading",
+      icon: "speed",
     },
-    {
-      id: "saver",
-      label: "Data Saver",
-      spec: "96 kbps Opus",
-      badge: "Eco",
-      desc: "Optimized for mobile cellular data and weak connections.",
-    },
+  ];
+
+  const themeOptions = [
+    { id: "cyan", label: "Cyan Nocturne", color: "#4cd7f6", glow: "rgba(76,215,246,0.3)" },
+    { id: "purple", label: "Cyber Violet", color: "#c4abff", glow: "rgba(196,171,255,0.3)" },
+    { id: "emerald", label: "Emerald Pulse", color: "#4edea3", glow: "rgba(78,222,163,0.3)" },
+    { id: "amber", label: "Sunset Gold", color: "#f59e0b", glow: "rgba(245,158,11,0.3)" },
   ];
 
   const handleClearCache = () => {
     try {
-      // Clear non-essential cached media items in localStorage
-      const keysToKeep = ["ceepeefy_user", "ceepeefy_settings", "nocturne_liked_songs", "nocturne_custom_playlists"];
+      const keysToKeep = [
+        "ceepeefy_user",
+        "ceepeefy_settings",
+        "nocturne_liked_songs",
+        "nocturne_custom_playlists",
+      ];
       Object.keys(localStorage).forEach((key) => {
         if (!keysToKeep.includes(key) && key.startsWith("ceepeefy_cache_")) {
           localStorage.removeItem(key);
@@ -76,26 +81,35 @@ export default function SettingsModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl max-h-[90vh] bg-[#0c1424]/95 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-        {/* Subtle ambient blur glow */}
-        <div className="absolute -top-16 -right-16 w-44 h-44 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-2xl animate-fade-in"
+      onClick={() => setIsSettingsModalOpen(false)}
+    >
+      <div
+        className="relative w-full max-w-2xl max-h-[92vh] bg-[#090d16]/95 border border-white/10 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Dynamic Ambient Blur Glow */}
+        <div className="absolute -top-24 -right-24 w-60 h-60 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-60 h-60 bg-secondary/15 rounded-full blur-3xl pointer-events-none" />
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-surface-container-lowest/60 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4.5 border-b border-white/10 bg-surface-container-lowest/80 relative z-10">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 flex items-center justify-center text-primary shadow-[0_0_16px_rgba(76,215,246,0.25)]">
               <span className="material-symbols-outlined text-[22px]">settings</span>
             </div>
             <div>
-              <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                Settings
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/15 border border-primary/20 text-primary">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-extrabold text-white tracking-tight">
+                  Settings
+                </h2>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/15 border border-primary/25 text-primary font-bold">
                   Studio v2.4
                 </span>
-              </h2>
+              </div>
               <p className="text-xs text-outline">
-                Configure audiophile streaming, playback transitions, and interface
+                Personalize your audio engine, appearance &amp; playback
               </p>
             </div>
           </div>
@@ -103,20 +117,61 @@ export default function SettingsModal() {
           <button
             type="button"
             onClick={() => setIsSettingsModalOpen(false)}
-            className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-outline hover:text-white transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/15 flex items-center justify-center text-outline hover:text-white transition-all cursor-pointer"
+            title="Close Settings"
           >
-            <span className="material-symbols-outlined text-[18px]">close</span>
+            <span className="material-symbols-outlined text-[19px]">close</span>
           </button>
         </div>
 
-        {/* Category Navigation Tabs */}
-        <div className="flex items-center gap-2 px-6 py-2.5 border-b border-white/5 bg-surface-container/40 overflow-x-auto scrollbar-none flex-shrink-0">
+        {/* User Profile Mini Banner */}
+        <div className="mx-6 mt-4 p-3.5 rounded-2xl bg-gradient-to-r from-primary/10 via-surface-container/60 to-surface-container/30 border border-white/10 flex items-center justify-between gap-3 relative z-10">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-cyan-300 p-0.5 shadow-[0_0_12px_rgba(76,215,246,0.4)] flex-shrink-0">
+              <div className="w-full h-full rounded-full bg-[#0c1424] flex items-center justify-center text-primary font-bold text-sm">
+                {(user?.name || "N")[0].toUpperCase()}
+              </div>
+            </div>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white truncate">
+                  {user?.name || "Studio Master"}
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-cyan-950 border border-cyan-500/40 text-cyan-300">
+                  @{user?.username || "nabeeyl"}
+                </span>
+              </div>
+              <span className="text-[11px] text-outline flex items-center gap-1.5 mt-0.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                Cloud Audio Sync Active
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="hidden sm:inline-block text-[11px] font-mono text-outline">
+              Device: {currentDevice || "Default Audio"}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSettingsModalOpen(false);
+                setIsDeviceModalOpen(true);
+              }}
+              className="px-2.5 py-1 rounded-xl bg-surface-container hover:bg-white/10 border border-white/10 text-[11px] font-semibold text-white transition-all cursor-pointer"
+            >
+              Output
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-2 px-6 pt-3 pb-2 border-b border-white/5 bg-transparent overflow-x-auto no-scrollbar flex-shrink-0 relative z-10">
           {[
             { id: "audio", label: "Audio & Hi-Fi", icon: "graphic_eq" },
             { id: "playback", label: "Playback", icon: "tune" },
             { id: "appearance", label: "Appearance", icon: "palette" },
-            { id: "storage", label: "Storage", icon: "database" },
-            { id: "about", label: "About", icon: "info" },
+            { id: "storage", label: "Storage & System", icon: "database" },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -124,9 +179,9 @@ export default function SettingsModal() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   isActive
-                    ? "bg-primary text-surface-container-lowest shadow-[0_0_12px_rgba(76,215,246,0.35)]"
+                    ? "bg-primary text-surface-container-lowest font-bold shadow-[0_0_16px_rgba(76,215,246,0.35)]"
                     : "text-outline hover:text-white hover:bg-white/5"
                 }`}
               >
@@ -138,61 +193,61 @@ export default function SettingsModal() {
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* TAB 1: AUDIO & HI-FI */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 relative z-10 no-scrollbar">
+          {/* TAB 1: AUDIO & SOUND */}
           {activeTab === "audio" && (
-            <div className="space-y-6">
-              {/* Streaming Quality Selector */}
+            <div className="space-y-5 animate-fade-in">
+              {/* Streaming Quality */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <h4 className="text-sm font-bold text-white tracking-tight">
-                      Streaming Audio Quality
-                    </h4>
-                    <p className="text-xs text-outline">
-                      Select playback bitrate and encoding fidelity
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Streaming Fidelity
+                    </h3>
+                    <p className="text-[11px] text-outline">
+                      Select audio decoding resolution for streaming playback
                     </p>
                   </div>
-                  <span className="text-[11px] font-mono text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
-                    Active: {settings.audioQuality?.toUpperCase()}
+                  <span className="text-[10px] font-mono text-cyan-300 font-bold px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/40">
+                    {settings.audioQuality?.toUpperCase() || "LOSSLESS"}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {qualityOptions.map((opt) => {
                     const isSelected = settings.audioQuality === opt.id;
                     return (
                       <div
                         key={opt.id}
                         onClick={() => updateSetting("audioQuality", opt.id)}
-                        className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
                           isSelected
-                            ? "bg-primary/15 border-primary shadow-[0_0_18px_rgba(76,215,246,0.2)]"
-                            : "bg-surface-container/60 border-white/5 hover:bg-surface-container hover:border-white/15"
+                            ? "bg-primary/15 border-primary shadow-[0_0_20px_rgba(76,215,246,0.25)] ring-1 ring-primary/40"
+                            : "bg-surface-container/50 border-white/5 hover:bg-surface-container/80 hover:border-white/20"
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-white">{opt.label}</span>
-                          <span
-                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                              isSelected
-                                ? "bg-primary text-surface-container-lowest font-bold"
-                                : "bg-white/10 text-outline"
-                            }`}
-                          >
-                            {opt.badge}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-outline leading-tight">{opt.desc}</p>
-                        <div className="flex items-center justify-between pt-1 border-t border-white/5">
-                          <span className="text-[10px] font-mono text-primary font-medium">
-                            {opt.spec}
-                          </span>
+                          <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center text-primary">
+                            <span className="material-symbols-outlined text-[18px]">
+                              {opt.icon}
+                            </span>
+                          </div>
                           {isSelected && (
-                            <span className="material-symbols-outlined text-primary text-[16px]">
+                            <span className="material-symbols-outlined text-primary text-[18px]">
                               check_circle
                             </span>
                           )}
+                        </div>
+
+                        <div>
+                          <div className="text-xs font-bold text-white">{opt.label}</div>
+                          <div className="text-[10px] text-outline mt-0.5">{opt.desc}</div>
+                        </div>
+
+                        <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                          <span className="text-[10px] font-mono text-primary font-bold">
+                            {opt.spec}
+                          </span>
                         </div>
                       </div>
                     );
@@ -200,26 +255,31 @@ export default function SettingsModal() {
                 </div>
               </div>
 
-              {/* Hardware & Equalization Toggles */}
-              <div className="space-y-3 pt-2 border-t border-white/5">
-                <h4 className="text-sm font-bold text-white tracking-tight">
-                  Studio Sound Processing
-                </h4>
+              {/* Sound Processing Switches */}
+              <div className="space-y-3 pt-3 border-t border-white/5">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Studio Audio Enhancement
+                </h3>
 
-                {/* Normalize volume */}
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container/60 border border-white/5">
-                  <div className="flex flex-col gap-0.5 max-w-[80%]">
-                    <span className="text-xs font-semibold text-white">
-                      Volume Normalization
-                    </span>
-                    <span className="text-[11px] text-outline">
-                      Maintains uniform loudness (-14 LUFS) to prevent abrupt volume shifts between tracks.
-                    </span>
+                {/* Volume Normalization */}
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/50 border border-white/5 hover:border-white/10 transition-colors">
+                  <div className="flex items-center gap-3 max-w-[80%]">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                      <span className="material-symbols-outlined text-[18px]">equalizer</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-white">
+                        Loudness Normalization
+                      </span>
+                      <span className="text-[11px] text-outline">
+                        Standardizes volume levels across all tracks to avoid sudden loudness shifts
+                      </span>
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => updateSetting("normalizeVolume", !settings.normalizeVolume)}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
                       settings.normalizeVolume ? "bg-primary" : "bg-surface-container-high"
                     }`}
                   >
@@ -232,19 +292,24 @@ export default function SettingsModal() {
                 </div>
 
                 {/* Spatial Audio */}
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container/60 border border-white/5">
-                  <div className="flex flex-col gap-0.5 max-w-[80%]">
-                    <span className="text-xs font-semibold text-white">
-                      3D Spatial Audio & Holographic Soundstage
-                    </span>
-                    <span className="text-[11px] text-outline">
-                      Simulates acoustic depth and panoramic multichannel surround separation.
-                    </span>
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/50 border border-white/5 hover:border-white/10 transition-colors">
+                  <div className="flex items-center gap-3 max-w-[80%]">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                      <span className="material-symbols-outlined text-[18px]">surround_sound</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-white">
+                        3D Spatial Soundstage
+                      </span>
+                      <span className="text-[11px] text-outline">
+                        Expands stereo imaging for an acoustic panoramic listening experience
+                      </span>
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => updateSetting("spatialAudio", !settings.spatialAudio)}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
                       settings.spatialAudio ? "bg-primary" : "bg-surface-container-high"
                     }`}
                   >
@@ -256,20 +321,25 @@ export default function SettingsModal() {
                   </button>
                 </div>
 
-                {/* Bit-Perfect DAC */}
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container/60 border border-white/5">
-                  <div className="flex flex-col gap-0.5 max-w-[80%]">
-                    <span className="text-xs font-semibold text-white">
-                      Bit-Perfect Direct Output (Exclusive Mode)
-                    </span>
-                    <span className="text-[11px] text-outline">
-                      Bypasses OS audio mixing drivers for pure analog conversion.
-                    </span>
+                {/* Bit-Perfect DAC Mode */}
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/50 border border-white/5 hover:border-white/10 transition-colors">
+                  <div className="flex items-center gap-3 max-w-[80%]">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                      <span className="material-symbols-outlined text-[18px]">album</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-white">
+                        Bit-Perfect Direct Audio Stream
+                      </span>
+                      <span className="text-[11px] text-outline">
+                        Bypasses OS sound resampling for unadulterated high-resolution DAC output
+                      </span>
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => updateSetting("bitPerfect", !settings.bitPerfect)}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
                       settings.bitPerfect ? "bg-primary" : "bg-surface-container-high"
                     }`}
                   >
@@ -280,56 +350,32 @@ export default function SettingsModal() {
                     />
                   </button>
                 </div>
-
-                {/* Audio Output Device Link */}
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container/60 border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-primary text-[22px]">
-                      speaker_group
-                    </span>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-semibold text-white">
-                        Connected Audio Output Device
-                      </span>
-                      <span className="text-[11px] text-outline">{currentDevice}</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSettingsModalOpen(false);
-                      setIsDeviceModalOpen(true);
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-white/10 text-xs font-semibold text-white border border-white/10 transition-colors cursor-pointer"
-                  >
-                    Change Device
-                  </button>
-                </div>
               </div>
             </div>
           )}
 
           {/* TAB 2: PLAYBACK */}
           {activeTab === "playback" && (
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold text-white tracking-tight">
-                Playback Experience
-              </h4>
-
-              {/* Autoplay Toggle */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container/60 border border-white/5">
-                <div className="flex flex-col gap-0.5 max-w-[80%]">
-                  <span className="text-xs font-semibold text-white">
-                    Autoplay Similar Tracks
-                  </span>
-                  <span className="text-[11px] text-outline">
-                    Keep the music going — automatically queues similar songs when your track or playlist finishes.
-                  </span>
+            <div className="space-y-4 animate-fade-in">
+              {/* Autoplay Similar Tracks */}
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/50 border border-white/5">
+                <div className="flex items-center gap-3 max-w-[80%]">
+                  <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">queue_music</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-white">
+                      Autoplay Similar Tracks
+                    </span>
+                    <span className="text-[11px] text-outline">
+                      Continuously queues recommended songs when your current playlist ends
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsAutoplayEnabled(!isAutoplayEnabled)}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
                     isAutoplayEnabled ? "bg-primary" : "bg-surface-container-high"
                   }`}
                 >
@@ -341,31 +387,31 @@ export default function SettingsModal() {
                 </button>
               </div>
 
-              {/* Crossfade duration */}
-              <div className="p-3.5 rounded-xl bg-surface-container/60 border border-white/5 space-y-3">
+              {/* Crossfade Duration */}
+              <div className="p-4 rounded-2xl bg-surface-container/50 border border-white/5 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-semibold text-white">
-                      Track Crossfade
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-[18px]">
+                      linear_scale
                     </span>
-                    <span className="text-[11px] text-outline">
-                      Crossfades the audio between songs for continuous mix flow.
-                    </span>
+                    <span className="text-xs font-bold text-white">Track Crossfade</span>
                   </div>
-                  <span className="text-xs font-mono text-primary font-bold">
+                  <span className="text-xs font-mono font-bold text-primary px-2 py-0.5 rounded bg-primary/10">
                     {settings.crossfade === 0 ? "Off" : `${settings.crossfade}s`}
                   </span>
                 </div>
-
-                <div className="flex items-center gap-2">
+                <p className="text-[11px] text-outline">
+                  Blends audio seamlessly between consecutive tracks for a continuous DJ-style transition
+                </p>
+                <div className="flex items-center gap-2 pt-1">
                   {[0, 2, 4, 6, 8, 12].map((secs) => (
                     <button
                       key={secs}
                       type="button"
                       onClick={() => updateSetting("crossfade", secs)}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                      className={`flex-1 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all cursor-pointer ${
                         settings.crossfade === secs
-                          ? "bg-primary text-surface-container-lowest shadow-[0_0_10px_rgba(76,215,246,0.3)]"
+                          ? "bg-primary text-surface-container-lowest font-bold shadow-[0_0_12px_rgba(76,215,246,0.3)]"
                           : "bg-surface-container hover:bg-white/10 text-outline hover:text-white border border-white/5"
                       }`}
                     >
@@ -376,19 +422,24 @@ export default function SettingsModal() {
               </div>
 
               {/* Gapless Playback */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container/60 border border-white/5">
-                <div className="flex flex-col gap-0.5 max-w-[80%]">
-                  <span className="text-xs font-semibold text-white">
-                    Gapless Playback
-                  </span>
-                  <span className="text-[11px] text-outline">
-                    Removes silent pauses between sequential tracks on continuous live sets and concept albums.
-                  </span>
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/50 border border-white/5">
+                <div className="flex items-center gap-3 max-w-[80%]">
+                  <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">motion_photos_on</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-white">
+                      Gapless Playback
+                    </span>
+                    <span className="text-[11px] text-outline">
+                      Eliminates silent pauses between tracks on concept albums and live concerts
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => updateSetting("gapless", !settings.gapless)}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
                     settings.gapless ? "bg-primary" : "bg-surface-container-high"
                   }`}
                 >
@@ -399,75 +450,45 @@ export default function SettingsModal() {
                   />
                 </button>
               </div>
-
-              {/* AI Automix */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container/60 border border-white/5">
-                <div className="flex flex-col gap-0.5 max-w-[80%]">
-                  <span className="text-xs font-semibold text-white">
-                    Harmonic Beat-matched Automix
-                  </span>
-                  <span className="text-[11px] text-outline">
-                    Smart BPM and key matching when shifting from track to track in DJ mixes.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => updateSetting("automix", !settings.automix)}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                    settings.automix ? "bg-primary" : "bg-surface-container-high"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                      settings.automix ? "left-6" : "left-1"
-                    }`}
-                  />
-                </button>
-              </div>
             </div>
           )}
 
           {/* TAB 3: APPEARANCE */}
           {activeTab === "appearance" && (
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold text-white tracking-tight">
-                Atmosphere & Display
-              </h4>
-
-              {/* Theme Accent Glow */}
-              <div className="p-3.5 rounded-xl bg-surface-container/60 border border-white/5 space-y-2.5">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs font-semibold text-white">
-                    Studio Accent Glow Color
-                  </span>
-                  <span className="text-[11px] text-outline">
-                    Pick your preferred studio neon illumination
-                  </span>
+            <div className="space-y-4 animate-fade-in">
+              {/* Neon Theme Selector */}
+              <div className="p-4 rounded-2xl bg-surface-container/50 border border-white/5 space-y-3">
+                <div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Studio Accent Illumination
+                  </h3>
+                  <p className="text-[11px] text-outline mt-0.5">
+                    Customize your studio visual neon glow color
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 pt-1">
-                  {[
-                    { id: "cyan", label: "Cyan Nocturne", color: "#4cd7f6" },
-                    { id: "purple", label: "Cyber Violet", color: "#c4abff" },
-                    { id: "emerald", label: "Emerald Pulse", color: "#4edea3" },
-                  ].map((thm) => {
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                  {themeOptions.map((thm) => {
                     const isSelected = settings.themeAccent === thm.id;
                     return (
                       <button
                         key={thm.id}
                         type="button"
                         onClick={() => updateSetting("themeAccent", thm.id)}
-                        className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer ${
+                        className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all cursor-pointer ${
                           isSelected
-                            ? "bg-white/10 border-primary shadow-[0_0_12px_rgba(76,215,246,0.25)]"
+                            ? "bg-white/10 border-primary shadow-[0_0_16px_rgba(76,215,246,0.3)]"
                             : "bg-surface-container/50 border-white/5 hover:border-white/20"
                         }`}
                       >
                         <span
-                          className="w-4 h-4 rounded-full shadow-sm flex-shrink-0"
-                          style={{ backgroundColor: thm.color }}
+                          className="w-5 h-5 rounded-full shadow-md"
+                          style={{
+                            backgroundColor: thm.color,
+                            boxShadow: `0 0 10px ${thm.glow}`,
+                          }}
                         />
-                        <span className="text-xs font-medium text-white truncate">
+                        <span className="text-xs font-semibold text-white truncate">
                           {thm.label}
                         </span>
                       </button>
@@ -476,20 +497,25 @@ export default function SettingsModal() {
                 </div>
               </div>
 
-              {/* Ambient Glow */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container/60 border border-white/5">
-                <div className="flex flex-col gap-0.5 max-w-[80%]">
-                  <span className="text-xs font-semibold text-white">
-                    Atmospheric Album Art Glow
-                  </span>
-                  <span className="text-[11px] text-outline">
-                    Projects blurred dynamic color glows based on the current album artwork.
-                  </span>
+              {/* Dynamic Artwork Ambient Glow */}
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/50 border border-white/5">
+                <div className="flex items-center gap-3 max-w-[80%]">
+                  <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">flare</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-white">
+                      Atmospheric Album Glow
+                    </span>
+                    <span className="text-[11px] text-outline">
+                      Projects dynamic ambient color lighting inspired by current track artwork
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => updateSetting("ambientGlow", !settings.ambientGlow)}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
                     settings.ambientGlow ? "bg-primary" : "bg-surface-container-high"
                   }`}
                 >
@@ -501,20 +527,25 @@ export default function SettingsModal() {
                 </button>
               </div>
 
-              {/* Dynamic Live Lyrics */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container/60 border border-white/5">
-                <div className="flex flex-col gap-0.5 max-w-[80%]">
-                  <span className="text-xs font-semibold text-white">
-                    Synchronized Lyrics Glow & Highlighting
-                  </span>
-                  <span className="text-[11px] text-outline">
-                    Highlights karaoke lines with smooth active line auto-scrolling.
-                  </span>
+              {/* Synchronized Live Lyrics */}
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/50 border border-white/5">
+                <div className="flex items-center gap-3 max-w-[80%]">
+                  <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">lyrics</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-white">
+                      Synchronized Karaoke Lyrics
+                    </span>
+                    <span className="text-[11px] text-outline">
+                      Live line-by-line glowing lyric auto-scrolling during song playback
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => updateSetting("showLiveLyrics", !settings.showLiveLyrics)}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
                     settings.showLiveLyrics ? "bg-primary" : "bg-surface-container-high"
                   }`}
                 >
@@ -528,30 +559,26 @@ export default function SettingsModal() {
             </div>
           )}
 
-          {/* TAB 4: STORAGE & CACHE */}
+          {/* TAB 4: STORAGE & SYSTEM */}
           {activeTab === "storage" && (
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold text-white tracking-tight">
-                Storage & Local Audio Cache
-              </h4>
-
-              <div className="p-4 rounded-xl bg-surface-container/60 border border-white/5 space-y-3">
+            <div className="space-y-4 animate-fade-in">
+              <div className="p-4 rounded-2xl bg-surface-container/50 border border-white/5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary text-[20px]">
                       database
                     </span>
-                    <span className="text-xs font-semibold text-white">Audio Stream Cache</span>
+                    <span className="text-xs font-bold text-white">Local Audio Stream Cache</span>
                   </div>
                   <span className="text-xs font-mono text-outline">~48.2 MB Used</span>
                 </div>
 
                 <div className="w-full bg-surface-container-highest rounded-full h-2 overflow-hidden">
-                  <div className="bg-primary h-full w-[24%]" />
+                  <div className="bg-primary h-full w-[28%] rounded-full shadow-[0_0_8px_rgba(76,215,246,0.6)]" />
                 </div>
 
                 <p className="text-[11px] text-outline leading-relaxed">
-                  Cached chunks accelerate track preloading and eliminate stutter during slow network conditions.
+                  Cached audio segments accelerate instant playback and avoid buffering during mobile and spotty connections.
                 </p>
 
                 <div className="pt-2">
@@ -564,64 +591,41 @@ export default function SettingsModal() {
                     Clear Stream Cache
                   </button>
                   {cacheCleared && (
-                    <span className="text-xs text-primary font-medium mt-2 flex items-center gap-1 animate-in fade-in">
+                    <span className="text-xs text-primary font-medium mt-2 flex items-center gap-1 animate-fade-in">
                       <span className="material-symbols-outlined text-[16px]">check</span>
                       Cache purged successfully!
                     </span>
                   )}
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* TAB 5: ABOUT & SHORTCUTS */}
-          {activeTab === "about" && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-surface-container/60 border border-white/5 flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary via-cyan-500 to-secondary-container flex items-center justify-center shadow-[0_0_16px_rgba(6,182,212,0.45)]">
-                  <span className="material-symbols-outlined text-surface-container-lowest text-[26px] font-bold">
-                    graphic_eq
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white tracking-tight">
-                    Ceepeefy Studio Edition
-                  </h3>
-                  <p className="text-xs text-outline">
-                    Version 2.4.0 (Studio Mode) • Nocturne Core Audio Engine
-                  </p>
-                  <p className="text-[11px] text-primary mt-0.5">
-                    Lossless bit-perfect architecture • HTML5 WebAudio
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2.5">
-                  Studio Keyboard Shortcuts
-                </h4>
+              {/* Keyboard Shortcuts */}
+              <div className="p-4 rounded-2xl bg-surface-container/50 border border-white/5 space-y-2.5">
+                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  Quick Shortcuts
+                </span>
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-lg bg-surface-container/50 border border-white/5 flex items-center justify-between">
-                    <span className="text-outline">Search</span>
-                    <kbd className="px-2 py-0.5 font-mono text-[10px] bg-surface-container-highest text-white rounded">
-                      ⌘K / Ctrl+K
-                    </kbd>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-surface-container/50 border border-white/5 flex items-center justify-between">
+                  <div className="p-2.5 rounded-xl bg-surface-container/60 border border-white/5 flex items-center justify-between">
                     <span className="text-outline">Play / Pause</span>
-                    <kbd className="px-2 py-0.5 font-mono text-[10px] bg-surface-container-highest text-white rounded">
+                    <kbd className="px-2 py-0.5 font-mono text-[10px] bg-white/10 text-white rounded">
                       Space
                     </kbd>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-surface-container/50 border border-white/5 flex items-center justify-between">
-                    <span className="text-outline">Mute Toggle</span>
-                    <kbd className="px-2 py-0.5 font-mono text-[10px] bg-surface-container-highest text-white rounded">
+                  <div className="p-2.5 rounded-xl bg-surface-container/60 border border-white/5 flex items-center justify-between">
+                    <span className="text-outline">Search</span>
+                    <kbd className="px-2 py-0.5 font-mono text-[10px] bg-white/10 text-white rounded">
+                      ⌘K / Ctrl+K
+                    </kbd>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-surface-container/60 border border-white/5 flex items-center justify-between">
+                    <span className="text-outline">Mute</span>
+                    <kbd className="px-2 py-0.5 font-mono text-[10px] bg-white/10 text-white rounded">
                       M
                     </kbd>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-surface-container/50 border border-white/5 flex items-center justify-between">
-                    <span className="text-outline">Close Modals</span>
-                    <kbd className="px-2 py-0.5 font-mono text-[10px] bg-surface-container-highest text-white rounded">
+                  <div className="p-2.5 rounded-xl bg-surface-container/60 border border-white/5 flex items-center justify-between">
+                    <span className="text-outline">Close</span>
+                    <kbd className="px-2 py-0.5 font-mono text-[10px] bg-white/10 text-white rounded">
                       Esc
                     </kbd>
                   </div>
@@ -632,14 +636,14 @@ export default function SettingsModal() {
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3 border-t border-white/10 bg-surface-container-lowest/80 flex items-center justify-between flex-shrink-0">
-          <span className="text-[11px] text-outline">
-            All settings are saved automatically to local storage.
+        <div className="px-6 py-3.5 border-t border-white/10 bg-surface-container-lowest/80 flex items-center justify-between relative z-10">
+          <span className="text-[11px] text-outline font-mono">
+            Preferences auto-saved to device
           </span>
           <button
             type="button"
             onClick={() => setIsSettingsModalOpen(false)}
-            className="px-4 py-1.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_12px_rgba(76,215,246,0.3)] hover:brightness-110 transition-all cursor-pointer"
+            className="px-5 py-2 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_14px_rgba(76,215,246,0.35)] hover:brightness-110 active:scale-95 transition-all cursor-pointer"
           >
             Done
           </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -9,7 +9,14 @@ import { useMusic } from "../context/MusicContext";
 export default function Sidebar({ className = "", onClose }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentTrack, customPlaylists, createPlaylist, deleteCustomPlaylist, user, openAuthModal } = useMusic();
+  const { currentTrack, customPlaylists, createPlaylist, deleteCustomPlaylist, user, openAuthModal, isPlaylistPinned, lyricsMode, minimizeLyricsToCard } = useMusic();
+
+  const handleNavClick = () => {
+    if (lyricsMode === "full") {
+      minimizeLyricsToCard();
+    }
+    if (onClose) onClose();
+  };
   const [mounted, setMounted] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [popoverCoords, setPopoverCoords] = useState({ top: 0, left: 0, arrowTop: 18 });
@@ -109,7 +116,7 @@ export default function Sidebar({ className = "", onClose }) {
     const created = createPlaylist(newPlaylistTitle);
     setNewPlaylistTitle("");
     setIsPopoverOpen(false);
-    if (onClose) onClose();
+    handleNavClick();
     router.push(`/playlist/${created.id}`);
   };
 
@@ -119,6 +126,7 @@ export default function Sidebar({ className = "", onClose }) {
     { label: "Playlists", href: "/playlists", icon: "queue_music" },
     { label: "Self Mix", href: "/self-mix", icon: "equalizer" },
     { label: "Liked Songs", href: "/liked", icon: "favorite" },
+    { label: "Offline Songs", href: "/offline", icon: "download_for_offline" },
   ];
 
   return (
@@ -129,7 +137,7 @@ export default function Sidebar({ className = "", onClose }) {
       <div className="flex flex-col gap-5 overflow-hidden">
         {/* Brand Header */}
         <div className="px-6 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
+          <Link href="/" onClick={handleNavClick} className="flex items-center gap-3 group">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary via-cyan-500 to-secondary-container flex items-center justify-center shadow-[0_0_16px_rgba(6,182,212,0.45)] group-hover:scale-105 transition-transform">
               <span className="material-symbols-outlined text-surface-container-lowest text-[22px] font-bold">
                 graphic_eq
@@ -166,16 +174,16 @@ export default function Sidebar({ className = "", onClose }) {
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={onClose}
+                onClick={handleNavClick}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all group font-medium text-sm ${isActive
-                    ? "bg-gradient-to-r from-primary/15 to-transparent text-primary font-bold border-l-[3px] border-primary shadow-[0_0_24px_-4px_rgba(6,182,212,0.25)]"
-                    : "text-on-surface-variant hover:bg-surface-container/70 hover:text-white"
+                  ? "bg-gradient-to-r from-primary/15 to-transparent text-primary font-bold border-l-[3px] border-primary shadow-[0_0_24px_-4px_rgba(6,182,212,0.25)]"
+                  : "text-on-surface-variant hover:bg-surface-container/70 hover:text-white"
                   }`}
               >
                 <span
                   className={`material-symbols-outlined text-[21px] transition-colors ${isActive
-                      ? "text-primary"
-                      : "text-outline group-hover:text-primary"
+                    ? "text-primary"
+                    : "text-outline group-hover:text-primary"
                     }`}
                 >
                   {item.icon}
@@ -208,8 +216,8 @@ export default function Sidebar({ className = "", onClose }) {
                 type="button"
                 onClick={togglePopover}
                 className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${isPopoverOpen
-                    ? "bg-primary text-surface-container-lowest scale-110 shadow-[0_0_12px_rgba(76,215,246,0.6)]"
-                    : "hover:bg-surface-container text-outline hover:text-primary"
+                  ? "bg-primary text-surface-container-lowest scale-110 shadow-[0_0_12px_rgba(76,215,246,0.6)]"
+                  : "hover:bg-surface-container text-outline hover:text-primary"
                   }`}
                 title={isPopoverOpen ? "Close popover" : "Create new playlist"}
               >
@@ -311,47 +319,74 @@ export default function Sidebar({ className = "", onClose }) {
           <div className="flex flex-col gap-1">
             {/* Custom User-Created Playlists */}
             {mounted && customPlaylists && customPlaylists.length > 0 ? (
-              customPlaylists.map((pl) => (
-                <Link
-                  key={pl.id}
-                  href={`/playlist/${pl.id}`}
-                  onClick={onClose}
-                  className="flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-surface-container/70 transition-colors group cursor-pointer relative"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden border border-primary/30 group-hover:border-primary transition-colors shadow-sm relative">
-                    <img
-                      alt={pl.title}
-                      src={pl.coverUrl}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                    />
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-tl bg-primary" />
-                  </div>
-                  <div className="flex flex-col min-w-0 flex-1">
-                    <span className="text-sm font-medium text-white truncate group-hover:text-primary transition-colors">
-                      {pl.title}
-                    </span>
-                    <span className="text-[11px] text-primary font-medium truncate">
-                      {pl.tracks?.length || 0} songs • You
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      deleteCustomPlaylist(pl.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-outline hover:text-red-400 hover:bg-white/10 rounded-md transition-all flex-shrink-0"
-                    title="Delete playlist"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">delete</span>
-                  </button>
-                </Link>
-              ))
+              [...customPlaylists]
+                .sort((a, b) => {
+                  const aPinned = isPlaylistPinned ? isPlaylistPinned(a.id) : false;
+                  const bPinned = isPlaylistPinned ? isPlaylistPinned(b.id) : false;
+                  if (aPinned && !bPinned) return -1;
+                  if (!aPinned && bPinned) return 1;
+                  return 0;
+                })
+                .map((pl) => {
+                  const isPinned = isPlaylistPinned ? isPlaylistPinned(pl.id) : false;
+                  return (
+                    <Link
+                      key={pl.id}
+                      href={`/playlist/${pl.id}`}
+                      onClick={handleNavClick}
+                      className="flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-surface-container/70 transition-colors group cursor-pointer relative"
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden border border-primary/30 group-hover:border-primary transition-colors shadow-sm relative">
+                        <img
+                          alt={pl.title}
+                          src={pl.coverUrl}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        />
+                        {isPinned ? (
+                          <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-primary rounded-bl flex items-center justify-center shadow-sm">
+                            <span className="material-symbols-outlined text-[10px] text-surface-container-lowest rotate-45 font-bold">push_pin</span>
+                          </div>
+                        ) : (
+                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-tl bg-primary" />
+                        )}
+                      </div>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium text-white truncate group-hover:text-primary transition-colors">
+                            {pl.title}
+                          </span>
+                          {isPinned && (
+                            <span className="material-symbols-outlined text-primary text-[13px] rotate-45 flex-shrink-0" title="Pinned to Library">
+                              push_pin
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-primary font-medium truncate">
+                          {pl.tracks?.length || 0} songs • You
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          deleteCustomPlaylist(pl.id);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-outline hover:text-red-400 hover:bg-white/10 rounded-md transition-all flex-shrink-0"
+                        title="Delete playlist"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">delete</span>
+                      </button>
+                    </Link>
+                  );
+                })
             ) : (
               <div
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (lyricsMode === "full") {
+                    minimizeLyricsToCard();
+                  }
                   updateCoords();
                   setIsPopoverOpen(true);
                   setTimeout(() => inputRef.current?.focus(), 150);

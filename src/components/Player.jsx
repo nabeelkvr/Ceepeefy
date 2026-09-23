@@ -7,11 +7,6 @@ import MiniLyricsView from "./MiniLyricsView";
 import { Infinity as InfinityIcon } from "lucide-react";
 
 export default function Player() {
-  // Modes: "bar" (full-width bottom player), "mini" (compact floating widget), "card" (big photo card like Image 5)
-  const [playerMode, setPlayerMode] = useState("bar");
-  const isMinimized = playerMode === "mini";
-  const setIsMinimized = (min) => setPlayerMode(min ? "mini" : "bar");
-
   const {
     currentTrack,
     isPlaying,
@@ -26,6 +21,9 @@ export default function Player() {
     isLyricsOpen,
     lyricsMode,
     setLyricsMode,
+    playerMode,
+    setPlayerMode,
+    minimizeLyricsToCard,
     isAutoplayEnabled,
     isAutoplayLoading,
     toggleAutoplay,
@@ -45,6 +43,9 @@ export default function Player() {
     formatTime,
   } = useMusic();
 
+  const isMinimized = playerMode === "mini";
+  const setIsMinimized = (min) => setPlayerMode(min ? "mini" : "bar");
+
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const progressBarRef = useRef(null);
   const volumeBarRef = useRef(null);
@@ -52,9 +53,10 @@ export default function Player() {
   const cardVolumeBarRef = useRef(null);
   const cardRef = useRef(null);
 
-  // Click outside big card closes it back to mini player (Image 2)
+  // Click outside big card closes it back to mini player ONLY if not in synchronized lyrics mode
   useEffect(() => {
     if (playerMode !== "card") return;
+    if (lyricsMode === "mini") return; // Keep synchronized lyrics card visible while browsing!
 
     const handleClickOutside = (event) => {
       if (cardRef.current && !cardRef.current.contains(event.target)) {
@@ -79,7 +81,7 @@ export default function Player() {
       document.removeEventListener("pointerdown", handleClickOutside);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [playerMode]);
+  }, [playerMode, lyricsMode]);
 
   const handleSeekClick = (e) => {
     if (!progressBarRef.current || duration <= 0) return;
@@ -127,7 +129,7 @@ export default function Player() {
       {playerMode === "card" && (
         <aside
           ref={cardRef}
-          className="fixed bottom-5 right-5 z-50 w-72 sm:w-80 max-h-[calc(100vh-2.5rem)] rounded-2xl bg-surface-container-lowest/95 backdrop-blur-2xl border border-white/20 p-3.5 sm:p-4 shadow-[0_16px_50px_rgba(0,0,0,0.85)] flex flex-col gap-2.5 select-none animate-slide-up transition-all duration-300 ease-in-out overflow-hidden"
+          className="fixed bottom-20 right-3 sm:right-5 sm:bottom-5 z-50 w-[calc(100vw-1.5rem)] max-w-xs sm:w-80 max-h-[calc(100vh-6rem)] rounded-2xl bg-surface-container-lowest/95 backdrop-blur-2xl border border-white/20 p-3.5 sm:p-4 shadow-[0_16px_50px_rgba(0,0,0,0.85)] flex flex-col gap-2.5 select-none animate-slide-up transition-all duration-300 ease-in-out overflow-hidden"
           aria-label="Now Playing Card"
         >
           {/* Header Bar */}
@@ -475,9 +477,89 @@ export default function Player() {
         </aside>
       )}
 
-      {/* 3. FULL-LENGTH BOTTOM PLAYER BAR (Default View) */}
+      {/* 3a. SLEEK MOBILE FLOATING PLAYER BAR (< md) */}
       {playerMode === "bar" && (
-        <footer className="fixed bottom-0 left-0 right-0 h-24 bg-surface-container-lowest/95 backdrop-blur-2xl border-t border-white/10 px-4 md:px-6 z-50 flex items-center justify-between shadow-[0_-10px_30px_rgba(0,0,0,0.5)] select-none animate-slide-up">
+        <div
+          onClick={() => setPlayerMode("card")}
+          className="fixed bottom-[68px] inset-x-2.5 z-40 h-14 bg-[#091224]/95 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] px-3 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group"
+          role="region"
+          aria-label="Mobile Mini Player"
+        >
+          {/* Top Progress Bar Scrubber */}
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/10">
+            <div
+              className="h-full bg-primary transition-all duration-100"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Left: Thumbnail & Info */}
+          <div className="flex items-center min-w-0 flex-1 mr-2">
+            <div className="relative w-9 h-9 rounded-lg overflow-hidden bg-surface-container flex-shrink-0 shadow border border-white/10">
+              <img
+                src={currentTrack.coverUrl}
+                alt={currentTrack.title}
+                className="w-full h-full object-cover"
+              />
+              {isPlaying && (
+                <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-primary text-[14px] animate-pulse">
+                    graphic_eq
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col min-w-0 ml-2.5 flex-1">
+              <span className="text-xs font-bold text-white truncate">
+                {currentTrack.title}
+              </span>
+              <span className="text-[10px] text-on-surface-variant truncate mt-0.5 flex items-center gap-1.5">
+                <span className="truncate">{currentTrack.artist}</span>
+                <span className="text-[8px] px-1 py-0.2 rounded bg-primary/15 text-primary font-mono font-bold flex-shrink-0">
+                  FLAC
+                </span>
+              </span>
+            </div>
+          </div>
+
+          {/* Right: Like Button & Play/Pause */}
+          <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => toggleLike(currentTrack)}
+              className={`p-2 rounded-full hover:bg-surface-container transition-colors ${
+                isLiked(currentTrack.id) ? "text-primary" : "text-outline hover:text-white"
+              }`}
+              title={isLiked(currentTrack.id) ? "Remove from favorites" : "Add to favorites"}
+            >
+              <span
+                className="material-symbols-outlined text-[20px]"
+                style={{
+                  fontVariationSettings: isLiked(currentTrack.id) ? "'FILL' 1" : "'FILL' 0",
+                }}
+              >
+                {isLiked(currentTrack.id) ? "favorite" : "favorite_border"}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="w-9 h-9 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] active:scale-95 transition-transform"
+              title={isPlaying ? "Pause" : "Play"}
+            >
+              <span className="material-symbols-outlined text-[22px]">
+                {isBuffering ? "progress_activity" : isPlaying ? "pause" : "play_arrow"}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3b. FULL-LENGTH BOTTOM PLAYER BAR (Desktop Default View md:flex) */}
+      {playerMode === "bar" && (
+        <footer className="hidden md:flex fixed bottom-0 left-0 right-0 h-24 bg-surface-container-lowest/95 backdrop-blur-2xl border-t border-white/10 px-4 md:px-6 z-50 items-center justify-between shadow-[0_-10px_30px_rgba(0,0,0,0.5)] select-none animate-slide-up">
           {/* Left: Track Details */}
           <div className="flex items-center gap-3 md:gap-4 w-48 sm:w-64 md:w-80 min-w-0">
             <div
@@ -640,7 +722,14 @@ export default function Player() {
             </button>
 
             <button
-              onClick={() => setIsQueueOpen(!isQueueOpen)}
+              onClick={() => {
+                if (lyricsMode === "full") {
+                  minimizeLyricsToCard();
+                  setIsQueueOpen(false);
+                } else {
+                  setIsQueueOpen(!isQueueOpen);
+                }
+              }}
               className={`p-1.5 md:p-2 rounded-full hover:bg-surface-container transition-colors ${isQueueOpen ? "text-primary bg-surface-container" : "text-outline hover:text-white"
                 }`}
               title="Up Next Queue"
@@ -705,7 +794,13 @@ export default function Player() {
             {/* Minimize 'X' Button right at the edge of the right side (Image 1 fix) */}
             <div className="pl-1 md:pl-2 border-l border-white/10">
               <button
-                onClick={() => setPlayerMode("mini")}
+                onClick={() => {
+                  if (lyricsMode === "full") {
+                    minimizeLyricsToCard();
+                  } else {
+                    setPlayerMode("mini");
+                  }
+                }}
                 className="p-1.5 md:p-2 rounded-full hover:bg-surface-container text-outline hover:text-white transition-colors flex items-center justify-center group"
                 title="Minimize player"
                 aria-label="Minimize player"

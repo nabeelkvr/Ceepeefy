@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useMusic } from "../context/MusicContext";
 import ProfileDropdown from "./ProfileDropdown";
@@ -99,16 +100,32 @@ export default function Header({ onToggleMobileMenu }) {
   return (
     <header className="h-16 bg-surface-container-lowest/80 backdrop-blur-xl z-40 flex items-center justify-between px-4 md:px-8 border-b border-white/5 shadow-md flex-shrink-0">
       {/* Left: Title & Mobile menu button */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5 sm:gap-3">
         <button
           onClick={onToggleMobileMenu}
-          className="md:hidden text-outline hover:text-white p-1.5 rounded-lg hover:bg-surface-container transition-colors"
+          className="md:hidden text-outline hover:text-white p-1 rounded-lg hover:bg-surface-container transition-colors"
           title="Toggle Navigation Menu"
         >
           <span className="material-symbols-outlined text-[24px]">menu</span>
         </button>
 
-        <div className="flex items-center gap-2">
+        {/* Mobile Brand Identity matching Image 1 & 2 */}
+        <div className="flex md:hidden items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary via-cyan-500 to-secondary-container flex items-center justify-center shadow-[0_0_12px_rgba(6,182,212,0.4)]">
+            <span className="material-symbols-outlined text-surface-container-lowest text-[17px] font-bold">
+              graphic_eq
+            </span>
+          </div>
+          <span className="font-extrabold text-[17px] tracking-tight text-white flex items-center gap-1.5">
+            Ceepeefy
+          </span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary font-bold tracking-wider uppercase">
+            • Studio
+          </span>
+        </div>
+
+        {/* Desktop Brand Identity */}
+        <div className="hidden md:flex items-center gap-2">
           <h1 className="text-base md:text-lg font-bold text-white tracking-tight flex items-center gap-2 whitespace-nowrap">
             Enjoy Music
             <span className="text-[10px] md:text-xs px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-medium">
@@ -118,9 +135,9 @@ export default function Header({ onToggleMobileMenu }) {
         </div>
       </div>
 
-      {/* Middle: Search bar with shortcut & live debouncing (Hidden on /search to avoid duplicate search bars) */}
+      {/* Middle: Search bar with shortcut & live debouncing (Hidden on mobile and on /search) */}
       {!pathname?.startsWith("/search") ? (
-        <div className="flex-1 max-w-xl mx-3 md:mx-8">
+        <div className="hidden md:flex flex-1 max-w-xl mx-3 md:mx-8">
           <div className="flex items-center gap-2.5 px-3.5 py-1.5 md:py-2 rounded-full bg-surface-container/80 border border-white/10 text-on-surface w-full shadow-inner focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all group">
             <button
               type="button"
@@ -174,6 +191,16 @@ export default function Header({ onToggleMobileMenu }) {
 
       {/* Right: Actions and Avatar */}
       <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 relative">
+        {/* Mobile Quick Search Button (Image 1 & 2 match) */}
+        {pathname !== "/search" && (
+          <Link
+            href="/search"
+            className="md:hidden w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/5 flex items-center justify-center text-outline hover:text-white transition-colors"
+            title="Search"
+          >
+            <span className="material-symbols-outlined text-[19px]">search</span>
+          </Link>
+        )}
         {/* Notifications */}
         <div className="relative" ref={notificationsRef}>
           <button

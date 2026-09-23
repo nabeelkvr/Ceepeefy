@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMusic } from "../../../context/MusicContext";
 import { fetchAlbumDetails } from "../../../services/audioService";
 import DownloadButton from "../../../components/DownloadButton";
+import SongOptionsMenu from "../../../components/SongOptionsMenu";
 
 export default function AlbumPage() {
   const params = useParams();
@@ -25,6 +26,8 @@ export default function AlbumPage() {
     setIsShuffle,
     formatTime,
     addRecentSearch,
+    isPlaylistPinned,
+    togglePinPlaylist,
   } = useMusic();
 
   const [album, setAlbum] = useState(null);
@@ -165,7 +168,7 @@ export default function AlbumPage() {
       <div className="relative w-full p-6 md:p-8 bg-gradient-to-b from-surface-container-high/60 via-surface-container-low/40 to-transparent border-b border-white/5">
         <div className="flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-8 max-w-6xl">
           {/* Cover Art */}
-          <div className="relative w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group">
+          <div className="relative w-36 h-36 sm:w-44 sm:h-44 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group">
             {isLoading ? (
               <div className="w-full h-full bg-surface-container-highest animate-pulse" />
             ) : (
@@ -179,18 +182,18 @@ export default function AlbumPage() {
           </div>
 
           {/* Metadata info */}
-          <div className="flex flex-col gap-2.5 text-center md:text-left flex-1 min-w-0">
+          <div className="flex flex-col gap-2 sm:gap-2.5 text-center md:text-left flex-1 min-w-0">
             <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary text-[11px] font-bold tracking-wider uppercase flex items-center gap-1">
+              <span className="px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary text-[10px] sm:text-[11px] font-bold tracking-wider uppercase flex items-center gap-1">
                 <span className="material-symbols-outlined text-[13px]">movie</span>
                 Official Film Album • Hi-Res Lossless
               </span>
-              <span className="px-2 py-0.5 rounded-md bg-tertiary/15 text-tertiary text-[10px] font-mono font-bold border border-tertiary/25">
+              <span className="px-2 py-0.5 rounded-md bg-tertiary/15 text-tertiary text-[9px] sm:text-[10px] font-mono font-bold border border-tertiary/25">
                 24-Bit • 192kHz Lossless
               </span>
             </div>
 
-            <h1 className="text-2xl md:text-5xl font-extrabold text-white tracking-tight leading-tight">
+            <h1 className="text-xl sm:text-2xl md:text-5xl font-extrabold text-white tracking-tight leading-tight">
               {isLoading ? "Loading Album..." : album?.title || "Film Soundtrack"}
             </h1>
 
@@ -198,10 +201,10 @@ export default function AlbumPage() {
               {album?.description || "Original Motion Picture Soundtrack"}
             </p>
 
-            <div className="flex items-center justify-center md:justify-start gap-3 text-xs text-outline pt-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[11px] font-bold">
-                  <span className="material-symbols-outlined text-[14px]">graphic_eq</span>
+            <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3 text-xs text-outline pt-1 sm:pt-2 flex-wrap">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[10px] sm:text-[11px] font-bold">
+                  <span className="material-symbols-outlined text-[12px] sm:text-[14px]">graphic_eq</span>
                 </div>
                 <span className="text-white font-medium">{album?.artist || "Film Soundtrack"}</span>
               </div>
@@ -220,15 +223,15 @@ export default function AlbumPage() {
         </div>
 
         {/* Action Controls Bar */}
-        <div className="flex items-center gap-4 mt-8">
+        <div className="flex items-center gap-2.5 sm:gap-4 mt-5 sm:mt-8 flex-wrap">
           {/* Master Play Button */}
           <button
             onClick={handleMasterPlay}
             disabled={tracks.length === 0}
-            className="w-14 h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+            className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
             title={isCurrentAlbumPlaying ? "Pause album" : "Play all songs"}
           >
-            <span className="material-symbols-outlined text-[32px]">
+            <span className="material-symbols-outlined text-[26px] sm:text-[32px]">
               {isCurrentAlbumPlaying ? "pause" : "play_arrow"}
             </span>
           </button>
@@ -236,14 +239,44 @@ export default function AlbumPage() {
           {/* Shuffle Button */}
           <button
             onClick={() => setIsShuffle((prev) => !prev)}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
               isShuffle
                 ? "text-primary bg-primary/10 border border-primary/30"
                 : "text-outline hover:text-white bg-surface-container/60 hover:bg-surface-container"
             }`}
             title="Toggle Shuffle"
           >
-            <span className="material-symbols-outlined text-[22px]">shuffle</span>
+            <span className="material-symbols-outlined text-[20px] sm:text-[22px]">shuffle</span>
+          </button>
+
+          {/* Pin to Library Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!album) return;
+              togglePinPlaylist(album.id || albumId, {
+                id: album.id || albumId,
+                title: album.title || "Album",
+                curator: album.artist || "Official Album",
+                description: album.description || "Official Album Soundtrack",
+                coverUrl: album.image || album.thumbnail || album.coverUrl,
+                tracks,
+                trackCount: tracks.length,
+                type: "album",
+                isAlbum: true,
+              });
+            }}
+            className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full border flex items-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${
+              isPlaylistPinned(album?.id || albumId)
+                ? "bg-primary/15 text-primary border-primary/40 shadow-[0_0_15px_rgba(76,215,246,0.3)]"
+                : "bg-surface-container/60 text-outline hover:text-white border-white/10 hover:border-white/20"
+            }`}
+            title={isPlaylistPinned(album?.id || albumId) ? "Unpin from library" : "Pin to library"}
+          >
+            <span className={`material-symbols-outlined text-[17px] sm:text-[19px] ${isPlaylistPinned(album?.id || albumId) ? "rotate-45" : ""}`}>
+              push_pin
+            </span>
+            <span>{isPlaylistPinned(album?.id || albumId) ? "Pinned" : "Pin to Library"}</span>
           </button>
 
           {/* Like Album */}
@@ -290,14 +323,14 @@ export default function AlbumPage() {
       {/* Tracklist Table (Exact Image 2 Structure) */}
       <div className="px-4 md:px-8 pt-6 flex flex-col gap-2">
         {/* Table Header */}
-        <div className="grid grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_4.5rem] items-center px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
+        <div className="grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
           <span className="text-center">#</span>
           <span>Title</span>
           <span className="hidden md:block">Artist</span>
-          <span className="text-right flex items-center justify-end">
+          <span className="text-right flex items-center justify-end pr-1">
             <span className="material-symbols-outlined text-[16px]">schedule</span>
           </span>
-          <span className="text-center" />
+          <span className="text-right hidden md:block pr-2">Actions</span>
         </div>
 
         {/* Loading Skeletons */}
@@ -339,7 +372,7 @@ export default function AlbumPage() {
                 <div
                   key={track.id || idx}
                   onClick={() => handleRowClick(track)}
-                  className={`group grid grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_4.5rem] items-center px-4 py-2.5 rounded-xl transition-all cursor-pointer select-none ${
+                  className={`group grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2.5 rounded-xl transition-all cursor-pointer select-none ${
                     isCurrent
                       ? "bg-surface-container-high/80 border border-primary/30 text-primary shadow-[0_0_15px_rgba(76,215,246,0.15)]"
                       : "hover:bg-surface-container/60 hover:border-white/5 border border-transparent text-on-surface"
@@ -435,12 +468,12 @@ export default function AlbumPage() {
                   </span>
 
                   {/* Duration */}
-                  <span className="text-xs font-mono text-outline text-right">
+                  <span className="text-xs font-mono text-outline text-right pr-2">
                     {track.durationFormatted || formatTime(track.duration || 210)}
                   </span>
 
-                  {/* Row Actions: Download & Like */}
-                  <div className="flex items-center justify-center gap-1 opacity-80 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                  {/* Row Actions: Download, Like, & 3-dot options */}
+                  <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
                     <DownloadButton track={track} iconSize="text-[16px]" buttonSize="p-1" />
                     <button
                       onClick={(e) => {
@@ -459,6 +492,7 @@ export default function AlbumPage() {
                         {isLiked(track.id) ? "favorite" : "favorite_border"}
                       </span>
                     </button>
+                    <SongOptionsMenu track={track} iconClassName="text-[18px]" buttonClassName="p-1" />
                   </div>
                 </div>
               );

@@ -14,6 +14,19 @@ import {
   deleteLocalAudioFile,
   deleteLocalAudioFiles
 } from "../services/localAudioStorage";
+import {
+  getOfflineAudioUrl,
+  getOfflineTracks,
+  getOfflineTrackIds,
+  isTrackOffline,
+  downloadTrack as serviceDownloadTrack,
+  removeOfflineTrack as serviceRemoveOfflineTrack,
+  downloadPlaylist as serviceDownloadPlaylist,
+  removePlaylistOffline as serviceRemovePlaylistOffline,
+  getPlaylistOfflineStatus as serviceGetPlaylistOfflineStatus,
+  getOfflineStorageStats,
+  getOfflinePlaylists,
+} from "../services/offlineStorage";
 import { formatPlaylistDuration } from "../utils/playlistUtils";
 import {
   DEFAULT_USER_ID,
@@ -133,10 +146,22 @@ export const MusicProvider = ({ children }) => {
   const isPrefetchingRef = useRef(false);
   const sessionPlayedTrackIdsRef = useRef(new Set());
   const sessionPlayedKeysRef = useRef(new Set());
+  const originalPlaylistTracksRef = useRef([]);
+
+  // Pinned Playlists State
+  const [pinnedPlaylistIds, setPinnedPlaylistIds] = useState([]);
+  const [addedPlaylists, setAddedPlaylists] = useState([]);
 
   // Modals & Drawers
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [lyricsMode, setLyricsMode] = useState("hidden"); // 'hidden' | 'full' | 'mini'
+  const [playerMode, setPlayerMode] = useState("bar"); // 'bar' | 'mini' | 'card'
+
+  const minimizeLyricsToCard = () => {
+    setLyricsMode("mini");
+    setPlayerMode("card");
+  };
+
   const [syncedLyrics, setSyncedLyrics] = useState([]);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [lyricsError, setLyricsError] = useState(null);
@@ -284,7 +309,7 @@ export const MusicProvider = ({ children }) => {
       localStorage.removeItem("isLoggedIn");
       localStorage.removeItem("activeUser");
       localStorage.removeItem("ceepeefy_user");
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // Audiophile App & Playback Settings
@@ -317,7 +342,7 @@ export const MusicProvider = ({ children }) => {
       const updated = { ...prev, [key]: val };
       try {
         localStorage.setItem("ceepeefy_settings", JSON.stringify(updated));
-      } catch (e) {}
+      } catch (e) { }
       return updated;
     });
   };
@@ -334,6 +359,97 @@ export const MusicProvider = ({ children }) => {
   const [customPlaylists, setCustomPlaylists] = useState([]);
   const [selfMixes, setSelfMixes] = useState([]);
   const hasLoadedStorageRef = useRef(false);
+
+  // Offline Songs & Device Storage State
+  const [offlineTrackIds, setOfflineTrackIds] = useState(new Set());
+  const [offlineTracks, setOfflineTracks] = useState([]);
+  const [offlinePlaylists, setOfflinePlaylists] = useState([]);
+  const [isNetworkOnline, setIsNetworkOnline] = useState(true);
+  const [offlineNotice, setOfflineNotice] = useState(null);
+  const offlineNoticeTimerRef = useRef(null);
+
+  const showOfflineNotice = (message) => {
+    if (offlineNoticeTimerRef.current) clearTimeout(offlineNoticeTimerRef.current);
+    setOfflineNotice(message);
+    offlineNoticeTimerRef.current = setTimeout(() => {
+      setOfflineNotice(null);
+    }, 4500);
+  };
+
+  const refreshOfflineState = async () => {
+    try {
+      const [tracks, ids, playlists] = await Promise.all([
+        getOfflineTracks(),
+        getOfflineTrackIds(),
+        getOfflinePlaylists(),
+      ]);
+      setOfflineTracks(tracks);
+      setOfflineTrackIds(ids);
+      setOfflinePlaylists(playlists);
+    } catch (e) {
+      console.warn("[MusicContext] Could not refresh offline state:", e);
+    }
+  };
+
+  useEffect(() => {
+    refreshOfflineState();
+
+    if (typeof window !== "undefined" && typeof navigator !== "undefined") {
+      setIsNetworkOnline(navigator.onLine);
+    }
+
+    const handleOnline = () => setIsNetworkOnline(true);
+    const handleOffline = () => {
+      setIsNetworkOnline(false);
+      showOfflineNotice("Network disconnected. You are in offline mode.");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      if (offlineNoticeTimerRef.current) clearTimeout(offlineNoticeTimerRef.current);
+    };
+  }, []);
+
+  const isOffline = (trackId) => {
+    if (!trackId) return false;
+    return offlineTrackIds.has(String(trackId));
+  };
+
+  const downloadTrack = async (track, playlistId = null) => {
+    const res = await serviceDownloadTrack(track, playlistId);
+    if (res.success) {
+      await refreshOfflineState();
+    }
+    return res;
+  };
+
+  const removeOfflineTrack = async (trackId, playlistId = null) => {
+    const res = await serviceRemoveOfflineTrack(trackId, playlistId);
+    if (res) {
+      await refreshOfflineState();
+    }
+    return res;
+  };
+
+  const downloadPlaylist = async (playlist, onProgress) => {
+    const res = await serviceDownloadPlaylist(playlist, onProgress);
+    await refreshOfflineState();
+    return res;
+  };
+
+  const removePlaylistOffline = async (playlistId, tracks = []) => {
+    const res = await serviceRemovePlaylistOffline(playlistId, tracks);
+    await refreshOfflineState();
+    return res;
+  };
+
+  const getPlaylistOfflineStatus = async (playlistId, tracks = []) => {
+    return await serviceGetPlaylistOfflineStatus(playlistId, tracks);
+  };
 
   // Central Account-Bound Data Persister (localStorage cache)
   const persistAccountData = (overrides = {}) => {
@@ -384,13 +500,13 @@ export const MusicProvider = ({ children }) => {
         const userObj = savedUserStr
           ? JSON.parse(savedUserStr)
           : {
-              username: DEFAULT_USER_ID,
-              name: DEFAULT_USER_ID,
-              email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
-              plan: "Owner / Studio Master",
-              isLoggedIn: true,
-              activeUser: DEFAULT_USER_ID,
-            };
+            username: DEFAULT_USER_ID,
+            name: DEFAULT_USER_ID,
+            email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
+            plan: "Owner / Studio Master",
+            isLoggedIn: true,
+            activeUser: DEFAULT_USER_ID,
+          };
         setUser(userObj);
 
         // Instant local cache hydration for zero UI flicker
@@ -464,7 +580,27 @@ export const MusicProvider = ({ children }) => {
       if (savedAutoplay !== null) {
         try {
           setIsAutoplayEnabled(Boolean(JSON.parse(savedAutoplay)));
-        } catch {}
+        } catch { }
+      }
+
+      const savedPinned = localStorage.getItem("ceepeefy_pinned_playlists");
+      if (savedPinned) {
+        try {
+          const parsedPinned = JSON.parse(savedPinned);
+          if (Array.isArray(parsedPinned)) {
+            setPinnedPlaylistIds(parsedPinned);
+          }
+        } catch { }
+      }
+
+      const savedAdded = localStorage.getItem("ceepeefy_added_playlists");
+      if (savedAdded) {
+        try {
+          const parsedAdded = JSON.parse(savedAdded);
+          if (Array.isArray(parsedAdded)) {
+            setAddedPlaylists(parsedAdded);
+          }
+        } catch { }
       }
     } catch (e) {
       console.warn("Failed to load saved state from localStorage:", e);
@@ -539,7 +675,7 @@ export const MusicProvider = ({ children }) => {
     });
   };
 
-  const createSelfMix = (title, initialTracks = []) => {
+  const createSelfMix = (title, initialTracks = [], customCover = null) => {
     const count = selfMixes.length + 1;
     const cleanTitle = title?.trim() || `Self Mix #${count}`;
     const id = `mix-${Date.now()}`;
@@ -551,7 +687,7 @@ export const MusicProvider = ({ children }) => {
       "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80",
       "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80"
     ];
-    const coverUrl = coverOptions[selfMixes.length % coverOptions.length];
+    const coverUrl = customCover || coverOptions[selfMixes.length % coverOptions.length];
 
     const safeTracks = Array.isArray(initialTracks)
       ? initialTracks.map(normalizeTrack).filter(Boolean)
@@ -916,19 +1052,19 @@ export const MusicProvider = ({ children }) => {
       setCurrentTime(cur);
       lastProgressTimeRef.current = cur;
 
-      // Smart Background Autoplay Injection:
-      // When the current queue is about to end (0 songs left in active queue),
-      // and playback reaches within 14s before ending, extract seed metadata and silently inject 5-10 tracks!
+      // Smart Background Autoplay Injection & Continuation:
+      // When the active queue is nearly exhausted (<= 2 songs left),
+      // and playback reaches within 25s before ending (or 75% progress), silently fetch & append next similar tracks!
       if (
         isAutoplayEnabledRef.current &&
-        queueRef.current.length === 0 &&
-        dur > 20 &&
-        cur >= dur - 14 &&
+        queueRef.current.length <= 2 &&
+        dur > 15 &&
+        (cur >= dur - 25 || cur >= dur * 0.75) &&
         !isFetchingAutoplayRef.current
       ) {
         const currentSong = currentTrackRef.current;
         if (currentSong?.id) {
-          fetchAndInjectAutoplayQueue(currentSong, true);
+          fetchAndInjectAutoplayQueue(currentSong, { mode: "append" });
         }
       }
     }
@@ -1021,7 +1157,7 @@ export const MusicProvider = ({ children }) => {
 
   /**
    * ListenFree-style Seed Metadata Extraction:
-   * Extracts id, album_id, primary_artist, language, and year of the final seed song.
+   * Extracts id, album_id, album, primary_artist, genre, mood, language, year, title, and artist of the seed song.
    */
   const extractSeedMetadata = (seedTrack) => {
     if (!seedTrack) return null;
@@ -1038,7 +1174,10 @@ export const MusicProvider = ({ children }) => {
     return {
       id: String(seedTrack.id || ""),
       album_id: String(seedTrack.album_id || seedTrack.albumId || seedTrack.more_info?.album_id || ""),
+      album: String(seedTrack.album || seedTrack.albumName || seedTrack.more_info?.album || ""),
       primary_artist: String(seedTrack.primary_artist || seedTrack.primaryArtist || seedTrack.artist || seedTrack.singers || ""),
+      genre: String(seedTrack.genre || seedTrack.more_info?.genre || ""),
+      mood: String(seedTrack.mood || seedTrack.more_info?.mood || ""),
       language: String(seedTrack.language || seedTrack.more_info?.language || ""),
       year: String(seedTrack.year || seedTrack.releaseDate?.slice(0, 4) || ""),
       title: String(seedTrack.title || seedTrack.song || ""),
@@ -1047,18 +1186,28 @@ export const MusicProvider = ({ children }) => {
   };
 
   /**
-   * ListenFree-style Tiered Autoplay Queue Manager:
-   * 1. Extracts seed metadata (id, album_id, primary_artist, language, year).
-   * 2. Fetches raw batch of 30 candidate tracks from JioSaavn recommendation/station endpoints.
-   * 3. Ranks candidates via Strict Tiered Sorting Algorithm:
-   *    - Priority 1: Same album_id (movie) OR same primary_artist + language + era.
-   *    - Priority 2: Same primary_artist (diff movie) OR related universe / same language.
-   *    - Priority 3: Algorithmic fallback mathematically sorted by play count & popularity.
-   * 4. Filters out session history (tracks already listened to in current session).
-   * 5. Silently appends top 5 to 10 ranked tracks to active queue.
+   * Spotify-Inspired 6-Tier Intelligent Queue Manager:
+   * 1. Extracts seed metadata (id, album_id, album, primary_artist, genre, mood, language, year, title).
+   * 2. Fetches candidate tracks ranked by the strict 6-tier recommendation engine.
+   * 3. Mode "initial": User played a song from Search. Populates upcoming queue with highest-priority recommendations,
+   *    preserving any manual queue items.
+   * 4. Mode "append": Queue is running low (<= 2 tracks). Seamlessly fetches and appends next recommendations if Autoplay is ON.
+   * 5. Mode "transition": Current queue depleted and Autoplay is ON; transitions to next recommendation with zero downtime.
    */
-  const fetchAndInjectAutoplayQueue = async (seedTrack, isSilentAppend = true) => {
-    if (!seedTrack || isFetchingAutoplayRef.current || !isAutoplayEnabledRef.current) return;
+  const fetchAndInjectAutoplayQueue = async (seedTrack, options = {}) => {
+    if (!seedTrack) return;
+
+    let mode = "append";
+    if (typeof options === "boolean") {
+      mode = options ? "append" : "transition";
+    } else if (options?.mode) {
+      mode = options.mode;
+    }
+
+    // If Autoplay is OFF, allow initial queue generation from Search, but skip append/transition
+    if (mode !== "initial" && !isAutoplayEnabledRef.current) return;
+    if (isFetchingAutoplayRef.current) return;
+
     const seedMeta = extractSeedMetadata(seedTrack);
     if (!seedMeta || !seedMeta.id) return;
 
@@ -1082,14 +1231,21 @@ export const MusicProvider = ({ children }) => {
         params.set("songId", seedMeta.id);
         params.set("id", seedMeta.id);
         if (seedMeta.album_id) params.set("album_id", seedMeta.album_id);
+        if (seedMeta.album) params.set("album", seedMeta.album);
         if (seedMeta.primary_artist) params.set("primary_artist", seedMeta.primary_artist);
+        if (seedMeta.genre) params.set("genre", seedMeta.genre);
+        if (seedMeta.mood) params.set("mood", seedMeta.mood);
         if (seedMeta.language) params.set("language", seedMeta.language);
         if (seedMeta.year) params.set("year", seedMeta.year);
         if (seedMeta.title) params.set("title", seedMeta.title);
         if (seedMeta.artist) params.set("artist", seedMeta.artist);
 
+        // Session history exclusion to avoid repetitive recommendations
+        const excludeList = Array.from(sessionPlayedTrackIdsRef.current).join(",");
+        if (excludeList) params.set("excludeIds", excludeList);
+
         console.log(
-          `[Autoplay] Querying 30 candidate tracks for seed: "${seedMeta.title}" (${seedMeta.id}) | Album: ${seedMeta.album_id || "N/A"} | Artist: ${seedMeta.primary_artist} | Lang: ${seedMeta.language || "N/A"}`
+          `[Autoplay] Querying intelligent recommendations for seed: "${seedMeta.title}" (${seedMeta.id}) | Mode: ${mode} | Album: ${seedMeta.album_id || "N/A"} | Artist: ${seedMeta.primary_artist} | Lang: ${seedMeta.language || "N/A"}`
         );
         const res = await fetch(`/api/audio/recommendations?${params.toString()}`);
 
@@ -1114,7 +1270,7 @@ export const MusicProvider = ({ children }) => {
           if (!t || !t.id) return false;
           const tid = String(t.id);
           if (tid === seedId || tid === curId) return false;
-          if (currentQueueIds.has(tid)) return false;
+          if (mode !== "initial" && currentQueueIds.has(tid)) return false;
           return true;
         });
 
@@ -1131,36 +1287,47 @@ export const MusicProvider = ({ children }) => {
       // Fallback if session history exhausted candidates: use candidateTracks so queue never halts
       const tracksToUse = freshTracks.length > 0 ? freshTracks : candidateTracks;
 
-      // Select top 5 to 10 ranked tracks (8 tracks default)
-      const topRankedTracks = tracksToUse.slice(0, 8);
+      // Select top 12-16 ranked tracks for initial queue, or 8 tracks for append
+      const countToTake = mode === "initial" ? 15 : 8;
+      const topRankedTracks = tracksToUse.slice(0, countToTake);
 
       if (topRankedTracks.length > 0) {
-        if (isSilentAppend) {
+        if (mode === "initial") {
+          console.log(
+            `[Autoplay] Initializing intelligent queue with ${topRankedTracks.length} tracks for "${seedMeta.title}":`,
+            topRankedTracks.map((t) => `[Tier ${t.tier}] ${t.title}`).join(", ")
+          );
+          setQueue((prev) => {
+            const manual = prev.filter((t) => t.isManual);
+            return [...manual, ...topRankedTracks];
+          });
+          setCurrentTracklist([...topRankedTracks]);
+        } else if (mode === "append") {
           console.log(
             `[Autoplay] Silently appending ${topRankedTracks.length} ranked candidate tracks to the active queue:`,
             topRankedTracks.map((t) => `[Tier ${t.tier}] ${t.title}`).join(", ")
           );
           setQueue((prev) => [...prev, ...topRankedTracks]);
           setCurrentTracklist((prev) => [...prev, ...topRankedTracks]);
-        } else {
+        } else if (mode === "transition") {
           const nextTrack = topRankedTracks[0];
           const upcomingQueue = topRankedTracks.slice(1);
           console.log(
-            `[Autoplay] Seamlessly transitioning to: "${nextTrack.title}" [Tier ${nextTrack.tier}: ${nextTrack.tierReason}]. Silently appending ${upcomingQueue.length} tracks to queue.`
+            `[Autoplay] Seamlessly transitioning to: "${nextTrack.title}" [Tier ${nextTrack.tier}: ${nextTrack.tierReason}]. Queueing ${upcomingQueue.length} tracks.`
           );
           setCurrentTracklist((prev) => [...prev, nextTrack, ...upcomingQueue]);
           setQueue((prev) => [...prev, ...upcomingQueue]);
-          await playTrack(nextTrack);
+          await playTrack(nextTrack, null, { fromQueue: true });
         }
       } else {
         console.warn("[Autoplay] No suitable recommendations found.");
-        if (!isSilentAppend) {
+        if (mode === "transition") {
           setIsPlaying(false);
         }
       }
     } catch (err) {
       console.error("[Autoplay] Error during autoplay queue injection:", err);
-      if (!isSilentAppend) {
+      if (mode === "transition") {
         const fallbackList = NOCTURNE_TRACKS.filter((t) => String(t.id) !== String(seedTrack.id));
         if (fallbackList.length > 0) {
           const fallback = fallbackList[Math.floor(Math.random() * fallbackList.length)];
@@ -1177,7 +1344,7 @@ export const MusicProvider = ({ children }) => {
 
   // Keep triggerAutoplayTransition as alias for backwards compatibility
   const triggerAutoplayTransition = async (seedTrack) => {
-    return fetchAndInjectAutoplayQueue(seedTrack, false);
+    return fetchAndInjectAutoplayQueue(seedTrack, { mode: "transition" });
   };
 
   const handleEnded = () => {
@@ -1277,10 +1444,10 @@ export const MusicProvider = ({ children }) => {
   };
 
   // Play a specific track: fetches raw direct audio streaming URL from open-source music search
-  const playTrack = async (track, tracklist = null) => {
+  const playTrack = async (track, tracklist = null, options = {}) => {
     if (!track) return;
 
-    if (!user) {
+    if (!user && !offlineTrackIds.has(String(track.id))) {
       openAuthModal("login");
       return;
     }
@@ -1300,10 +1467,27 @@ export const MusicProvider = ({ children }) => {
     setDuration(track.duration || 210);
     setIsBuffering(true);
 
-    if (tracklist && tracklist.length > 0) {
+    if (tracklist && tracklist.length > 0 && !options?.fromSearch) {
+      originalPlaylistTracksRef.current = tracklist;
       setCurrentTracklist(tracklist);
-      const remaining = tracklist.filter((t) => t.id !== track.id);
+      let remaining;
+      if (isShuffleRef.current) {
+        remaining = [...tracklist.filter((t) => String(t.id) !== String(track.id))].sort(() => Math.random() - 0.5);
+      } else {
+        const idx = tracklist.findIndex((t) => String(t.id) === String(track.id));
+        remaining = idx !== -1 ? tracklist.slice(idx + 1) : tracklist.filter((t) => String(t.id) !== String(track.id));
+      }
       setQueue(remaining);
+    } else if (!options?.fromQueue) {
+      // Standalone track or played from search:
+      // Preserve manual tracks if any, and trigger immediate 6-tier intelligent queue generation!
+      const manual = (queueRef.current || []).filter((t) => t.isManual);
+      setQueue(manual);
+      fetchAndInjectAutoplayQueue(track, { mode: "initial" });
+    } else if (options?.fromQueue) {
+      if (isAutoplayEnabledRef.current && queueRef.current.length <= 2) {
+        fetchAndInjectAutoplayQueue(track, { mode: "append" });
+      }
     }
 
     // Reset retry counters on new track play
@@ -1356,9 +1540,10 @@ export const MusicProvider = ({ children }) => {
         return [norm.id, ...filtered].slice(0, 25);
       });
 
-      // Cloud persistence for recently played
+      // Cloud persistence for recently played (only when network is online)
       const currentUserId = getAccountUserId(user);
-      if (user && currentUserId === DEFAULT_USER_ID) {
+      const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
+      if (user && currentUserId === DEFAULT_USER_ID && isOnline) {
         recordRecentlyPlayedToCloud(norm, currentUserId).catch((err) => {
           console.error("[MusicContext] Failed to record recently played track to Supabase:", err);
         });
@@ -1366,9 +1551,21 @@ export const MusicProvider = ({ children }) => {
     }
 
     try {
-      // Hit IndexedDB for local audio or the music search service for remote streams
+      // Hit IndexedDB for local offline audio, local uploads, or remote streams
       let rawAudioUrl = track.audioUrl;
-      if (isLocalTrack) {
+
+      // 1. Check local offline storage (IndexedDB)
+      try {
+        const offlineUrl = await getOfflineAudioUrl(track.id);
+        if (offlineUrl) {
+          rawAudioUrl = offlineUrl;
+        }
+      } catch (offlineErr) {
+        console.warn("[OfflineStorage] Offline track check error:", offlineErr);
+      }
+
+      // 2. Check local user uploads (Self Mix) if not found in offline storage
+      if (!rawAudioUrl && isLocalTrack) {
         try {
           const localUrl = await getLocalAudioUrl(track.id);
           if (localUrl) {
@@ -1377,7 +1574,18 @@ export const MusicProvider = ({ children }) => {
         } catch (localErr) {
           console.warn("[LocalAudio] Error retrieving local audio from IndexedDB:", localErr);
         }
-      } else if (!rawAudioUrl) {
+      }
+
+      // 3. Graceful offline detection: if no local/offline audio and browser is disconnected
+      const isOnlineNow = typeof navigator !== "undefined" ? navigator.onLine : true;
+      if (!rawAudioUrl && !isOnlineNow) {
+        setIsBuffering(false);
+        showOfflineNotice("This track is not downloaded for offline listening. Connect to the internet or play your offline songs.");
+        return;
+      }
+
+      // 4. Remote stream resolution if online
+      if (!rawAudioUrl) {
         const streamData = await getDirectAudioStreamUrl(track.title, track.artist, track.id);
         rawAudioUrl = streamData.audioUrl;
       }
@@ -1435,11 +1643,10 @@ export const MusicProvider = ({ children }) => {
   const handleNextTrack = () => {
     const q = queueRef.current;
     if (q.length > 0) {
-      const next = isShuffleRef.current
-        ? q[Math.floor(Math.random() * q.length)]
-        : q[0];
-      setQueue((prev) => prev.filter((t) => t.id !== next.id));
-      playTrack(next);
+      const next = q[0];
+      const remaining = q.slice(1);
+      setQueue(remaining);
+      playTrack(next, null, { fromQueue: true });
       return;
     }
 
@@ -1473,7 +1680,145 @@ export const MusicProvider = ({ children }) => {
         }
       }
       playTrack(tracklist[nextIndex]);
+    } else if (isAutoplayEnabledRef.current && cur) {
+      triggerAutoplayTransition(cur);
     }
+  };
+
+  // Play upcoming item directly from queue
+  const playFromQueue = (track, index) => {
+    const remaining = queueRef.current.slice(index + 1);
+    setQueue(remaining);
+    playTrack(track, null, { fromQueue: true });
+  };
+
+  // Clear upcoming queue without stopping current playback
+  const clearQueue = () => {
+    setQueue([]);
+  };
+
+  // Add track to queue: Append to the end of the upcoming queue
+  const addToQueue = (track) => {
+    if (!track) return;
+    const norm = normalizeTrack(track);
+    if (!norm) return;
+    const manualTrack = { ...norm, isManual: true };
+    setQueue((prev) => [...prev, manualTrack]);
+  };
+
+  // Play track immediately next in queue: Insert immediately after current song, before other upcoming songs
+  const playNext = (track) => {
+    if (!track) return;
+    const norm = normalizeTrack(track);
+    if (!norm) return;
+    const manualTrack = { ...norm, isManual: true };
+    setQueue((prev) => [manualTrack, ...prev]);
+  };
+
+  // Playlist Shuffle: keeps currently playing track, shuffles upcoming without duplicates
+  const toggleShuffle = (explicitTracks = null) => {
+    setIsShuffle((prev) => {
+      const next = !prev;
+      const orig = explicitTracks || originalPlaylistTracksRef.current || currentTracklistRef.current || [];
+      const cur = currentTrackRef.current;
+      if (orig && orig.length > 0) {
+        if (next) {
+          // Shuffle remaining tracks without altering current track
+          const remaining = orig.filter((t) => String(t.id) !== String(cur?.id));
+          const shuffled = [...remaining].sort(() => Math.random() - 0.5);
+          setQueue(shuffled);
+        } else {
+          // Restore normal playlist-order playback
+          const curIndex = orig.findIndex((t) => String(t.id) === String(cur?.id));
+          const normalRemaining = curIndex !== -1 ? orig.slice(curIndex + 1) : orig.filter((t) => String(t.id) !== String(cur?.id));
+          setQueue(normalRemaining);
+        }
+      }
+      return next;
+    });
+  };
+
+  // Pin & Unpin playlist with persistence and full metadata
+  const togglePinPlaylist = (playlistId, playlistData = null) => {
+    if (!playlistId) return;
+    const pid = String(playlistId);
+    setPinnedPlaylistIds((prev) => {
+      const isAlreadyPinned = prev.includes(pid);
+      const next = isAlreadyPinned ? prev.filter((id) => id !== pid) : [...prev, pid];
+      try {
+        localStorage.setItem("ceepeefy_pinned_playlists", JSON.stringify(next));
+      } catch (e) {
+        console.warn("Could not save pinned playlists:", e);
+      }
+      return next;
+    });
+
+    setAddedPlaylists((prev) => {
+      const isAlreadyAdded = prev.some((p) => String(p.id) === pid);
+      let next;
+      if (isAlreadyAdded) {
+        next = prev.filter((p) => String(p.id) !== pid);
+      } else {
+        const itemToSave = playlistData
+          ? {
+              id: pid,
+              title: playlistData.title || "Playlist",
+              description: playlistData.description || playlistData.subtitle || "Added to library",
+              curator: playlistData.curator || playlistData.artist || "Curated",
+              coverUrl:
+                playlistData.coverUrl ||
+                playlistData.image ||
+                playlistData.thumbnail ||
+                "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
+              tracks: playlistData.tracks || [],
+              trackCount: playlistData.tracks?.length || playlistData.trackCount || playlistData.songCount || 0,
+              type: playlistData.type || (playlistData.isMovie || playlistData.isAlbum ? "album" : "playlist"),
+              addedAt: Date.now(),
+            }
+          : {
+              id: pid,
+              title: "Added Playlist",
+              curator: "Curated",
+              coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
+              tracks: [],
+              trackCount: 0,
+              type: "playlist",
+              addedAt: Date.now(),
+            };
+        next = [itemToSave, ...prev];
+      }
+      try {
+        localStorage.setItem("ceepeefy_added_playlists", JSON.stringify(next));
+      } catch (e) {
+        console.warn("Could not save added playlists:", e);
+      }
+      return next;
+    });
+  };
+
+  const removeAddedPlaylist = (playlistId) => {
+    if (!playlistId) return;
+    const pid = String(playlistId);
+    setPinnedPlaylistIds((prev) => {
+      const next = prev.filter((id) => id !== pid);
+      try {
+        localStorage.setItem("ceepeefy_pinned_playlists", JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    setAddedPlaylists((prev) => {
+      const next = prev.filter((p) => String(p.id) !== pid);
+      try {
+        localStorage.setItem("ceepeefy_added_playlists", JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const isPlaylistPinned = (playlistId) => {
+    if (!playlistId) return false;
+    const pid = String(playlistId);
+    return pinnedPlaylistIds.includes(pid) || addedPlaylists.some((p) => String(p.id) === pid);
   };
 
   // Previous track
@@ -1621,6 +1966,9 @@ export const MusicProvider = ({ children }) => {
         isQueueOpen,
         isLyricsOpen,
         lyricsMode,
+        playerMode,
+        setPlayerMode,
+        minimizeLyricsToCard,
         syncedLyrics,
         isLoadingLyrics,
         lyricsError,
@@ -1672,6 +2020,7 @@ export const MusicProvider = ({ children }) => {
         changeVolume,
         toggleMute,
         setIsShuffle,
+        toggleShuffle,
         setRepeatMode,
         setIsQueueOpen,
         setIsLyricsOpen,
@@ -1681,7 +2030,15 @@ export const MusicProvider = ({ children }) => {
         setIsDeviceModalOpen,
         setCurrentDevice,
         setQueue,
-        addToQueue: (track) => setQueue((prev) => [...prev, track]),
+        addToQueue,
+        playNext,
+        playFromQueue,
+        clearQueue,
+        pinnedPlaylistIds,
+        addedPlaylists,
+        togglePinPlaylist,
+        removeAddedPlaylist,
+        isPlaylistPinned,
         setActiveFilter,
         setSearchQuery,
         addRecentSearch,
@@ -1695,9 +2052,45 @@ export const MusicProvider = ({ children }) => {
         addLocalTracksToSelfMix,
         addTrackToPlaylist,
         removeTrackFromPlaylist,
+
+        // Offline storage & playback helpers
+        offlineTrackIds,
+        offlineTracks,
+        offlinePlaylists,
+        isNetworkOnline,
+        offlineNotice,
+        setOfflineNotice,
+        showOfflineNotice,
+        isOffline,
+        refreshOfflineState,
+        downloadTrack,
+        removeOfflineTrack,
+        downloadPlaylist,
+        removePlaylistOffline,
+        getPlaylistOfflineStatus,
+        getOfflineStorageStats,
+        getOfflinePlaylists,
       }}
     >
       {children}
+
+      {/* Floating Offline Notification Toast */}
+      {offlineNotice && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] bg-[#0d172e]/95 text-white border border-primary/40 px-4 py-2.5 rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200">
+          <span className="material-symbols-outlined text-primary text-[18px]">
+            offline_pin
+          </span>
+          <span>{offlineNotice}</span>
+          <button
+            onClick={() => setOfflineNotice(null)}
+            className="text-outline hover:text-white p-0.5 rounded-full transition-colors ml-1"
+            title="Dismiss"
+          >
+            <span className="material-symbols-outlined text-[14px]">close</span>
+          </button>
+        </div>
+      )}
+
       {/* Standard HTML5 <audio> Element with Aggressive Preloading & Stall Recovery */}
       <audio
         ref={audioRef}

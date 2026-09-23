@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
@@ -10,13 +10,21 @@ import FullLyricsPanel from "./FullLyricsPanel";
 import DeviceModal from "./DeviceModal";
 import SettingsModal from "./SettingsModal";
 import AuthModal from "./AuthModal";
+import MobileBottomNav from "./MobileBottomNav";
 import { useMusic } from "../context/MusicContext";
 
 export default function AppShell({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const { currentTrack, lyricsMode, user, openAuthModal } = useMusic();
+  const { currentTrack, lyricsMode, minimizeLyricsToCard, user, openAuthModal } = useMusic();
+
+  // When navigating between pages, automatically minimize full-screen lyrics to Image 2 floating card
+  useEffect(() => {
+    if (lyricsMode === "full") {
+      minimizeLyricsToCard();
+    }
+  }, [pathname]);
 
   const isUserAuthenticated = Boolean(user && user.isLoggedIn);
 
@@ -90,7 +98,7 @@ export default function AppShell({ children }) {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-[#0b1326] via-[#0d172e] to-[#070e1e] md:my-2 md:mr-2 md:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5">
           <Header onToggleMobileMenu={() => setIsMobileSidebarOpen((prev) => !prev)} />
-          <main className={`flex-1 overflow-y-auto ${currentTrack ? "pb-28 md:pb-28" : "pb-8 md:pb-8"} scroll-smooth transition-[padding] duration-300`}>
+          <main className={`flex-1 overflow-y-auto ${currentTrack ? "pb-36 md:pb-28" : "pb-20 md:pb-8"} scroll-smooth transition-[padding] duration-300`}>
             {children}
           </main>
 
@@ -104,6 +112,9 @@ export default function AppShell({ children }) {
 
       {/* Persistent Bottom Player Bar */}
       <Player />
+
+      {/* Mobile Fixed Bottom Navigation Bar */}
+      <MobileBottomNav />
 
       {/* Floating Modals */}
       <DeviceModal />

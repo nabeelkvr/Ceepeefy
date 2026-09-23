@@ -10,6 +10,7 @@ import {
 } from "../../../data/nocturneData";
 import { searchMusicTracks, fetchArtistImage } from "../../../services/audioService";
 import DownloadButton from "../../../components/DownloadButton";
+import SongOptionsMenu from "../../../components/SongOptionsMenu";
 
 export default function ArtistPage() {
   const params = useParams();
@@ -396,14 +397,14 @@ function normalizeSongTitle(title) {
         ) : (
           <>
             {/* Table Header */}
-            <div className="grid grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_4.5rem] items-center px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
+            <div className="grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
               <span className="text-center">#</span>
               <span>Title</span>
               <span className="hidden md:block">Artist</span>
-              <span className="text-right flex items-center justify-end">
+              <span className="text-right flex items-center justify-end pr-1">
                 <span className="material-symbols-outlined text-[16px]">schedule</span>
               </span>
-              <span className="text-center" />
+              <span className="text-right hidden md:block pr-2">Actions</span>
             </div>
 
             {/* Tracks List */}
@@ -416,7 +417,7 @@ function normalizeSongTitle(title) {
                   <div
                     key={track.id || idx}
                     onClick={() => handleRowClick(track)}
-                    className={`group grid grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_4.5rem] items-center px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+                    className={`group grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
                       isCurrent
                         ? "bg-primary/15 border border-primary/40 text-primary shadow-[0_0_15px_rgba(76,215,246,0.15)]"
                         : "hover:bg-surface-container/70 hover:border-white/5 border border-transparent text-on-surface"
@@ -472,12 +473,12 @@ function normalizeSongTitle(title) {
                     </div>
 
                     {/* Duration Column */}
-                    <div className="text-right text-xs font-mono text-outline">
+                    <div className="text-right text-xs font-mono text-outline pr-2">
                       {track.durationFormatted || formatTime(track.duration)}
                     </div>
 
                     {/* Actions: Download & Favorite Buttons */}
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="flex items-center justify-end gap-1 flex-shrink-0">
                       <DownloadButton track={track} />
 
                       <button
@@ -497,6 +498,8 @@ function normalizeSongTitle(title) {
                           {isLiked(track.id) ? "favorite" : "favorite_border"}
                         </span>
                       </button>
+
+                      <SongOptionsMenu track={track} iconClassName="text-[18px]" />
                     </div>
                   </div>
                 );
