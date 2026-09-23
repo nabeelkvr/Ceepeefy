@@ -481,7 +481,7 @@ export default function Player() {
       {playerMode === "bar" && (
         <div
           onClick={() => setPlayerMode("card")}
-          className="fixed bottom-[68px] inset-x-2.5 z-40 h-14 bg-[#091224]/95 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] px-3 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group"
+          className="fixed bottom-[calc(68px+env(safe-area-inset-bottom,0px))] inset-x-2.5 z-40 h-14 bg-[#091224]/95 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] px-3 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group"
           role="region"
           aria-label="Mobile Mini Player"
         >

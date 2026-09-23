@@ -3,16 +3,35 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
+
   html, body {
     margin: 0;
     padding: 0;
     background-color: #0b1326;
     color: #dae2fd;
     font-family: 'Inter', sans-serif;
-  }
-  body {
     overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
   }
+
+  /* Optimize touch responsiveness and eliminate 300ms tap delay on mobile */
+  button, a, input, select, textarea, [role="button"], [tabindex] {
+    touch-action: manipulation;
+  }
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 /* Slim Custom Scrollbars */

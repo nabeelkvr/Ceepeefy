@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useMusic } from "../context/MusicContext";
+import { usePWA } from "../context/PWAContext";
 import ProfileDropdown from "./ProfileDropdown";
 
 export default function Header({ onToggleMobileMenu }) {
@@ -16,6 +17,7 @@ export default function Header({ onToggleMobileMenu }) {
     user,
     setIsSettingsModalOpen,
   } = useMusic();
+  const { isInstalled, promptInstall } = usePWA();
   const [localQuery, setLocalQuery] = useState(searchQuery || "");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -244,6 +246,19 @@ export default function Header({ onToggleMobileMenu }) {
             </div>
           )}
         </div>
+
+        {/* Install PWA Button (Hidden when running in standalone mode) */}
+        {!isInstalled && (
+          <button
+            type="button"
+            onClick={promptInstall}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_12px_rgba(76,215,246,0.15)]"
+            title="Install Ceepeefy App"
+          >
+            <span className="material-symbols-outlined text-[17px]">download</span>
+            <span className="hidden sm:inline">Install App</span>
+          </button>
+        )}
 
         {/* Audio & App Settings */}
         <button

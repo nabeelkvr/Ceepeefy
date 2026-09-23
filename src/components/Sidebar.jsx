@@ -5,11 +5,13 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMusic } from "../context/MusicContext";
+import { usePWA } from "../context/PWAContext";
 
 export default function Sidebar({ className = "", onClose }) {
   const pathname = usePathname();
   const router = useRouter();
   const { currentTrack, customPlaylists, createPlaylist, deleteCustomPlaylist, user, openAuthModal, isPlaylistPinned, lyricsMode, minimizeLyricsToCard } = useMusic();
+  const { isInstalled, promptInstall } = usePWA();
 
   const handleNavClick = () => {
     if (lyricsMode === "full") {
@@ -406,6 +408,27 @@ export default function Sidebar({ className = "", onClose }) {
             )}
           </div>
         </div>
+
+        {/* Install Ceepeefy App Banner (Hidden when running in standalone mode) */}
+        {!isInstalled && (
+          <div className="p-3 mx-2 my-2 rounded-xl bg-gradient-to-r from-primary/10 to-cyan-500/5 border border-primary/20 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+                <span className="material-symbols-outlined text-[19px]">install_mobile</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-white truncate">Install App</p>
+                <p className="text-[10px] text-on-surface-variant truncate">Offline & Fullscreen</p>
+              </div>
+            </div>
+            <button
+              onClick={promptInstall}
+              className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs transition-colors flex-shrink-0 cursor-pointer shadow-sm"
+            >
+              Get
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

@@ -1,0 +1,39 @@
+export default function manifest() {
+  return {
+    name: "Ceepeefy — Studio Music Player",
+    short_name: "Ceepeefy",
+    description: "Cinematic, high-fidelity music streaming progressive web application.",
+    start_url: "/",
+    scope: "/",
+    display: "standalone",
+    orientation: "portrait-primary",
+    background_color: "#0b1326",
+    theme_color: "#0b1326",
+    icons: [
+      {
+        src: "/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icon-512-maskable.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
+      },
+      {
+        src: "/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+    categories: ["music", "entertainment", "audio"],
+  };
+}

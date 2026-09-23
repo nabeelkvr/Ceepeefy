@@ -69,7 +69,7 @@ export default function AppShell({ children }) {
     <div
       onClickCapture={handleGlobalClickCapture}
       onKeyDownCapture={handleGlobalKeyDownCapture}
-      className="h-screen w-screen flex flex-col bg-[#0b1326] text-on-surface font-sans overflow-hidden selection:bg-primary-container selection:text-on-primary-container"
+      className="h-[100dvh] h-screen w-screen flex flex-col bg-[#0b1326] text-on-surface font-sans overflow-hidden selection:bg-primary-container selection:text-on-primary-container"
     >
       {/* Upper area: Sidebar + Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -98,7 +98,7 @@ export default function AppShell({ children }) {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-[#0b1326] via-[#0d172e] to-[#070e1e] md:my-2 md:mr-2 md:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5">
           <Header onToggleMobileMenu={() => setIsMobileSidebarOpen((prev) => !prev)} />
-          <main className={`flex-1 overflow-y-auto ${currentTrack ? "pb-36 md:pb-28" : "pb-20 md:pb-8"} scroll-smooth transition-[padding] duration-300`}>
+          <main className={`flex-1 overflow-y-auto ${currentTrack ? "pb-[calc(9.5rem+env(safe-area-inset-bottom,0px))] md:pb-28" : "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8"} scroll-smooth transition-[padding] duration-300`}>
             {children}
           </main>
 
