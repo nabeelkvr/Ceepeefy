@@ -291,28 +291,6 @@ export default function AuthModal() {
             {authModalTab === "signup" ? "Create Free Account" : "Sign In to Ceepeefy"}
           </button>
         </form>
-
-        {/* Divider */}
-        <div className="flex items-center gap-3 my-0.5">
-          <div className="flex-1 h-[1px] bg-white/10" />
-          <span className="text-[10px] text-outline uppercase tracking-wider">
-            Quick Access
-          </span>
-          <div className="flex-1 h-[1px] bg-white/10" />
-        </div>
-
-        {/* Quick Owner Login Button */}
-        <button
-          type="button"
-          onClick={handleQuickOwnerSignIn}
-          className="w-full py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-medium text-xs border border-white/10 hover:border-primary/40 transition-all flex items-center justify-center gap-2 cursor-pointer group"
-        >
-          <span className="material-symbols-outlined text-primary text-[18px] group-hover:scale-110 transition-transform">
-            key
-          </span>
-          <span>Quick Owner Login (nabeeyl)</span>
-        </button>
-
         {/* Switch tab note */}
         <div className="text-center text-[11px] text-outline">
           {authModalTab === "signup" ? (

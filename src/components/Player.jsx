@@ -59,6 +59,7 @@ export default function Player() {
     if (lyricsMode === "mini") return; // Keep synchronized lyrics card visible while browsing!
 
     const handleClickOutside = (event) => {
+      if (typeof window !== "undefined" && window.innerWidth < 768) return;
       if (cardRef.current && !cardRef.current.contains(event.target)) {
         setPlayerMode("mini");
       }
@@ -66,7 +67,7 @@ export default function Player() {
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
-        setPlayerMode("mini");
+        setPlayerMode("bar");
       }
     };
 
@@ -125,20 +126,41 @@ export default function Player() {
 
   return (
     <>
-      {/* 1. RESIZED & COMPACT BIG PHOTO CARD (Image 5 style, fits comfortably on screen) */}
+      {/* 1. NOW PLAYING CARD / FULL-SCREEN MOBILE PLAYER MODAL */}
       {playerMode === "card" && (
         <aside
           ref={cardRef}
-          className="fixed bottom-20 right-3 sm:right-5 sm:bottom-5 z-50 w-[calc(100vw-1.5rem)] max-w-xs sm:w-80 max-h-[calc(100vh-6rem)] rounded-2xl bg-surface-container-lowest/95 backdrop-blur-2xl border border-white/20 p-3.5 sm:p-4 shadow-[0_16px_50px_rgba(0,0,0,0.85)] flex flex-col gap-2.5 select-none animate-slide-up transition-all duration-300 ease-in-out overflow-hidden"
+          className="fixed inset-0 z-50 w-full h-full rounded-none bg-[#070e1e]/98 backdrop-blur-3xl border-none p-5 sm:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex flex-col justify-between overflow-y-auto select-none animate-slide-up md:fixed md:bottom-5 md:right-5 md:top-auto md:left-auto md:w-80 md:h-auto md:max-h-[calc(100vh-6rem)] md:rounded-2xl md:border md:border-white/20 md:p-3.5 md:gap-2.5 md:shadow-[0_16px_50px_rgba(0,0,0,0.85)] md:overflow-hidden"
           aria-label="Now Playing Card"
         >
           {/* Header Bar */}
-          <div className="flex items-center justify-between pb-0.5">
-            <div className="flex items-center gap-1.5 text-primary font-mono text-[10px] font-bold uppercase tracking-wider">
-              <span className="material-symbols-outlined text-[14px] animate-pulse">graphic_eq</span>
-              {lyricsMode === "mini" ? "Synchronized Lyrics" : "Now Playing"}
+          <div className="flex items-center justify-between pb-1 flex-shrink-0">
+            {/* Mobile Downward Chevron Minimize Button */}
+            <button
+              onClick={() => {
+                if (lyricsMode === "mini") {
+                  setLyricsMode("hidden");
+                }
+                setPlayerMode("bar");
+              }}
+              className="md:hidden p-1.5 -ml-1.5 rounded-full text-outline hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Minimize player"
+              aria-label="Minimize"
+            >
+              <span className="material-symbols-outlined text-[30px]">keyboard_arrow_down</span>
+            </button>
+
+            <div className="flex flex-col items-center md:items-start flex-1 min-w-0 mx-2">
+              <div className="flex items-center gap-1.5 text-primary font-mono text-[10px] md:text-[11px] font-bold uppercase tracking-wider">
+                <span className="material-symbols-outlined text-[14px] animate-pulse">graphic_eq</span>
+                <span>{lyricsMode === "mini" ? "Synchronized Lyrics" : "Now Playing"}</span>
+              </div>
+              <span className="text-[11px] text-outline truncate max-w-[200px] md:hidden">
+                {currentTrack.album || currentTrack.artist}
+              </span>
             </div>
-            <div className="flex items-center gap-0.5">
+
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => {
                   if (lyricsMode === "mini") {
@@ -148,7 +170,7 @@ export default function Player() {
                     setPlayerMode("bar");
                   }
                 }}
-                className="p-1 rounded-full text-outline hover:text-white hover:bg-white/10 transition-colors"
+                className="hidden md:flex p-1 rounded-full text-outline hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 title={lyricsMode === "mini" ? "Expand to full-width lyrics" : "Expand to bottom bar"}
                 aria-label="Expand to bottom bar"
               >
@@ -159,42 +181,44 @@ export default function Player() {
                   if (lyricsMode === "mini") {
                     setLyricsMode("hidden");
                   } else {
-                    setPlayerMode("mini");
+                    setPlayerMode("bar");
                   }
                 }}
-                className="p-1 rounded-full text-outline hover:text-white hover:bg-white/10 transition-colors"
-                title={lyricsMode === "mini" ? "Close lyrics (return to artwork)" : "Minimize to mini-player"}
+                className="p-1.5 rounded-full text-outline hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                title="Minimize player"
                 aria-label="Close"
               >
-                <span className="material-symbols-outlined text-[17px]">close</span>
+                <span className="material-symbols-outlined text-[22px] md:text-[17px]">close</span>
               </button>
             </div>
           </div>
 
           {/* Photo or Mini Synchronized Lyrics View */}
           {lyricsMode === "mini" ? (
-            <MiniLyricsView />
+            <div className="flex-1 min-h-0 my-2">
+              <MiniLyricsView />
+            </div>
           ) : (
-            <div className="relative aspect-[4/3] sm:aspect-square max-h-44 sm:max-h-48 w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-xl border border-white/10 group">
+            <div className="relative aspect-square w-full max-w-[320px] sm:max-w-[340px] mx-auto md:max-w-none md:max-h-48 md:aspect-[4/3] rounded-2xl md:rounded-xl overflow-hidden bg-surface-container-highest shadow-2xl border border-white/10 group my-auto flex-shrink-0">
               <img
                 alt={currentTrack.title}
                 src={currentTrack.coverUrl}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
               {/* Top Right Badge on Photo */}
-              <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-black/65 backdrop-blur-md border border-white/15 text-tertiary text-[9px] font-extrabold tracking-wider uppercase flex items-center gap-1 shadow-md">
-                <span className="material-symbols-outlined text-[12px]">album</span>
-                {currentTrack.badge || "ALBUM"}
+              <div className="absolute top-2.5 right-2.5 px-2.5 py-1 md:px-2 md:py-0.5 rounded-full bg-black/75 backdrop-blur-md border border-white/15 text-tertiary text-[10px] md:text-[9px] font-extrabold tracking-wider uppercase flex items-center gap-1 shadow-md">
+                <span className="material-symbols-outlined text-[13px] md:text-[12px]">album</span>
+                <span>{currentTrack.badge || "LOSSLESS"}</span>
               </div>
 
               {/* Hover Center Play/Pause Button */}
               <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <button
                   onClick={togglePlay}
-                  className="w-12 h-12 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.8)] hover:scale-110 active:scale-95 transition-all"
+                  className="w-14 h-14 md:w-12 md:h-12 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.8)] hover:scale-110 active:scale-95 transition-all"
                   title={isPlaying ? "Pause" : "Play"}
                 >
-                  <span className="material-symbols-outlined text-[28px]">
+                  <span className="material-symbols-outlined text-[32px] md:text-[28px]">
                     {isPlaying ? "pause" : "play_arrow"}
                   </span>
                 </button>
@@ -203,24 +227,25 @@ export default function Player() {
           )}
 
           {/* Track Details */}
-          <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center justify-between gap-3 min-w-0 my-2 md:my-0 flex-shrink-0">
             <div className="flex flex-col min-w-0 flex-1">
-              <h3 className="text-sm font-bold text-white truncate hover:text-primary transition-colors">
+              <h3 className="text-xl md:text-sm font-bold text-white truncate hover:text-primary transition-colors">
                 {currentTrack.title}
               </h3>
-              <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+              <p className="text-sm md:text-[11px] text-on-surface-variant truncate mt-0.5">
                 {currentTrack.artist}
               </p>
             </div>
 
             <button
               onClick={() => toggleLike(currentTrack)}
-              className={`p-1.5 rounded-full hover:bg-surface-container transition-colors flex-shrink-0 ${isLiked(currentTrack.id) ? "text-primary" : "text-outline hover:text-white"
-                }`}
+              className={`p-2 md:p-1.5 rounded-full hover:bg-surface-container transition-colors flex-shrink-0 ${
+                isLiked(currentTrack.id) ? "text-primary" : "text-outline hover:text-white"
+              }`}
               title={isLiked(currentTrack.id) ? "Remove from favorites" : "Add to favorites"}
             >
               <span
-                className="material-symbols-outlined text-[20px]"
+                className="material-symbols-outlined text-[26px] md:text-[20px]"
                 style={{
                   fontVariationSettings: isLiked(currentTrack.id) ? "'FILL' 1" : "'FILL' 0",
                 }}
@@ -231,57 +256,60 @@ export default function Player() {
           </div>
 
           {/* Timeline Scrubber */}
-          <div className="flex items-center gap-2 w-full">
-            <span className="text-[10px] text-outline font-mono w-6 select-none text-right">
+          <div className="flex items-center gap-2.5 md:gap-2 w-full flex-shrink-0">
+            <span className="text-xs md:text-[10px] text-outline font-mono w-8 md:w-6 select-none text-right">
               {formatTime(currentTime)}
             </span>
             <div
               ref={cardProgressBarRef}
               onClick={handleCardSeekClick}
-              className="relative flex-1 h-1 bg-surface-container-high rounded-full cursor-pointer group hover:h-1.5 transition-all"
+              className="relative flex-1 h-1.5 md:h-1 bg-surface-container-high rounded-full cursor-pointer group hover:h-2 md:hover:h-1.5 transition-all"
             >
               <div
                 className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-cyan-400 to-primary rounded-full transition-all duration-100"
                 style={{ width: `${progressPercent}%` }}
               />
               <div
-                className="w-2.5 h-2.5 bg-white rounded-full absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 shadow-[0_0_6px_rgba(255,255,255,0.9)] transition-opacity"
-                style={{ left: `calc(${progressPercent}% - 5px)` }}
+                className="w-3.5 h-3.5 md:w-2.5 md:h-2.5 bg-white rounded-full absolute top-1/2 -translate-y-1/2 opacity-100 md:opacity-0 md:group-hover:opacity-100 shadow-[0_0_8px_rgba(255,255,255,0.9)] transition-opacity"
+                style={{ left: `calc(${progressPercent}% - 7px)` }}
               />
             </div>
-            <span className="text-[10px] text-outline font-mono w-6 select-none">
+            <span className="text-xs md:text-[10px] text-outline font-mono w-8 md:w-6 select-none">
               {formatTime(duration)}
             </span>
           </div>
 
-          {/* Main Playback Controls */}
-          <div className="flex items-center justify-between px-1">
+          {/* Main Playback Controls (Image 5 style) */}
+          <div className="flex items-center justify-between px-2 md:px-1 py-1 flex-shrink-0">
             <button
               onClick={() => setIsShuffle(!isShuffle)}
-              className={`p-1 rounded-full hover:bg-surface-container transition-colors ${isShuffle ? "text-primary" : "text-outline hover:text-white"
-                }`}
+              className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${
+                isShuffle ? "text-primary" : "text-outline hover:text-white"
+              }`}
               title={`Shuffle: ${isShuffle ? "On" : "Off"}`}
             >
-              <span className="material-symbols-outlined text-[18px]">shuffle</span>
+              <span className="material-symbols-outlined text-[22px] md:text-[18px]">shuffle</span>
             </button>
 
             <button
               onClick={handlePrevTrack}
-              className="text-on-surface hover:text-primary transition-colors p-1 rounded-full hover:bg-surface-container"
+              className="text-on-surface hover:text-primary transition-colors p-2 md:p-1 rounded-full hover:bg-surface-container active:scale-90"
               title="Previous track"
             >
-              <span className="material-symbols-outlined text-[22px]">skip_previous</span>
+              <span className="material-symbols-outlined text-[28px] md:text-[22px]">skip_previous</span>
             </button>
 
             <button
               onClick={togglePlay}
-              className={`w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_18px_rgba(76,215,246,0.6)] ${isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
-                }`}
+              className={`w-14 h-14 md:w-10 md:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_24px_rgba(76,215,246,0.6)] ${
+                isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
+              }`}
               title={isBuffering ? "Buffering..." : isPlaying ? "Pause" : "Play"}
             >
               <span
-                className={`material-symbols-outlined text-[24px] ${isBuffering ? "animate-spin text-[18px]" : ""
-                  }`}
+                className={`material-symbols-outlined text-[32px] md:text-[24px] ${
+                  isBuffering ? "animate-spin text-[24px]" : ""
+                }`}
               >
                 {isBuffering ? "progress_activity" : isPlaying ? "pause" : "play_arrow"}
               </span>
@@ -289,19 +317,20 @@ export default function Player() {
 
             <button
               onClick={handleNextTrack}
-              className="text-on-surface hover:text-primary transition-colors p-1 rounded-full hover:bg-surface-container"
+              className="text-on-surface hover:text-primary transition-colors p-2 md:p-1 rounded-full hover:bg-surface-container active:scale-90"
               title="Next track"
             >
-              <span className="material-symbols-outlined text-[22px]">skip_next</span>
+              <span className="material-symbols-outlined text-[28px] md:text-[22px]">skip_next</span>
             </button>
 
             <button
               onClick={cycleRepeat}
-              className={`p-1 rounded-full hover:bg-surface-container transition-colors ${repeatMode !== "off" ? "text-primary" : "text-outline hover:text-white"
-                }`}
+              className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${
+                repeatMode !== "off" ? "text-primary" : "text-outline hover:text-white"
+              }`}
               title={`Repeat: ${repeatMode}`}
             >
-              <span className="material-symbols-outlined text-[18px]">
+              <span className="material-symbols-outlined text-[22px] md:text-[18px]">
                 {repeatMode === "one" ? "repeat_one" : "repeat"}
               </span>
             </button>
@@ -309,52 +338,56 @@ export default function Player() {
             {/* Autoplay / Infinite Smart Queue Toggle */}
             <button
               onClick={toggleAutoplay}
-              className={`p-1 rounded-full hover:bg-surface-container transition-colors relative group ${isAutoplayEnabled ? "text-primary" : "text-outline hover:text-white"
-                }`}
+              className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors relative group ${
+                isAutoplayEnabled ? "text-primary" : "text-outline hover:text-white"
+              }`}
               title={`Autoplay: ${isAutoplayEnabled ? "On (Infinite Smart Queue)" : "Off"}`}
               aria-label="Toggle Autoplay"
             >
               <InfinityIcon
-                size={18}
-                className={`transition-transform duration-200 group-hover:scale-110 ${isAutoplayLoading ? "animate-pulse" : ""
-                  }`}
+                size={22}
+                className={`transition-transform duration-200 group-hover:scale-110 ${
+                  isAutoplayLoading ? "animate-pulse" : ""
+                }`}
               />
               {isAutoplayEnabled && (
-                <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full shadow-[0_0_6px_rgba(76,215,246,0.9)]" />
+                <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_6px_rgba(76,215,246,0.9)]" />
               )}
             </button>
           </div>
 
           {/* Bottom Settings / Action Row */}
-          <div className="flex items-center justify-between pt-1.5 border-t border-white/10">
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between pt-2 border-t border-white/10 flex-shrink-0">
+            <div className="flex items-center gap-2 md:gap-1">
               <button
                 onClick={() => setLyricsMode(lyricsMode === "mini" ? "hidden" : "mini")}
-                className={`p-1 rounded-full hover:bg-surface-container transition-colors ${lyricsMode === "mini" ? "text-primary bg-surface-container" : "text-outline hover:text-white"
-                  }`}
+                className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${
+                  lyricsMode === "mini" ? "text-primary bg-surface-container" : "text-outline hover:text-white"
+                }`}
                 title={lyricsMode === "mini" ? "Show Album Artwork" : "Show Synchronized Lyrics"}
               >
-                <span className="material-symbols-outlined text-[16px]">lyrics</span>
+                <span className="material-symbols-outlined text-[20px] md:text-[16px]">lyrics</span>
               </button>
               <button
                 onClick={() => setIsQueueOpen(!isQueueOpen)}
-                className={`p-1 rounded-full hover:bg-surface-container transition-colors ${isQueueOpen ? "text-primary bg-surface-container" : "text-outline hover:text-white"
-                  }`}
+                className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${
+                  isQueueOpen ? "text-primary bg-surface-container" : "text-outline hover:text-white"
+                }`}
                 title="Queue"
               >
-                <span className="material-symbols-outlined text-[16px]">queue_music</span>
+                <span className="material-symbols-outlined text-[20px] md:text-[16px]">queue_music</span>
               </button>
-              <DownloadButton track={currentTrack} buttonSize="p-0.5" iconSize="text-[14px]" />
+              <DownloadButton track={currentTrack} buttonSize="p-1.5 md:p-0.5" iconSize="text-[18px] md:text-[14px]" />
             </div>
 
-            {/* Mini Volume Bar */}
-            <div className="flex items-center gap-1.5">
+            {/* Volume Bar */}
+            <div className="flex items-center gap-2 md:gap-1.5">
               <button
                 onClick={toggleMute}
-                className="text-outline hover:text-white transition-colors p-0.5"
+                className="text-outline hover:text-white transition-colors p-1 md:p-0.5"
                 title={isMuted ? "Unmute" : "Mute"}
               >
-                <span className="material-symbols-outlined text-[16px]">
+                <span className="material-symbols-outlined text-[20px] md:text-[16px]">
                   {isMuted || volume === 0
                     ? "volume_off"
                     : volume < 0.4
@@ -365,7 +398,7 @@ export default function Player() {
               <div
                 ref={cardVolumeBarRef}
                 onClick={handleCardVolumeClick}
-                className="w-12 sm:w-16 h-1 bg-surface-container-high rounded-full relative cursor-pointer group hover:h-1.5 transition-all"
+                className="w-20 md:w-16 h-1.5 md:h-1 bg-surface-container-high rounded-full relative cursor-pointer group hover:h-2 md:hover:h-1.5 transition-all"
               >
                 <div
                   className="absolute left-0 top-0 bottom-0 bg-primary rounded-full transition-all duration-100"
@@ -377,42 +410,153 @@ export default function Player() {
         </aside>
       )}
 
-      {/* 2. COMPACT MINI-PLAYER WIDGET (Image 2 & 4) */}
+      {/* 2. DOCKED MOBILE BOTTOM MINI-PLAYER (Image 3 style: edge-to-edge flush with sides, resized height) */}
+      {playerMode !== "card" && currentTrack && (
+        <aside
+          onClick={() => setPlayerMode("card")}
+          className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 w-full h-[74px] bg-[#091224]/95 backdrop-blur-2xl border-t border-b border-white/10 px-4 py-2.5 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group shadow-xl"
+          role="region"
+          aria-label="Mobile Mini Player"
+        >
+          {/* Top Progress Line */}
+          <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-white/10">
+            <div
+              className="h-full bg-primary transition-all duration-100"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Left: Animated Sound Bars + Artwork + Title & Artist */}
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+            {/* Animated Equalizer Sound Bars (Image 3) */}
+            <div
+              className="flex items-end gap-[2.5px] h-5 px-0.5 flex-shrink-0"
+              title={isPlaying ? "Playing audio" : "Paused"}
+            >
+              <span
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-1" : "h-1 opacity-40"
+                }`}
+              />
+              <span
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-2" : "h-2.5 opacity-40"
+                }`}
+              />
+              <span
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-3" : "h-4 opacity-40"
+                }`}
+              />
+              <span
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-4" : "h-2.5 opacity-40"
+                }`}
+              />
+              <span
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-5" : "h-1 opacity-40"
+                }`}
+              />
+            </div>
+
+            {/* Thumbnail Photo */}
+            <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-surface-container flex-shrink-0 shadow-md border border-white/10 group-hover:scale-105 transition-transform">
+              <img
+                alt={currentTrack.title}
+                src={currentTrack.coverUrl}
+                className="w-full h-full object-cover"
+              />
+            </div>
+
+            {/* Song Title & Artist */}
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
+                {currentTrack.title}
+              </span>
+              <span className="text-[10px] sm:text-[11px] text-on-surface-variant truncate mt-0.5 flex items-center gap-1.5">
+                <span className="truncate">{currentTrack.artist}</span>
+                <span className="text-[7.5px] px-1 py-0.2 rounded bg-primary/15 text-primary font-mono font-bold flex-shrink-0">
+                  {currentTrack.badge || "FLAC"}
+                </span>
+              </span>
+            </div>
+          </div>
+
+          {/* Right Side: Play/Pause button + Next Track button (Image 5 elements, NO expand button!) */}
+          <div
+            className="flex items-center gap-2 flex-shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={togglePlay}
+              className={`w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-90 transition-all shadow-[0_0_14px_rgba(76,215,246,0.55)] ${
+                isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
+              }`}
+              title={isBuffering ? "Buffering..." : isPlaying ? "Pause" : "Play"}
+              aria-label={isPlaying ? "Pause" : "Play"}
+            >
+              <span className="material-symbols-outlined text-[22px]">
+                {isBuffering ? "progress_activity" : isPlaying ? "pause" : "play_arrow"}
+              </span>
+            </button>
+
+            {/* Next Track Button (from Image 5) */}
+            <button
+              type="button"
+              onClick={handleNextTrack}
+              className="p-2 text-on-surface hover:text-primary transition-colors rounded-full hover:bg-surface-container active:scale-90 cursor-pointer"
+              title="Next track"
+              aria-label="Next track"
+            >
+              <span className="material-symbols-outlined text-[26px]">skip_next</span>
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {/* 3. DESKTOP FLOATING MINI-PLAYER WIDGET (Image 2 & 4, md:flex only) */}
       {playerMode === "mini" && (
         <aside
-          className="fixed bottom-6 right-6 z-50 w-[calc(100vw-3rem)] max-w-sm h-16 rounded-2xl bg-surface-container-lowest/95 backdrop-blur-2xl border border-white/20 px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.7)] flex items-center justify-between select-none transition-all duration-300 ease-in-out hover:border-primary/40 group overflow-hidden"
+          className="hidden md:flex fixed bottom-6 right-6 z-50 w-80 h-16 rounded-2xl bg-surface-container-lowest/95 backdrop-blur-2xl border border-white/20 px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.7)] items-center justify-between select-none transition-all duration-300 ease-in-out hover:border-primary/40 group overflow-hidden"
           aria-label="Mini Player"
         >
-          {/* Left Side: Click opens the Big Photo Card (Image 5) */}
+          {/* Left Side: Click opens the Big Photo Card */}
           <div
             onClick={() => setPlayerMode("card")}
             className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer pr-2"
             title="Click to open big photo card"
           >
-            {/* Animated Equalizer Sound Bars (Image 3) BEFORE the photo */}
+            {/* Animated Equalizer Sound Bars */}
             <div
               className="flex items-end gap-[3px] h-6 px-1 flex-shrink-0"
               title={isPlaying ? "Playing audio" : "Paused"}
             >
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-1" : "h-1.5 opacity-40"
-                  }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-1" : "h-1.5 opacity-40"
+                }`}
               />
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-2" : "h-3.5 opacity-40"
-                  }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-2" : "h-3.5 opacity-40"
+                }`}
               />
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-3" : "h-5 opacity-40"
-                  }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-3" : "h-5 opacity-40"
+                }`}
               />
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-4" : "h-3 opacity-40"
-                  }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-4" : "h-3 opacity-40"
+                }`}
               />
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-5" : "h-1.5 opacity-40"
-                  }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
+                  isPlaying ? "animate-sound-bar-5" : "h-1.5 opacity-40"
+                }`}
               />
             </div>
 
@@ -436,15 +580,16 @@ export default function Player() {
             </div>
           </div>
 
-          {/* Right Side: Play/Pause button + Stretch icon (Image 4) */}
+          {/* Right Side: Play/Pause button + Stretch icon */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 togglePlay();
               }}
-              className={`w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-[0_0_12px_rgba(76,215,246,0.4)] ${isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
-                }`}
+              className={`w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-[0_0_12px_rgba(76,215,246,0.4)] ${
+                isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
+              }`}
               title={isPlaying ? "Pause" : "Play"}
               aria-label={isPlaying ? "Pause" : "Play"}
             >
@@ -459,7 +604,7 @@ export default function Player() {
                 e.stopPropagation();
                 setPlayerMode("bar");
               }}
-              className="p-1 text-outline hover:text-white hover:bg-white/10 rounded-full transition-colors flex-shrink-0 ml-0.5"
+              className="p-1 text-outline hover:text-white hover:bg-white/10 rounded-full transition-colors flex-shrink-0 ml-0.5 cursor-pointer"
               title="Restore full player bar"
               aria-label="Restore full player bar"
             >
@@ -475,86 +620,6 @@ export default function Player() {
             />
           </div>
         </aside>
-      )}
-
-      {/* 3a. SLEEK MOBILE FLOATING PLAYER BAR (< md) */}
-      {playerMode === "bar" && (
-        <div
-          onClick={() => setPlayerMode("card")}
-          className="fixed bottom-[calc(68px+env(safe-area-inset-bottom,0px))] inset-x-2.5 z-40 h-14 bg-[#091224]/95 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] px-3 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group"
-          role="region"
-          aria-label="Mobile Mini Player"
-        >
-          {/* Top Progress Bar Scrubber */}
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/10">
-            <div
-              className="h-full bg-primary transition-all duration-100"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-
-          {/* Left: Thumbnail & Info */}
-          <div className="flex items-center min-w-0 flex-1 mr-2">
-            <div className="relative w-9 h-9 rounded-lg overflow-hidden bg-surface-container flex-shrink-0 shadow border border-white/10">
-              <img
-                src={currentTrack.coverUrl}
-                alt={currentTrack.title}
-                className="w-full h-full object-cover"
-              />
-              {isPlaying && (
-                <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-primary text-[14px] animate-pulse">
-                    graphic_eq
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col min-w-0 ml-2.5 flex-1">
-              <span className="text-xs font-bold text-white truncate">
-                {currentTrack.title}
-              </span>
-              <span className="text-[10px] text-on-surface-variant truncate mt-0.5 flex items-center gap-1.5">
-                <span className="truncate">{currentTrack.artist}</span>
-                <span className="text-[8px] px-1 py-0.2 rounded bg-primary/15 text-primary font-mono font-bold flex-shrink-0">
-                  FLAC
-                </span>
-              </span>
-            </div>
-          </div>
-
-          {/* Right: Like Button & Play/Pause */}
-          <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => toggleLike(currentTrack)}
-              className={`p-2 rounded-full hover:bg-surface-container transition-colors ${
-                isLiked(currentTrack.id) ? "text-primary" : "text-outline hover:text-white"
-              }`}
-              title={isLiked(currentTrack.id) ? "Remove from favorites" : "Add to favorites"}
-            >
-              <span
-                className="material-symbols-outlined text-[20px]"
-                style={{
-                  fontVariationSettings: isLiked(currentTrack.id) ? "'FILL' 1" : "'FILL' 0",
-                }}
-              >
-                {isLiked(currentTrack.id) ? "favorite" : "favorite_border"}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={togglePlay}
-              className="w-9 h-9 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] active:scale-95 transition-transform"
-              title={isPlaying ? "Pause" : "Play"}
-            >
-              <span className="material-symbols-outlined text-[22px]">
-                {isBuffering ? "progress_activity" : isPlaying ? "pause" : "play_arrow"}
-              </span>
-            </button>
-          </div>
-        </div>
       )}
 
       {/* 3b. FULL-LENGTH BOTTOM PLAYER BAR (Desktop Default View md:flex) */}

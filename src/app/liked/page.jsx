@@ -48,12 +48,12 @@ export default function LikedSongsPage() {
   return (
     <div className="w-full flex flex-col pb-12 select-none">
       {/* Hero Header */}
-      <div className="relative w-full p-4 sm:p-6 md:p-8 bg-gradient-to-b from-secondary-container/50 via-surface-container-low/40 to-transparent border-b border-white/5">
-        <div className="flex flex-col md:flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-8 max-w-6xl">
+      <div className="relative w-full p-3.5 sm:p-6 md:p-8 bg-gradient-to-b from-secondary-container/50 via-surface-container-low/40 to-transparent border-b border-white/5">
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 max-w-6xl">
           {/* Cover Art Heart Box */}
-          <div className="w-36 h-36 sm:w-48 sm:h-48 md:w-56 md:h-56 rounded-2xl bg-gradient-to-br from-secondary-container via-purple-600 to-primary flex items-center justify-center shadow-[0_20px_40px_rgba(87,27,193,0.4)] flex-shrink-0 border border-white/10">
+          <div className="w-24 h-24 sm:w-36 sm:h-36 md:w-56 md:h-56 rounded-2xl bg-gradient-to-br from-secondary-container via-purple-600 to-primary flex items-center justify-center shadow-[0_20px_40px_rgba(87,27,193,0.4)] flex-shrink-0 border border-white/10 mx-auto md:mx-0">
             <span
-              className="material-symbols-outlined text-white text-[52px] sm:text-[72px]"
+              className="material-symbols-outlined text-white text-[38px] sm:text-[52px] md:text-[72px]"
               style={{ fontVariationSettings: "'FILL' 1" }}
             >
               favorite
@@ -61,36 +61,36 @@ export default function LikedSongsPage() {
           </div>
 
           {/* Info */}
-          <div className="flex flex-col gap-2.5 text-center md:text-left flex-1 min-w-0">
-            <span className="text-[11px] font-mono uppercase tracking-widest text-secondary font-bold">
+          <div className="flex flex-col gap-1.5 sm:gap-2.5 text-center md:text-left flex-1 min-w-0 w-full">
+            <span className="text-[10px] sm:text-[11px] font-mono uppercase tracking-widest text-secondary font-bold">
               Personal Collection
             </span>
 
-            <h1 className="text-2xl md:text-5xl font-extrabold text-white tracking-tight leading-tight">
+            <h1 className="text-xl sm:text-3xl md:text-5xl font-extrabold text-white tracking-tight leading-tight">
               Liked Songs
             </h1>
 
-            <p className="text-xs md:text-sm text-on-surface-variant max-w-xl">
+            <p className="text-xs md:text-sm text-on-surface-variant max-w-xl line-clamp-2 sm:line-clamp-none">
               Your favorite studio master recordings and audiophile tracks, saved directly to your local profile.
             </p>
 
-            <div className="flex items-center justify-center md:justify-start gap-2 text-xs text-outline pt-2">
+            <div className="flex items-center justify-center md:justify-start gap-2 text-xs text-outline pt-0.5 sm:pt-1">
               <span className="text-white font-medium">Curator Profile</span>
               <span>•</span>
-              <span>{likedTracks.length} Songs Saved</span>
+              <span className="text-primary font-semibold">{likedTracks.length} Songs Saved</span>
             </div>
           </div>
         </div>
 
         {/* Action Controls Bar */}
         {likedTracks.length > 0 && (
-          <div className="flex items-center gap-4 mt-8">
+          <div className="flex items-center justify-center md:justify-start gap-4 mt-4 sm:mt-6 md:mt-8">
             <button
               onClick={handleMasterPlay}
-              className="w-14 h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all"
+              className="w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all"
               title={isCurrentPlaying ? "Pause" : "Play all liked"}
             >
-              <span className="material-symbols-outlined text-[32px]">
+              <span className="material-symbols-outlined text-[24px] sm:text-[32px]">
                 {isCurrentPlaying ? "pause" : "play_arrow"}
               </span>
             </button>

@@ -140,59 +140,60 @@ export default function OfflineSongsPage() {
   return (
     <div className="w-full flex flex-col pb-12 select-none">
       {/* Hero Header */}
-      <div className="relative w-full p-4 sm:p-6 md:p-8 bg-gradient-to-b from-cyan-950/60 via-surface-container-low/40 to-transparent border-b border-white/5">
-        <div className="flex flex-col md:flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-8 max-w-6xl">
+      <div className="relative w-full p-3.5 sm:p-6 md:p-8 bg-gradient-to-b from-cyan-950/60 via-surface-container-low/40 to-transparent border-b border-white/5">
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 max-w-6xl">
           {/* Cover Art Box */}
-          <div className="w-36 h-36 sm:w-48 sm:h-48 md:w-56 md:h-56 rounded-2xl bg-gradient-to-br from-cyan-600 via-teal-700 to-slate-900 flex flex-col items-center justify-center shadow-[0_20px_40px_rgba(6,182,212,0.35)] flex-shrink-0 border border-white/10 relative overflow-hidden group">
+          <div className="w-24 h-24 sm:w-36 sm:h-36 md:w-56 md:h-56 rounded-2xl bg-gradient-to-br from-cyan-600 via-teal-700 to-slate-900 flex flex-col items-center justify-center shadow-[0_20px_40px_rgba(6,182,212,0.35)] flex-shrink-0 border border-white/10 relative overflow-hidden group mx-auto md:mx-0">
             <span
-              className="material-symbols-outlined text-white text-[56px] sm:text-[76px] drop-shadow-md group-hover:scale-105 transition-transform"
+              className="material-symbols-outlined text-white text-[40px] sm:text-[56px] md:text-[76px] drop-shadow-md group-hover:scale-105 transition-transform"
               style={{ fontVariationSettings: "'FILL' 1" }}
             >
               download_for_offline
             </span>
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
-            <div className="absolute bottom-2.5 left-2.5 right-2.5 sm:bottom-3 sm:left-3 sm:right-3 flex items-center justify-between text-[10px] sm:text-[11px] font-mono font-bold text-cyan-200 bg-black/40 backdrop-blur-md px-2 sm:px-2.5 py-1 rounded-lg border border-white/10">
+            <div className="absolute bottom-1.5 left-1.5 right-1.5 sm:bottom-3 sm:left-3 sm:right-3 flex items-center justify-between text-[8.5px] sm:text-[10px] md:text-[11px] font-mono font-bold text-cyan-200 bg-black/50 backdrop-blur-md px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg border border-white/10">
               <span className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                LOCAL ONLY
+                <span className="hidden sm:inline">LOCAL ONLY</span>
+                <span className="sm:hidden">OFFLINE</span>
               </span>
               <span>{stats.formattedSize}</span>
             </div>
           </div>
 
           {/* Info */}
-          <div className="flex flex-col gap-2.5 text-center md:text-left flex-1 min-w-0">
+          <div className="flex flex-col gap-1.5 sm:gap-2.5 text-center md:text-left flex-1 min-w-0 w-full">
             <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
-              <span className="text-[11px] font-mono uppercase tracking-widest text-primary font-bold">
+              <span className="text-[10px] sm:text-[11px] font-mono uppercase tracking-widest text-primary font-bold">
                 Device Storage • IndexedDB
               </span>
               {isMounted && !isNetworkOnline && (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                <span className="text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  Offline Mode Active
+                  Offline Mode
                 </span>
               )}
             </div>
 
-            <h1 className="text-2xl md:text-5xl font-extrabold text-white tracking-tight leading-tight">
+            <h1 className="text-xl sm:text-3xl md:text-5xl font-extrabold text-white tracking-tight leading-tight">
               Offline Songs
             </h1>
 
-            <p className="text-xs md:text-sm text-on-surface-variant max-w-xl">
+            <p className="text-xs md:text-sm text-on-surface-variant max-w-xl line-clamp-2 sm:line-clamp-none">
               Tracks stored in persistent high-fidelity audio binary format on this device. Fully playable anytime without internet connection or Supabase dependency.
             </p>
 
-            <div className="flex items-center justify-center md:justify-start gap-2 text-xs text-outline pt-2 flex-wrap">
-              <span className="text-white font-medium">This Computer</span>
+            <div className="flex items-center justify-center md:justify-start gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-outline pt-0.5 sm:pt-1 flex-wrap">
+              <span className="text-white font-medium">This Device</span>
               <span>•</span>
-              <span className="text-primary font-semibold">{tracks.length} {tracks.length === 1 ? "Song" : "Songs"} Downloaded</span>
+              <span className="text-primary font-semibold">{tracks.length} {tracks.length === 1 ? "Song" : "Songs"}</span>
               <span>•</span>
               <span className="font-mono text-outline">{stats.formattedSize} Used</span>
               {isMounted && stats.isPersisted && (
                 <>
                   <span>•</span>
                   <span className="text-emerald-400 flex items-center gap-1">
-                    <span className="material-symbols-outlined text-[14px]">verified</span>
+                    <span className="material-symbols-outlined text-[13px] sm:text-[14px]">verified</span>
                     Persistent
                   </span>
                 </>
@@ -203,19 +204,19 @@ export default function OfflineSongsPage() {
 
         {/* Master Play Controls */}
         {tracks.length > 0 && (
-          <div className="flex items-center gap-4 mt-8 flex-wrap">
+          <div className="flex items-center justify-center md:justify-start gap-3 sm:gap-4 mt-4 sm:mt-6 md:mt-8 flex-wrap">
             <button
               onClick={handleMasterPlay}
-              className="w-14 h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              className="w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all cursor-pointer flex-shrink-0"
               title={isCurrentPlaylistPlaying ? "Pause" : "Play all offline songs"}
             >
-              <span className="material-symbols-outlined text-[32px]">
+              <span className="material-symbols-outlined text-[24px] sm:text-[32px]">
                 {isCurrentPlaylistPlaying ? "pause" : "play_arrow"}
               </span>
             </button>
 
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container/70 border border-white/10 text-xs text-on-surface-variant font-medium">
-              <span className="material-symbols-outlined text-primary text-[16px]">
+            <div className="flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-full bg-surface-container/70 border border-white/10 text-[11px] sm:text-xs text-on-surface-variant font-medium">
+              <span className="material-symbols-outlined text-primary text-[15px] sm:text-[16px]">
                 check_circle
               </span>
               <span>Zero data usage • Instant local playback</span>

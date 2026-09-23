@@ -7,6 +7,8 @@ import { NOCTURNE_PLAYLISTS, NOCTURNE_TRACKS, getPlaylistById } from "../../../d
 import DownloadButton from "../../../components/DownloadButton";
 import SongOptionsMenu from "../../../components/SongOptionsMenu";
 import { formatPlaylistDuration } from "../../../utils/playlistUtils";
+import { searchMusicTracks } from "../../../services/audioService";
+import useDebounce from "../../../hooks/useDebounce";
 import {
   saveLocalAudioFile,
   getAudioFileDuration,
@@ -36,6 +38,7 @@ export default function PlaylistPage() {
     isPlaylistPinned,
     formatTime,
     customPlaylists,
+    createPlaylist,
     deleteCustomPlaylist,
     selfMixes,
     deleteSelfMix,
@@ -59,6 +62,16 @@ export default function PlaylistPage() {
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
   const [downloadStatusMsg, setDownloadStatusMsg] = useState(null);
   const [isOfflineMenuOpen, setIsOfflineMenuOpen] = useState(false);
+
+  // Add Songs & Search State
+  const [isAddSongsOpen, setIsAddSongsOpen] = useState(false);
+  const [searchAddQuery, setSearchAddQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchAddQuery, 300);
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearchingAdd, setIsSearchingAdd] = useState(false);
+  const [justAddedIds, setJustAddedIds] = useState(new Set());
+  const addSongsSectionRef = useRef(null);
+  const searchAddInputRef = useRef(null);
 
   const localMatch =
     customPlaylists?.find((p) => String(p.id) === String(playlistId)) ||
@@ -233,15 +246,115 @@ export default function PlaylistPage() {
     }
   };
 
+  // Add Songs Handlers
+  const handleOpenAddSongs = () => {
+    setIsAddSongsOpen(true);
+    setTimeout(() => {
+      if (addSongsSectionRef.current) {
+        addSongsSectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      if (searchAddInputRef.current) {
+        searchAddInputRef.current.focus();
+      }
+    }, 80);
+  };
+
+  const handleAddSongToPlaylist = (track) => {
+    if (!track) return;
+    if (isCustomPlaylist) {
+      addTrackToPlaylist(playlist.id, track);
+      setJustAddedIds((prev) => new Set([...prev, String(track.id)]));
+    } else {
+      const newPlaylist = createPlaylist(playlist.title);
+      if (newPlaylist?.id) {
+        (playlist.tracks || []).forEach((t) => addTrackToPlaylist(newPlaylist.id, t));
+        addTrackToPlaylist(newPlaylist.id, track);
+        setJustAddedIds((prev) => new Set([...prev, String(track.id)]));
+        router.push(`/playlist/${newPlaylist.id}`);
+      }
+    }
+  };
+
+  // Debounced catalog & local music search
+  useEffect(() => {
+    const q = (debouncedSearchQuery || "").trim();
+    if (!q) {
+      setSearchResults([]);
+      setIsSearchingAdd(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsSearchingAdd(true);
+
+    // Instant local matches from Nocturne tracks
+    const lower = q.toLowerCase();
+    const localFiltered = NOCTURNE_TRACKS.filter((nt) => {
+      return (
+        nt.title?.toLowerCase().includes(lower) ||
+        nt.artist?.toLowerCase().includes(lower) ||
+        (nt.album && nt.album.toLowerCase().includes(lower))
+      );
+    });
+
+    // Query live audio search catalog
+    searchMusicTracks(q)
+      .then((remoteSongs) => {
+        if (!isMounted) return;
+        const seenIds = new Set();
+        const combined = [];
+
+        // Put local matches first
+        localFiltered.forEach((track) => {
+          seenIds.add(String(track.id));
+          combined.push(track);
+        });
+
+        // Add remote matches
+        (remoteSongs || []).forEach((s) => {
+          if (!s || !s.id) return;
+          const sId = String(s.id);
+          if (!seenIds.has(sId)) {
+            seenIds.add(sId);
+            combined.push({
+              id: sId,
+              title: s.title || "Untitled",
+              artist: s.artist || "Unknown Artist",
+              album: s.album || s.artist || "",
+              coverUrl: s.coverUrl || s.thumbnail || s.image || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+              duration: typeof s.duration === "number" ? s.duration : 210,
+              durationFormatted: s.durationFormatted || "3:30",
+              audioUrl: s.audioUrl || "",
+              badge: "Lossless",
+            });
+          }
+        });
+
+        setSearchResults(combined);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        console.warn("Search tracks error:", err);
+        setSearchResults(localFiltered);
+      })
+      .finally(() => {
+        if (isMounted) setIsSearchingAdd(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [debouncedSearchQuery]);
+
   const totalDurationStr = formatPlaylistDuration(tracks);
 
   return (
     <div className="w-full flex flex-col pb-12 select-none">
       {/* Dynamic Hero Banner */}
       <div className="relative w-full p-4 sm:p-6 md:p-8 bg-gradient-to-b from-surface-container-high/60 via-surface-container-low/40 to-transparent border-b border-white/5">
-        <div className="flex flex-col md:flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-8 max-w-6xl">
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 max-w-6xl">
           {/* Cover Art */}
-          <div className="relative w-36 h-36 sm:w-44 sm:h-44 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group">
+          <div className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group mx-auto md:mx-0">
             <img
               src={playlist.coverUrl}
               alt={playlist.title}
@@ -251,10 +364,10 @@ export default function PlaylistPage() {
           </div>
 
           {/* Metadata info */}
-          <div className="flex flex-col gap-2 sm:gap-2.5 text-center md:text-left flex-1 min-w-0">
-            <div className="flex items-center justify-center md:justify-start gap-2">
+          <div className="flex flex-col gap-1.5 sm:gap-2.5 text-center md:text-left flex-1 min-w-0 w-full">
+            <div className="flex items-center justify-center md:justify-start gap-1.5 sm:gap-2 flex-wrap">
               <span
-                className={`px-2.5 py-0.5 rounded-full border text-[10px] sm:text-[11px] font-bold tracking-wider uppercase ${isSelfMix
+                className={`px-2.5 py-0.5 rounded-full border text-[9px] sm:text-[11px] font-bold tracking-wider uppercase ${isSelfMix
                   ? "bg-cyan-950/80 text-cyan-300 border-cyan-700/60"
                   : "bg-primary/15 border-primary/30 text-primary"
                   }`}
@@ -266,7 +379,7 @@ export default function PlaylistPage() {
               </span>
             </div>
 
-            <h1 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight">
+            <h1 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight line-clamp-2">
               {playlist.title}
             </h1>
 
@@ -274,7 +387,7 @@ export default function PlaylistPage() {
               {playlist.description}
             </p>
 
-            <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3 text-xs text-outline pt-1 sm:pt-2">
+            <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3 text-xs text-outline pt-0.5 sm:pt-1">
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <img
                   src={playlist.curatorAvatar || "https://lh3.googleusercontent.com/aida-public/AB6AXuB0776cuJDNwyUTJA-rmqEC0bmxGrVq2yheMO1LRRjEKa8X3Cf3UEDu0hJn4mdmjyKKeTpXvIjAXGckcnVAnrz3t0pLZyIHxk3oSWIBKnTAewK0vZY8jNgt5WWU1mB33uzQZJtQJNQfehNFMnRCim5JQVgBeDcIsQ21sOVpfHhvACpeifEiQ9VMkYu25PbaQ5RDOCGsSjDtlsMuC8kifyPcZ62qnvBUyplbvUNIWKL7azjlQ_ONJ0ZS"}
@@ -295,191 +408,208 @@ export default function PlaylistPage() {
           </div>
         </div>
 
-        {/* Action Controls Bar */}
-        <div className="flex items-center gap-2.5 sm:gap-4 mt-5 sm:mt-8 flex-wrap">
-          {/* Master Play Button */}
-          <button
-            onClick={handleMasterPlay}
-            disabled={tracks.length === 0}
-            className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            title={isCurrentPlaylistPlaying ? "Pause playlist" : "Play playlist"}
-          >
-            <span className="material-symbols-outlined text-[26px] sm:text-[32px]">
-              {isCurrentPlaylistPlaying ? "pause" : "play_arrow"}
-            </span>
-          </button>
+        {/* Action Controls Bar - Balanced 2-tier mobile & unified desktop */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 mt-4 sm:mt-7 w-full">
+          {/* Primary Actions Row */}
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            {/* Master Play Button */}
+            <button
+              onClick={handleMasterPlay}
+              disabled={tracks.length === 0}
+              className="w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
+              title={isCurrentPlaylistPlaying ? "Pause playlist" : "Play playlist"}
+            >
+              <span className="material-symbols-outlined text-[24px] sm:text-[32px]">
+                {isCurrentPlaylistPlaying ? "pause" : "play_arrow"}
+              </span>
+            </button>
 
-          {/* Shuffle Button matching Image 3 */}
-          <button
-            type="button"
-            onClick={() => toggleShuffle(tracks)}
-            className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full border flex items-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${isShuffle
-                ? "bg-primary/15 text-primary border-primary/40 shadow-[0_0_15px_rgba(76,215,246,0.3)]"
-                : "bg-surface-container/60 text-outline hover:text-white border-white/10 hover:border-white/20"
+            {/* Shuffle Button */}
+            <button
+              type="button"
+              onClick={() => toggleShuffle(tracks)}
+              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 sm:py-2.5 rounded-full border flex items-center justify-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${isShuffle
+                  ? "bg-primary/15 text-primary border-primary/40 shadow-[0_0_15px_rgba(76,215,246,0.3)]"
+                  : "bg-surface-container/60 text-outline hover:text-white border-white/10 hover:border-white/20"
+                }`}
+              title={isShuffle ? "Shuffle is ON" : "Shuffle is OFF"}
+            >
+              <span className="material-symbols-outlined text-[17px] sm:text-[19px]">shuffle</span>
+              <span>Shuffle</span>
+            </button>
+
+            {/* Add Songs Button */}
+            <button
+              type="button"
+              onClick={handleOpenAddSongs}
+              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 sm:py-2.5 rounded-full border flex items-center justify-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${
+                isAddSongsOpen
+                  ? "bg-primary text-surface-container-lowest border-primary shadow-[0_0_15px_rgba(76,215,246,0.4)]"
+                  : "bg-primary/15 text-primary border-primary/40 hover:bg-primary/25 shadow-[0_0_12px_rgba(76,215,246,0.2)]"
               }`}
-            title={isShuffle ? "Shuffle is ON" : "Shuffle is OFF"}
-          >
-            <span className="material-symbols-outlined text-[17px] sm:text-[19px]">shuffle</span>
-            <span>Shuffle</span>
-          </button>
+              title="Search and add songs to this playlist"
+            >
+              <span className="material-symbols-outlined text-[17px] sm:text-[19px]">
+                {isAddSongsOpen ? "search" : "add"}
+              </span>
+              <span>Add Songs</span>
+            </button>
+          </div>
 
-          {/* Pin to Library Button matching Image 3 */}
-          <button
-            type="button"
-            onClick={() => togglePinPlaylist(playlist.id, playlist)}
-            className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full border flex items-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${isPlaylistPinned(playlist.id)
-                ? "bg-primary/15 text-primary border-primary/40 shadow-[0_0_15px_rgba(76,215,246,0.3)]"
-                : "bg-surface-container/60 text-outline hover:text-white border-white/10 hover:border-white/20"
-              }`}
-            title={isPlaylistPinned(playlist.id) ? "Unpin from library" : "Pin to library"}
-          >
-            <span className={`material-symbols-outlined text-[17px] sm:text-[19px] ${isPlaylistPinned(playlist.id) ? "rotate-45" : ""}`}>
-              push_pin
-            </span>
-            <span>{isPlaylistPinned(playlist.id) ? "Pinned" : "Pin to Library"}</span>
-          </button>
+          {/* Secondary Actions Row */}
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            {/* Pin to Library Button */}
+            <button
+              type="button"
+              onClick={() => togglePinPlaylist(playlist.id, playlist)}
+              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 sm:py-2 rounded-full border flex items-center justify-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${isPlaylistPinned(playlist.id)
+                  ? "bg-primary/15 text-primary border-primary/40 shadow-[0_0_15px_rgba(76,215,246,0.3)]"
+                  : "bg-surface-container/60 text-outline hover:text-white border-white/10 hover:border-white/20"
+                }`}
+              title={isPlaylistPinned(playlist.id) ? "Unpin from library" : "Pin to library"}
+            >
+              <span className={`material-symbols-outlined text-[17px] sm:text-[19px] ${isPlaylistPinned(playlist.id) ? "rotate-45" : ""}`}>
+                push_pin
+              </span>
+              <span>{isPlaylistPinned(playlist.id) ? "Pinned" : "Pin"}</span>
+            </button>
 
-          {/* Like Playlist */}
-          <button
-            className="w-10 h-10 rounded-full flex items-center justify-center text-outline hover:text-white bg-surface-container/60 hover:bg-surface-container transition-all cursor-pointer"
-            title="Save to library"
-          >
-            <span className="material-symbols-outlined text-[22px]">favorite_border</span>
-          </button>
+            {/* Offline Download Control */}
+            <div className="relative flex-1 sm:flex-initial">
+              {isDownloadingOffline ? (
+                <div className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-primary/15 text-primary border border-primary/40 text-xs font-bold shadow-[0_0_15px_rgba(76,215,246,0.3)] animate-pulse select-none">
+                  <span className="material-symbols-outlined text-[16px] animate-spin">
+                    progress_activity
+                  </span>
+                  <span className="truncate">
+                    {downloadProgress.current} / {downloadProgress.total}
+                  </span>
+                </div>
+              ) : isPlaylistFullyOffline ? (
+                <div className="relative w-full">
+                  <button
+                    type="button"
+                    onClick={() => setIsOfflineMenuOpen((prev) => !prev)}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/25 text-xs font-bold shadow-[0_0_16px_rgba(16,185,129,0.25)] active:scale-95 transition-all cursor-pointer group"
+                    title="Available for offline playback on this device (click for options)"
+                  >
+                    <span className="material-symbols-outlined text-emerald-400 text-[17px]">
+                      check_circle
+                    </span>
+                    <span className="truncate">Offline</span>
+                    <span className="material-symbols-outlined text-[14px] text-emerald-400/80">
+                      expand_more
+                    </span>
+                  </button>
 
-          {/* Offline Download Control */}
-          <div className="relative">
-            {isDownloadingOffline ? (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/15 text-primary border border-primary/40 text-xs font-bold shadow-[0_0_15px_rgba(76,215,246,0.3)] animate-pulse select-none">
-                <span className="material-symbols-outlined text-[17px] animate-spin">
-                  progress_activity
-                </span>
-                <span>
-                  Downloading {downloadProgress.current} / {downloadProgress.total} songs
-                </span>
-              </div>
-            ) : isPlaylistFullyOffline ? (
-              <div className="relative">
+                  {isOfflineMenuOpen && (
+                    <div className="absolute top-full left-0 mt-2 w-52 bg-[#0d172e]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1.5 text-[11px] text-outline border-b border-white/10 mb-1">
+                        {downloadedTrackCount} of {totalTrackCount} songs offline
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDownloadPlaylist}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[17px] text-primary">
+                          refresh
+                        </span>
+                        <span>Update / Re-download</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveOffline}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[17px]">
+                          delete
+                        </span>
+                        <span>Remove from offline</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : isPlaylistPartiallyOffline ? (
                 <button
                   type="button"
-                  onClick={() => setIsOfflineMenuOpen((prev) => !prev)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/25 text-xs font-bold shadow-[0_0_16px_rgba(16,185,129,0.25)] active:scale-95 transition-all cursor-pointer group"
-                  title="Available for offline playback on this device (click for options)"
+                  onClick={handleDownloadPlaylist}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/25 text-xs font-bold active:scale-95 transition-all cursor-pointer"
+                  title="Download missing tracks to make playlist fully offline"
                 >
-                  <span className="material-symbols-outlined text-emerald-400 text-[18px]">
-                    check_circle
+                  <span className="material-symbols-outlined text-[17px] text-cyan-400">
+                    downloading
                   </span>
-                  <span>✓ Available Offline</span>
-                  <span className="material-symbols-outlined text-[15px] text-emerald-400/80 group-hover:translate-y-0.5 transition-transform">
-                    expand_more
+                  <span className="truncate">
+                    {downloadedTrackCount}/{totalTrackCount} Offline
                   </span>
                 </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDownloadPlaylist}
+                  disabled={totalTrackCount === 0}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-surface-container/80 text-white hover:text-primary hover:border-primary/40 border border-white/10 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
+                  title="Download all songs in playlist to this device for offline playback"
+                >
+                  <span className="material-symbols-outlined text-[17px] text-outline group-hover:text-primary transition-colors">
+                    download_for_offline
+                  </span>
+                  <span className="truncate">Download</span>
+                </button>
+              )}
+            </div>
 
-                {isOfflineMenuOpen && (
-                  <div className="absolute top-full left-0 mt-2 w-52 bg-[#0d172e]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-3 py-1.5 text-[11px] text-outline border-b border-white/10 mb-1">
-                      {downloadedTrackCount} of {totalTrackCount} songs offline
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleDownloadPlaylist}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[17px] text-primary">
-                        refresh
-                      </span>
-                      <span>Update / Re-download</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRemoveOffline}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[17px]">
-                        delete
-                      </span>
-                      <span>Remove from offline</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : isPlaylistPartiallyOffline ? (
+            {/* Like Playlist */}
+            <button
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-outline hover:text-white bg-surface-container/60 hover:bg-surface-container border border-white/10 transition-all cursor-pointer flex-shrink-0"
+              title="Save to library"
+            >
+              <span className="material-symbols-outlined text-[20px] sm:text-[22px]">favorite_border</span>
+            </button>
+
+            {/* Upload Tracks Button (Only for Self Mix) */}
+            {isSelfMix && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) {
+                      handleFilesSelected(e.target.files);
+                    }
+                  }}
+                />
+                <button
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-primary/15 text-primary hover:bg-primary hover:text-surface-container-lowest border border-primary/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
+                  title="Upload audio mix files into this Self Mix"
+                >
+                  <span className="material-symbols-outlined text-[17px]">
+                    {isUploading ? "progress_activity" : "upload_file"}
+                  </span>
+                  <span>{isUploading ? "..." : "Upload"}</span>
+                </button>
+              </>
+            )}
+
+            {/* Delete Playlist Button */}
+            {isCustomPlaylist && (
               <button
                 type="button"
-                onClick={handleDownloadPlaylist}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/25 text-xs font-bold active:scale-95 transition-all cursor-pointer"
-                title="Download missing tracks to make playlist fully offline"
+                onClick={() => setIsDeleteModalOpen(true)}
+                aria-label={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
+                title={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 transition-all shadow-sm active:scale-95 cursor-pointer flex-shrink-0"
               >
-                <span className="material-symbols-outlined text-[18px] text-cyan-400">
-                  downloading
-                </span>
-                <span>
-                  {downloadedTrackCount} / {totalTrackCount} Available Offline
-                </span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleDownloadPlaylist}
-                disabled={totalTrackCount === 0}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container/80 text-white hover:text-primary hover:border-primary/40 border border-white/10 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
-                title="Download all songs in playlist to this device for offline playback"
-              >
-                <span className="material-symbols-outlined text-[18px] text-outline group-hover:text-primary transition-colors">
-                  download_for_offline
-                </span>
-                <span>Download for Offline</span>
+                <span className="material-symbols-outlined text-[19px]">delete</span>
               </button>
             )}
           </div>
-
-          {downloadStatusMsg && (
-            <span className="text-xs font-medium text-on-surface-variant flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10">
-              {downloadStatusMsg}
-            </span>
-          )}
-
-          {/* Upload Tracks Button (Only for Self Mix) */}
-          {isSelfMix && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files) {
-                    handleFilesSelected(e.target.files);
-                  }
-                }}
-              />
-              <button
-                disabled={isUploading}
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/15 text-primary hover:bg-primary hover:text-surface-container-lowest border border-primary/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
-                title="Upload audio mix files into this Self Mix"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {isUploading ? "progress_activity" : "upload_file"}
-                </span>
-                <span>{isUploading ? "Uploading..." : "Upload Mix"}</span>
-              </button>
-            </>
-          )}
-
-          {/* Delete Playlist Button (icon-only matching Image 2) */}
-          {isCustomPlaylist && (
-            <button
-              type="button"
-              onClick={() => setIsDeleteModalOpen(true)}
-              aria-label={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
-              title={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
-              className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 transition-all shadow-sm active:scale-95 ml-auto sm:ml-2 cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[20px]">delete</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -530,14 +660,14 @@ export default function PlaylistPage() {
       {/* Tracklist Table */}
       <div className="px-4 md:px-8 pt-6 flex flex-col gap-2">
         {/* Table Header */}
-        <div className="grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
+        <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 py-2 border-b border-white/10 text-[11px] font-semibold uppercase tracking-wider text-outline select-none">
           <span className="text-center">#</span>
           <span>Title</span>
           <span className="hidden md:block">Artist</span>
           <span className="text-right flex items-center justify-end pr-1">
-            <span className="material-symbols-outlined text-[16px]">schedule</span>
+            <span className="material-symbols-outlined text-[15px]">schedule</span>
           </span>
-          <span className="text-right hidden md:block pr-2">Actions</span>
+          <span className="text-right pr-2">Actions</span>
         </div>
 
         {/* Tracks List */}
@@ -585,6 +715,14 @@ export default function PlaylistPage() {
                 <p className="text-xs text-outline max-w-sm">
                   Add recommended tracks below or search songs to build your personalized playlist.
                 </p>
+                <button
+                  type="button"
+                  onClick={handleOpenAddSongs}
+                  className="mt-2 px-5 py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                  <span>Add Songs</span>
+                </button>
               </div>
             )
           ) : (
@@ -596,9 +734,9 @@ export default function PlaylistPage() {
                 <div
                   key={track.id}
                   onClick={() => handleRowClick(track)}
-                  className={`group grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2.5 rounded-xl transition-all cursor-pointer ${isCurrent
-                    ? "bg-surface-container-high/80 border border-primary/30"
-                    : "hover:bg-surface-container/60 hover:border-white/5 border border-transparent"
+                  className={`group grid grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 py-2.5 rounded-xl transition-all duration-200 cursor-pointer select-none ${isCurrent
+                    ? "bg-primary/10 border border-primary/40 shadow-[0_0_20px_rgba(76,215,246,0.15)]"
+                    : "bg-surface-container/30 hover:bg-surface-container-high/80 hover:border-white/10 border border-transparent hover:shadow-md"
                     }`}
                 >
                   {/* Index / Play status */}
@@ -713,41 +851,50 @@ export default function PlaylistPage() {
                     {track.artist}
                   </div>
 
-                  {/* Duration */}
-                  <div className="text-right text-xs font-mono text-outline pr-2">
+                  {/* Duration with clean tabular font and dedicated space */}
+                  <div className="text-right text-xs font-mono text-outline tabular-nums whitespace-nowrap pl-1 pr-1 sm:pr-2">
                     {track.durationFormatted || formatTime(track.duration)}
                   </div>
 
                   {/* Actions: Download, Like, & Remove from playlist */}
-                  <div className="flex items-center justify-end gap-1 flex-shrink-0">
+                  <div className="flex items-center justify-end gap-1 sm:gap-1.5 flex-shrink-0">
                     {!track.isLocal && (
-                      <DownloadButton track={track} buttonSize="p-1" iconSize="text-[18px]" />
+                      <DownloadButton
+                        track={track}
+                        buttonSize="w-8 h-8"
+                        iconSize="text-[18px]"
+                        className="hover:scale-110 active:scale-95"
+                      />
                     )}
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleLike(track.id);
                       }}
-                      className={`p-1 hover:scale-110 transition-transform ${isLiked(track.id) ? "text-primary" : "text-outline hover:text-white"
-                        }`}
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${
+                        isLiked(track.id) ? "text-primary shadow-[0_0_12px_rgba(76,215,246,0.3)]" : "text-outline hover:text-white"
+                      }`}
+                      title={isLiked(track.id) ? "Remove from favorites" : "Add to favorites"}
                     >
                       <span
                         className="material-symbols-outlined text-[18px]"
                         style={{ fontVariationSettings: isLiked(track.id) ? "'FILL' 1" : "'FILL' 0" }}
                       >
-                        favorite
+                        {isLiked(track.id) ? "favorite" : "favorite_border"}
                       </span>
                     </button>
                     {isCustomPlaylist && (
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeTrackFromPlaylist(playlist.id, track.id);
                         }}
-                        className="p-1 text-outline hover:text-red-400 hover:bg-white/10 rounded-md transition-colors"
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
                         title="Remove from playlist"
                       >
-                        <span className="material-symbols-outlined text-[18px]">close</span>
+                        <span className="material-symbols-outlined text-[17px]">close</span>
                       </button>
                     )}
                     <SongOptionsMenu track={track} playlistId={isCustomPlaylist ? playlist.id : null} />
@@ -803,43 +950,233 @@ export default function PlaylistPage() {
           </div>
         )}
 
-        {/* Recommended songs to add ONLY if regular custom playlist (NOT Self Mix) */}
-        {isCustomPlaylist && !isSelfMix && (
-          <div className="mt-8 pt-6 border-t border-white/10 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
+        {/* Add Songs & Song Search Section */}
+        {(isCustomPlaylist || isAddSongsOpen) && !isSelfMix && (
+          <div
+            ref={addSongsSectionRef}
+            className="mt-10 pt-8 border-t border-white/10 flex flex-col gap-6 scroll-mt-24"
+          >
+            {/* Header & Subtitle */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary text-[20px]">add_circle</span>
-                  Add Songs to "{playlist.title}"
+                <h3 className="text-lg font-bold text-white flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined text-[18px]">playlist_add</span>
+                  </div>
+                  <span>Add Songs to &ldquo;{playlist.title}&rdquo;</span>
                 </h3>
-                <p className="text-xs text-on-surface-variant mt-0.5">Quickly sequence more tracks into your custom playlist</p>
+                <p className="text-xs text-on-surface-variant mt-1">
+                  Search millions of songs or pick recommendations to sequence into your playlist
+                </p>
+              </div>
+
+              {isAddSongsOpen && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddSongsOpen(false)}
+                  className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-outline hover:text-white bg-surface-container/60 hover:bg-surface-container border border-white/10 transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[15px]">close</span>
+                  <span>Close Search</span>
+                </button>
+              )}
+            </div>
+
+            {/* Song Search Bar */}
+            <div className="relative w-full max-w-2xl">
+              <div className="relative flex items-center w-full bg-surface-container-high/90 hover:bg-surface-container-high border border-white/10 focus-within:border-primary/50 focus-within:shadow-[0_0_25px_rgba(76,215,246,0.18)] rounded-2xl px-4 py-3 transition-all duration-200">
+                <span className="material-symbols-outlined text-outline text-[20px] select-none">
+                  search
+                </span>
+                <input
+                  ref={searchAddInputRef}
+                  type="text"
+                  value={searchAddQuery}
+                  onChange={(e) => setSearchAddQuery(e.target.value)}
+                  placeholder="Search songs by title, artist, or album..."
+                  className="bg-transparent border-none text-white text-sm placeholder:text-outline/60 focus:outline-none w-full ml-3 font-normal"
+                />
+                {isSearchingAdd && (
+                  <span className="material-symbols-outlined text-primary text-[18px] animate-spin select-none mr-1">
+                    progress_activity
+                  </span>
+                )}
+                {searchAddQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchAddQuery("");
+                      searchAddInputRef.current?.focus();
+                    }}
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-outline hover:text-white hover:bg-white/10 transition-colors ml-1 cursor-pointer"
+                    title="Clear search"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {NOCTURNE_TRACKS.filter((nt) => !tracks.some((t) => t.id === nt.id))
-                .slice(0, 6)
-                .map((track) => (
-                  <div
-                    key={track.id}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container/50 border border-white/5 hover:border-primary/30 transition-all group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <img src={track.coverUrl} alt={track.title} className="w-10 h-10 rounded-lg object-cover" />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-xs font-semibold text-white truncate">{track.title}</span>
-                        <span className="text-[11px] text-on-surface-variant truncate">{track.artist}</span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => addTrackToPlaylist(playlist.id, track)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-surface-container-lowest border border-primary/30 text-xs font-bold transition-all ml-2 flex-shrink-0 cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">add</span>
-                      <span>Add</span>
-                    </button>
+            {/* Search Results or Recommendations */}
+            <div className="flex flex-col gap-3">
+              {searchAddQuery.trim() ? (
+                /* Search Results Mode */
+                <>
+                  <div className="flex items-center justify-between text-xs text-on-surface-variant font-medium">
+                    <span>
+                      {isSearchingAdd
+                        ? `Searching for "${searchAddQuery}"...`
+                        : `${searchResults.length} result${searchResults.length === 1 ? "" : "s"} found for "${searchAddQuery}"`}
+                    </span>
                   </div>
-                ))}
+
+                  {searchResults.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {searchResults.map((track) => {
+                        const inPlaylist =
+                          tracks.some((t) => String(t.id) === String(track.id)) ||
+                          justAddedIds.has(String(track.id));
+
+                        return (
+                          <div
+                            key={track.id}
+                            className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container/60 hover:bg-surface-container border border-white/5 hover:border-primary/30 transition-all group"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
+                                <img
+                                  src={track.coverUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80"}
+                                  alt={track.title}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.target.src = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    playTrack(track, [track]);
+                                  }}
+                                  className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer"
+                                  title="Preview track"
+                                >
+                                  <span className="material-symbols-outlined text-[18px]">
+                                    {currentTrack?.id === track.id && isPlaying ? "pause" : "play_arrow"}
+                                  </span>
+                                </button>
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-semibold text-white truncate group-hover:text-primary transition-colors">
+                                  {track.title}
+                                </span>
+                                <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant truncate">
+                                  <span className="truncate">{track.artist}</span>
+                                  {track.durationFormatted && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="flex-shrink-0">{track.durationFormatted}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {inPlaylist ? (
+                              <button
+                                disabled
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-semibold ml-2 flex-shrink-0 cursor-default shadow-sm select-none"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">check</span>
+                                <span>Added</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleAddSongToPlaylist(track)}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/15 text-primary hover:bg-primary hover:text-surface-container-lowest border border-primary/30 text-xs font-bold transition-all ml-2 flex-shrink-0 cursor-pointer shadow-sm active:scale-95"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">add</span>
+                                <span>Add</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : !isSearchingAdd ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center gap-2 bg-surface-container/30 border border-white/5 rounded-2xl p-6">
+                      <span className="material-symbols-outlined text-3xl text-outline">search_off</span>
+                      <p className="text-xs text-outline">No songs found for &ldquo;{searchAddQuery}&rdquo;.</p>
+                      <p className="text-[11px] text-outline/70">Try searching for an artist, track title, or popular song.</p>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                /* Recommendations Mode */
+                <>
+                  <div className="flex items-center justify-between text-xs text-on-surface-variant font-medium">
+                    <span>Recommended for your playlist</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {NOCTURNE_TRACKS.filter((nt) => !tracks.some((t) => String(t.id) === String(nt.id)) && !justAddedIds.has(String(nt.id)))
+                      .slice(0, 8)
+                      .map((track) => (
+                        <div
+                          key={track.id}
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container/50 hover:bg-surface-container/80 border border-white/5 hover:border-primary/30 transition-all group"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
+                              <img
+                                src={track.coverUrl}
+                                alt={track.title}
+                                className="w-full h-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  playTrack(track, [track]);
+                                }}
+                                className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer"
+                                title="Preview track"
+                              >
+                                <span className="material-symbols-outlined text-[18px]">
+                                  {currentTrack?.id === track.id && isPlaying ? "pause" : "play_arrow"}
+                                </span>
+                              </button>
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-xs font-semibold text-white truncate group-hover:text-primary transition-colors">
+                                {track.title}
+                              </span>
+                              <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant truncate">
+                                <span className="truncate">{track.artist}</span>
+                                {track.durationFormatted && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="flex-shrink-0">{track.durationFormatted}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleAddSongToPlaylist(track)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-surface-container-lowest border border-primary/30 text-xs font-bold transition-all ml-2 flex-shrink-0 cursor-pointer active:scale-95"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">add</span>
+                            <span>Add</span>
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

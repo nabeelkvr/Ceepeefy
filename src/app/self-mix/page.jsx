@@ -346,6 +346,36 @@ function SelfMixContent() {
     }
   };
 
+  // Delete Playlist on the spot
+  const handleDeleteSelfMixPlaylist = async (mix, e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    if (!mix) return;
+
+    if (!confirm(`Delete playlist "${mix.title}"?`)) return;
+
+    try {
+      if (mix.id === "cloud-archive-playlist") {
+        const tracksToPurge = mix.tracks || [];
+        for (const t of tracksToPurge) {
+          await deleteSelfMixFromCloud(t.id, t.audioUrl || t.audio_url).catch(() => {});
+        }
+        setCloudMixes([]);
+      } else {
+        deleteSelfMix(mix.id);
+        if (mix.tracks && mix.tracks.length > 0) {
+          const deletedIds = new Set(mix.tracks.map((t) => String(t.id)));
+          setCloudMixes((prev) => prev.filter((cm) => !deletedIds.has(String(cm.id))));
+        }
+      }
+    } catch (err) {
+      console.warn("Error deleting self mix:", err);
+    } finally {
+      setSelectedMixId(null);
+      router.replace("/self-mix");
+    }
+  };
+
   // Playback for legacy local playlist
   const handleLocalMixPlay = (mix, e) => {
     e?.preventDefault?.();
@@ -403,8 +433,8 @@ function SelfMixContent() {
           <span>Back to Self Mixes</span>
         </button>
 
-        <div className="flex flex-col md:flex-row items-start md:items-end gap-6 p-6 rounded-2xl glass-card border border-white/10 bg-gradient-to-br from-cyan-950/40 via-surface-container/80 to-surface-container/40">
-          <div className="relative w-44 h-44 sm:w-52 sm:h-52 rounded-2xl overflow-hidden bg-surface-container-highest shadow-2xl flex-shrink-0 border border-white/10 group">
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-4 sm:gap-6 p-4 sm:p-5 md:p-6 rounded-2xl glass-card border border-white/10 bg-gradient-to-br from-cyan-950/40 via-surface-container/80 to-surface-container/40">
+          <div className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-52 md:h-52 rounded-2xl overflow-hidden bg-surface-container-highest shadow-2xl flex-shrink-0 border border-white/10 group mx-auto md:mx-0">
             <img
               src={
                 activeMix.coverUrl ||
@@ -417,18 +447,18 @@ function SelfMixContent() {
               <button
                 type="button"
                 onClick={(e) => handleLocalMixPlay(activeMix, e)}
-                className="w-14 h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.85)] hover:scale-105 transition-transform cursor-pointer"
+                className="w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.85)] hover:scale-105 transition-transform cursor-pointer"
                 title={isThisMixPlaying ? "Pause Mix" : "Play Mix"}
               >
-                <span className="material-symbols-outlined text-[32px]">
+                <span className="material-symbols-outlined text-[24px] sm:text-[32px]">
                   {isThisMixPlaying ? "pause" : "play_arrow"}
                 </span>
               </button>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:gap-3 min-w-0 flex-1 text-center md:text-left w-full">
+            <div className="flex items-center justify-center md:justify-start gap-2">
               <span className="text-[10px] font-mono font-extrabold uppercase px-2.5 py-1 rounded-md backdrop-blur-md border bg-cyan-950/90 text-cyan-300 border-cyan-700/60 shadow-[0_0_12px_rgba(6,182,212,0.3)] flex items-center gap-1">
                 <span className="material-symbols-outlined text-[13px]">equalizer</span>
                 LOCAL MIX
@@ -438,15 +468,15 @@ function SelfMixContent() {
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight break-words">
+            <h1 className="text-lg sm:text-2xl md:text-4xl font-extrabold text-white tracking-tight break-words line-clamp-2 sm:line-clamp-3 md:line-clamp-none">
               {activeMix.title}
             </h1>
 
-            <p className="text-xs sm:text-sm text-on-surface-variant max-w-2xl">
+            <p className="text-xs sm:text-sm text-on-surface-variant max-w-2xl line-clamp-2">
               {activeMix.description || `Custom self mix by ${activeMix.curator || "You"}`}
             </p>
 
-            <div className="flex flex-wrap items-center gap-4 text-xs text-outline pt-1">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 sm:gap-4 text-xs text-outline pt-0.5">
               <span className="flex items-center gap-1.5 text-primary font-bold">
                 <span className="material-symbols-outlined text-[16px]">graphic_eq</span>
                 {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
@@ -458,14 +488,14 @@ function SelfMixContent() {
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-3">
+            <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3 pt-2 sm:pt-3 flex-wrap">
               <button
                 type="button"
                 onClick={(e) => handleLocalMixPlay(activeMix, e)}
                 disabled={tracks.length === 0}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_16px_rgba(76,215,246,0.5)] hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                className="flex items-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_16px_rgba(76,215,246,0.5)] hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[18px]">
+                <span className="material-symbols-outlined text-[17px] sm:text-[18px]">
                   {isThisMixPlaying ? "pause" : "play_arrow"}
                 </span>
                 <span>{isThisMixPlaying ? "Pause Mix" : "Play Mix"}</span>
@@ -474,7 +504,7 @@ function SelfMixContent() {
               <button
                 type="button"
                 onClick={() => detailFileInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-surface-container-high/80 hover:bg-surface-container-highest border border-white/10 hover:border-primary/40 text-xs font-semibold text-white transition-all cursor-pointer shadow-md"
+                className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full bg-surface-container-high/80 hover:bg-surface-container-highest border border-white/10 hover:border-primary/40 text-xs font-semibold text-white transition-all cursor-pointer shadow-md"
               >
                 <span className="material-symbols-outlined text-[17px] text-primary">add</span>
                 <span>Add Songs</span>
@@ -482,17 +512,11 @@ function SelfMixContent() {
 
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm(`Delete "${activeMix.title}"?`)) {
-                    deleteSelfMix(activeMix.id);
-                    setSelectedMixId(null);
-                    router.push("/self-mix");
-                  }
-                }}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 text-xs font-bold transition-all shadow-sm active:scale-95 ml-auto cursor-pointer"
+                onClick={(e) => handleDeleteSelfMixPlaylist(activeMix, e)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 text-xs font-bold transition-all shadow-sm active:scale-95 ml-auto cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[17px]">delete</span>
-                <span>Delete Mix</span>
+                <span className="hidden sm:inline">Delete Mix</span>
               </button>
             </div>
           </div>
@@ -558,8 +582,19 @@ function SelfMixContent() {
           }}
         />
 
+        {/* Tracklist Table Header */}
+        <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 py-2 border-b border-white/10 text-[11px] font-semibold uppercase tracking-wider text-outline select-none">
+          <span className="text-center">#</span>
+          <span>Title</span>
+          <span className="hidden md:block">Artist</span>
+          <span className="text-right flex items-center justify-end pr-1">
+            <span className="material-symbols-outlined text-[15px]">schedule</span>
+          </span>
+          <span className="text-right pr-2">Actions</span>
+        </div>
+
         {/* Local Tracklist */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {tracks.map((track, idx) => {
             const isCurrent = currentTrack?.id === track.id;
             const isCurrentPlaying = isCurrent && isPlaying;
@@ -568,31 +603,33 @@ function SelfMixContent() {
               <div
                 key={track.id || idx}
                 onClick={() => playTrack(track, tracks)}
-                className={`group grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2.5 rounded-xl transition-all cursor-pointer border ${
+                className={`group grid grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 py-2.5 rounded-xl transition-all duration-200 cursor-pointer border select-none ${
                   isCurrent
-                    ? "bg-white/10 border-primary/30"
-                    : "hover:bg-white/5 border-transparent hover:border-white/5"
+                    ? "bg-primary/10 border-primary/40 shadow-[0_0_20px_rgba(76,215,246,0.15)]"
+                    : "bg-surface-container/30 hover:bg-surface-container-high/80 border-transparent hover:border-white/10 hover:shadow-md"
                 }`}
               >
+                {/* Index or Audio Equalizer */}
                 <div className="text-center flex items-center justify-center">
                   {isCurrentPlaying ? (
-                    <div className="flex items-end gap-[2px] h-3">
+                    <div className="flex items-end gap-[2px] h-3.5">
                       <span className="w-0.5 bg-primary animate-pulse rounded-full h-full" />
                       <span className="w-0.5 bg-primary animate-pulse rounded-full h-2/3 delay-75" />
                       <span className="w-0.5 bg-primary animate-pulse rounded-full h-1/2 delay-150" />
                     </div>
                   ) : (
                     <>
-                      <span className="text-xs text-outline group-hover:hidden">{idx + 1}</span>
-                      <span className="material-symbols-outlined text-primary text-[18px] hidden group-hover:block">
+                      <span className="text-xs font-mono text-outline group-hover:hidden">{idx + 1}</span>
+                      <span className="material-symbols-outlined text-primary text-[19px] hidden group-hover:block transition-transform hover:scale-110">
                         play_arrow
                       </span>
                     </>
                   )}
                 </div>
 
-                <div className="flex items-center gap-3 min-w-0 pr-2">
-                  <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high border border-white/5 shadow-inner">
+                {/* Title & Cover & Artist */}
+                <div className="flex items-center gap-3 min-w-0 pr-1">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high border border-white/10 shadow-sm group-hover:border-primary/30 transition-colors">
                     <img
                       src={
                         track.coverUrl ||
@@ -601,44 +638,53 @@ function SelfMixContent() {
                         "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80"
                       }
                       alt={track.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                   </div>
                   <div className="flex flex-col min-w-0">
                     <span
-                      className={`text-xs sm:text-sm font-bold truncate ${
+                      className={`text-xs sm:text-sm font-bold truncate transition-colors ${
                         isCurrent ? "text-primary" : "text-white group-hover:text-primary"
                       }`}
                     >
                       {track.title}
                     </span>
-                    <span className="text-[11px] text-on-surface-variant truncate md:hidden">
+                    <span className="text-[11px] text-on-surface-variant truncate md:hidden mt-0.5">
                       {track.artist || "Self Mix"}
                     </span>
                   </div>
                 </div>
 
+                {/* Desktop Artist */}
                 <div className="hidden md:flex items-center min-w-0 pr-2">
-                  <span className="text-xs text-on-surface-variant truncate">
+                  <span className="text-xs text-on-surface-variant group-hover:text-white/80 transition-colors truncate">
                     {track.artist || "Self Mix"}
                   </span>
                 </div>
 
-                <div className="text-right font-mono text-xs text-outline pr-2">
+                {/* Duration with clean tabular font and dedicated space */}
+                <div className="text-right font-mono text-xs text-outline tabular-nums whitespace-nowrap pl-1 pr-1 sm:pr-2">
                   {track.durationFormatted || formatTime(track.duration || 180)}
                 </div>
 
-                <div className="flex items-center justify-end gap-1.5 flex-shrink-0">
-                  <DownloadButton track={track} />
+                {/* Actions container with comfortable spacing preventing any collision */}
+                <div className="flex items-center justify-end gap-1 sm:gap-1.5 flex-shrink-0">
+                  <DownloadButton
+                    track={track}
+                    buttonSize="w-8 h-8"
+                    iconSize="text-[18px]"
+                    className="hover:scale-110 active:scale-95"
+                  />
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleLike(track);
                     }}
-                    className={`p-1 rounded-lg transition-colors cursor-pointer ${
-                      isLiked(track.id) ? "text-primary" : "text-outline hover:text-white"
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${
+                      isLiked(track.id) ? "text-primary shadow-[0_0_12px_rgba(76,215,246,0.3)]" : "text-outline hover:text-white"
                     }`}
+                    title={isLiked(track.id) ? "Remove from favorites" : "Add to favorites"}
                   >
                     <span
                       className="material-symbols-outlined text-[18px]"
@@ -655,7 +701,8 @@ function SelfMixContent() {
                       e.stopPropagation();
                       removeTrackFromPlaylist(activeMix.id, track.id);
                     }}
-                    className="p-1 rounded-lg text-outline hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
+                    title="Remove from mix"
                   >
                     <span className="material-symbols-outlined text-[17px]">close</span>
                   </button>
@@ -906,11 +953,7 @@ function SelfMixContent() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`Delete playlist "${mix.title}"?`)) {
-                        deleteSelfMix(mix.id);
-                      }
-                    }}
+                    onClick={(e) => handleDeleteSelfMixPlaylist(mix, e)}
                     className="w-8 h-8 rounded-full text-outline hover:text-red-400 hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
                     title="Delete Playlist"
                   >
@@ -1037,13 +1080,8 @@ function SelfMixContent() {
                     {/* Delete button top-right */}
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`Delete playlist "${mix.title}"?`)) {
-                          deleteSelfMix(mix.id);
-                        }
-                      }}
-                      className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10"
+                      onClick={(e) => handleDeleteSelfMixPlaylist(mix, e)}
+                      className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10 shadow-sm"
                       title="Delete Playlist"
                     >
                       <span className="material-symbols-outlined text-[15px]">delete</span>
@@ -1084,15 +1122,25 @@ function SelfMixContent() {
                   </div>
                 </div>
 
-                {/* Card Footer */}
-                <div className="pt-2.5 border-t border-white/5 flex items-center justify-between text-xs text-outline mt-2.5">
-                  <span className="flex items-center gap-1 font-mono text-[10px] text-cyan-300">
-                    <span className="material-symbols-outlined text-[12px]">schedule</span>
-                    {totalDurationStr || "0:00"}
-                  </span>
-                  <span className="font-mono text-[10px] text-outline">
-                    Self Mix
-                  </span>
+                {/* Modern Audio Telemetry Capsule for Track Count & Duration */}
+                <div className="pt-2.5 mt-2">
+                  <div className="flex items-center justify-between p-1.5 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner">
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[10.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)]">
+                      <div className="flex items-end gap-[1.5px] h-2.5">
+                        <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
+                        <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
+                        <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
+                      </div>
+                      <span className="tabular-nums">
+                        {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-white/80 text-[10.5px] font-mono font-medium">
+                      <span className="material-symbols-outlined text-[12px] text-outline">schedule</span>
+                      <span className="truncate">{totalDurationStr || "0:00"}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             );

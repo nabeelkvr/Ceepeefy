@@ -364,16 +364,25 @@ export default function PlaylistsPage() {
                   </div>
                 </div>
 
-                {/* Card Footer: Displays total tracks count and total duration */}
-                <div className="pt-2.5 border-t border-white/5 flex items-center justify-between text-xs text-outline mt-2.5">
-                  <span className="flex items-center gap-1 text-primary font-medium text-[10px]">
-                    <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
-                    {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
-                  </span>
-                  <span className="flex items-center gap-1 font-mono text-[10px] text-outline">
-                    <span className="material-symbols-outlined text-[12px]">schedule</span>
-                    {formatPlaylistDuration(tracks)}
-                  </span>
+                {/* Modern Audio Telemetry Capsule for Track Count & Duration */}
+                <div className="pt-2 mt-2">
+                  <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
+                    <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] sm:text-[10px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
+                      <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
+                        <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
+                        <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
+                        <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
+                      </div>
+                      <span className="tabular-nums whitespace-nowrap">
+                        {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9.5px] sm:text-[10px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
+                      <span className="material-symbols-outlined text-[12px] text-outline flex-shrink-0">schedule</span>
+                      <span className="truncate">{formatPlaylistDuration(tracks)}</span>
+                    </div>
+                  </div>
                 </div>
               </Link>
             );
@@ -568,16 +577,25 @@ export default function PlaylistsPage() {
                       </div>
                     </div>
 
-                    {/* Card Footer */}
-                    <div className="pt-2.5 border-t border-white/5 flex items-center justify-between text-xs text-outline mt-2.5">
-                      <span className="flex items-center gap-1 text-primary font-medium text-[10px]">
-                        <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
-                        {pl.trackCount || tracks.length} {(pl.trackCount || tracks.length) === 1 ? "track" : "tracks"}
-                      </span>
-                      <span className="flex items-center gap-1 font-mono text-[10px] text-outline">
-                        <span className="material-symbols-outlined text-[12px]">schedule</span>
-                        {formatPlaylistDuration(tracks)}
-                      </span>
+                    {/* Modern Audio Telemetry Capsule for Track Count & Duration */}
+                    <div className="pt-2 mt-2">
+                      <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
+                        <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] sm:text-[10px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
+                          <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
+                            <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
+                            <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
+                            <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
+                          </div>
+                          <span className="tabular-nums whitespace-nowrap">
+                            {pl.trackCount || tracks.length} {(pl.trackCount || tracks.length) === 1 ? "track" : "tracks"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9.5px] sm:text-[10px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
+                          <span className="material-symbols-outlined text-[12px] text-outline flex-shrink-0">schedule</span>
+                          <span className="truncate">{formatPlaylistDuration(tracks)}</span>
+                        </div>
+                      </div>
                     </div>
                   </Link>
                 );

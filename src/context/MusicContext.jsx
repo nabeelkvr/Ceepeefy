@@ -46,6 +46,7 @@ import {
   recordRecentlyPlayedToCloud,
   migrateLocalDataToSupabase,
 } from "../services/cloudStorageService";
+import { deleteSelfMixFromCloud } from "../services/supabaseClient";
 
 export const DEFAULT_MOCK_TRACK_IDS = new Set([
   "track-midnight-pulse",
@@ -720,8 +721,10 @@ export const MusicProvider = ({ children }) => {
   };
 
   const deleteSelfMix = (id) => {
-    const target = selfMixes.find((m) => m.id === id);
+    if (!id) return;
+    const target = selfMixes.find((m) => String(m.id) === String(id));
     if (target && target.tracks && target.tracks.length > 0) {
+      // 1. Delete local audio files from IndexedDB
       const localTrackIds = target.tracks
         .filter((t) => t.isLocal || String(t.id).startsWith("local-") || t.source === "local-upload")
         .map((t) => t.id);
@@ -730,8 +733,20 @@ export const MusicProvider = ({ children }) => {
           console.warn("Failed to delete local audio files:", e)
         );
       }
+
+      // 2. Delete cloud audio tracks from Supabase if present
+      const cloudTracks = target.tracks.filter(
+        (t) => t.isCloud || t.source === "supabase-cloud" || (t.audioUrl && t.audioUrl.includes("supabase"))
+      );
+      cloudTracks.forEach((t) => {
+        deleteSelfMixFromCloud(t.id, t.audioUrl).catch((e) =>
+          console.warn("Failed to delete cloud track:", e)
+        );
+      });
     }
-    setSelfMixes((prev) => prev.filter((m) => m.id !== id));
+
+    setSelfMixes((prev) => prev.filter((m) => String(m.id) !== String(id)));
+    setCustomPlaylists((prev) => prev.filter((p) => String(p.id) !== String(id)));
   };
 
   const addLocalTracksToSelfMix = (mixId, newTracks = []) => {

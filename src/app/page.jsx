@@ -452,10 +452,12 @@ export default function HomePage() {
                 const tracks = pl.tracks || [];
                 const isPlaylistPlaying =
                   isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+                const targetUrl = pl.isSelfMix ? `/self-mix?id=${pl.id}` : `/playlist/${pl.id}`;
 
                 return (
                   <div
                     key={pl.id}
+                    onClick={() => router.push(targetUrl)}
                     className="group flex flex-col gap-3 glass-card p-3.5 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
                   >
                     {/* Playlist Cover Image with Hover Play */}
@@ -482,6 +484,7 @@ export default function HomePage() {
                         }`}
                       >
                         <button
+                          type="button"
                           onClick={(e) => handlePlaylistPlay(pl, e)}
                           className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95"
                           title={isPlaylistPlaying ? "Pause" : "Play"}
@@ -494,25 +497,36 @@ export default function HomePage() {
                     </div>
 
                     {/* Playlist Title & Curator */}
-                    <Link href={`/playlist/${pl.id}`} className="flex flex-col min-w-0">
+                    <div className="flex flex-col min-w-0">
                       <h3 className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
                         {pl.title}
                       </h3>
                       <p className="text-xs text-on-surface-variant truncate mt-0.5">
                         {pl.subtitle || pl.description}
                       </p>
-                    </Link>
+                    </div>
 
-                    {/* Bottom Tags: Track count & Duration */}
-                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/5 text-[11px] font-mono text-outline">
-                      <span className="flex items-center gap-1 text-primary font-medium">
-                        <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
-                        {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[12px]">schedule</span>
-                        {formatPlaylistDuration(tracks)}
-                      </span>
+                    {/* Modern Audio Telemetry Capsule for Track Count & Duration */}
+                    <div className="mt-auto pt-2">
+                      <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
+                        {/* Track Count Badge with Animated Soundwave Equalizer */}
+                        <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[10px] sm:text-[10.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
+                          <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
+                            <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
+                            <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
+                            <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
+                          </div>
+                          <span className="tabular-nums whitespace-nowrap">
+                            {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+                          </span>
+                        </div>
+
+                        {/* Duration Pill */}
+                        <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-white/80 text-[10px] sm:text-[10.5px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
+                          <span className="material-symbols-outlined text-[12px] text-outline flex-shrink-0">schedule</span>
+                          <span className="truncate">{formatPlaylistDuration(tracks)}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
@@ -643,41 +657,43 @@ export default function HomePage() {
 
       {/* Section 4: My self mixes */}
       <section ref={selfMixesSectionRef} id="self-mixes" className="flex flex-col gap-5 pb-10 scroll-mt-6">
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-widest text-primary font-bold">
-                <span className="material-symbols-outlined text-[15px]">cloud_download</span>
-                <span>Personal Archive &amp; Offline Rips</span>
+        <div className="flex items-center sm:items-end justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] font-mono uppercase tracking-wider sm:tracking-widest text-primary font-bold">
+                <span className="material-symbols-outlined text-[13px] sm:text-[15px]">cloud_download</span>
+                <span className="sm:hidden">Archive &amp; Rips</span>
+                <span className="hidden sm:inline">Personal Archive &amp; Offline Rips</span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-secondary-container/70 text-secondary border border-secondary/30 font-semibold">
+              <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.5 rounded-full bg-secondary-container/70 text-secondary border border-secondary/30 font-semibold flex-shrink-0">
                 {selfMixes?.length || 0} {selfMixes?.length === 1 ? "Mix" : "Mixes"}
               </span>
             </div>
-            <h2 className="font-headline-lg text-xl md:text-2xl font-bold text-white tracking-tight mt-1">
+            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight mt-0.5 sm:mt-1 truncate">
               My self mixes
             </h2>
           </div>
 
           {/* Carousel Controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
             <Link
               href="/self-mix"
-              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 text-xs font-semibold text-outline hover:text-white transition-all mr-1"
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 text-[11px] sm:text-xs font-semibold text-outline hover:text-white transition-all"
             >
-              <span className="material-symbols-outlined text-[16px] text-primary">add</span>
-              <span>New Mix</span>
+              <span className="material-symbols-outlined text-[15px] sm:text-[16px] text-primary">add</span>
+              <span className="sm:hidden">Mix</span>
+              <span className="hidden sm:inline">New Mix</span>
             </Link>
             <button
               onClick={() => scrollMixes("left")}
-              className="w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 flex items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md cursor-pointer"
+              className="hidden sm:flex w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md cursor-pointer"
               title="Scroll left"
             >
               <span className="material-symbols-outlined text-[18px]">chevron_left</span>
             </button>
             <button
               onClick={() => scrollMixes("right")}
-              className="w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 flex items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md cursor-pointer"
+              className="hidden sm:flex w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md cursor-pointer"
               title="Scroll right"
             >
               <span className="material-symbols-outlined text-[18px]">chevron_right</span>
@@ -696,8 +712,9 @@ export default function HomePage() {
                 {displayedMixes.map((mix, idx) => {
                   const tracks = mix.tracks || [];
                   const isMixPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
-                  const specBadge =
+                  const rawSpec =
                     mix.spec || (idx === 0 ? "HI-FI" : idx === 1 ? "SPATIAL 360" : idx === 2 ? "32-BIT" : "FLAC");
+                  const specBadge = rawSpec.includes("24-Bit") ? "24-BIT" : rawSpec.length > 8 ? rawSpec.split("•")[0].trim() : rawSpec;
 
                   return (
                     <div
@@ -729,13 +746,12 @@ export default function HomePage() {
                             <h3 className="font-bold text-xs sm:text-sm text-white group-hover:text-primary transition-colors truncate">
                               {mix.title}
                             </h3>
-                            <span className="text-[8px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex-shrink-0">
+                            <span className="text-[7.5px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex-shrink-0">
                               {specBadge}
                             </span>
                           </div>
-                          <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                            {tracks.length > 0 ? `${tracks.length} tracks • ` : ""}
-                            {mix.subtitle || mix.description || `Self mix by ${mix.curator || "You"}`}
+                          <p className="text-[10px] text-on-surface-variant truncate mt-0.5">
+                            {tracks.length} {tracks.length === 1 ? "track" : "tracks"} • {mix.curator || "You"}
                           </p>
                         </div>
                       </div>

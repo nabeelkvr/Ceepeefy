@@ -72,10 +72,6 @@ export function formatPlaylistDuration(tracks = []) {
   }
 
   if (minutes > 0) {
-    // If fewer than 3 tracks, displaying seconds is helpful; otherwise standard minutes
-    if (tracks.length <= 2 && seconds > 0) {
-      return `${minutes} min ${seconds} sec`;
-    }
     return `${minutes} min`;
   }
 

@@ -20,12 +20,19 @@ export default function Sidebar({ className = "", onClose }) {
     if (onClose) onClose();
   };
   const [mounted, setMounted] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [popoverCoords, setPopoverCoords] = useState({ top: 0, left: 0, arrowTop: 18 });
   const [newPlaylistTitle, setNewPlaylistTitle] = useState("");
   const buttonRef = useRef(null);
   const popoverRef = useRef(null);
   const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsDismissed(localStorage.getItem("ceepeefy_pwa_dismissed") === "true");
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -409,24 +416,38 @@ export default function Sidebar({ className = "", onClose }) {
           </div>
         </div>
 
-        {/* Install Ceepeefy App Banner (Hidden when running in standalone mode) */}
-        {!isInstalled && (
-          <div className="p-3 mx-2 my-2 rounded-xl bg-gradient-to-r from-primary/10 to-cyan-500/5 border border-primary/20 flex items-center justify-between gap-2">
+        {/* Install Ceepeefy App Banner (Hidden when already installed or running in standalone PWA mode) */}
+        {!isInstalled && !isDismissed && (
+          <div className="relative p-3 mx-2 my-2 rounded-xl bg-gradient-to-r from-primary/10 to-cyan-500/5 border border-primary/20 flex items-center justify-between gap-2 group/install">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
                 <span className="material-symbols-outlined text-[19px]">install_mobile</span>
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-white truncate">Install App</p>
-                <p className="text-[10px] text-on-surface-variant truncate">Offline & Fullscreen</p>
+                <p className="text-[10px] text-on-surface-variant truncate">Offline &amp; Fullscreen</p>
               </div>
             </div>
-            <button
-              onClick={promptInstall}
-              className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs transition-colors flex-shrink-0 cursor-pointer shadow-sm"
-            >
-              Get
-            </button>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                onClick={promptInstall}
+                className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs transition-colors cursor-pointer shadow-sm"
+              >
+                Get
+              </button>
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.setItem("ceepeefy_pwa_dismissed", "true");
+                  } catch (e) {}
+                  setIsDismissed(true);
+                }}
+                className="p-1 text-outline hover:text-white rounded-full transition-colors cursor-pointer"
+                title="Dismiss"
+              >
+                <span className="material-symbols-outlined text-[15px]">close</span>
+              </button>
+            </div>
           </div>
         )}
       </div>

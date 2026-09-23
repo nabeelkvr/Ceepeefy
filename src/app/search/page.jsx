@@ -661,22 +661,24 @@ function SearchContent() {
           </div>
         </div>
 
-        {/* Right: Duration, Download, Like */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
+        {/* Right: Duration, Download (desktop only), Like, 3-Dot Options */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
           {/* Duration */}
-          <span className="text-xs font-mono text-outline w-10 text-right">
+          <span className="text-[11px] sm:text-xs font-mono text-outline w-8 sm:w-10 text-right">
             {track.durationFormatted || formatTime(track.duration || 210)}
           </span>
 
-          {/* Download Button */}
-          <DownloadButton
-            track={track}
-            onDownloadStart={() => {
-              if (searchQuery.trim()) {
-                addRecentSearch(searchQuery.trim(), "search");
-              }
-            }}
-          />
+          {/* Download Button (desktop only; on mobile download is accessible via the 3-dot menu) */}
+          <div className="hidden md:block">
+            <DownloadButton
+              track={track}
+              onDownloadStart={() => {
+                if (searchQuery.trim()) {
+                  addRecentSearch(searchQuery.trim(), "search");
+                }
+              }}
+            />
+          </div>
 
           {/* Heart / Like Button */}
           <button
@@ -685,7 +687,7 @@ function SearchContent() {
               e.stopPropagation();
               toggleLike(track);
             }}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isLiked(track.id) ? "text-primary" : "text-outline hover:text-white hover:bg-white/10"
+            className={`p-1 sm:p-1.5 rounded-lg transition-colors cursor-pointer ${isLiked(track.id) ? "text-primary" : "text-outline hover:text-white hover:bg-white/10"
               }`}
             title={isLiked(track.id) ? "Liked" : "Like song"}
           >
@@ -1370,10 +1372,10 @@ function SearchContent() {
                   addRecentSearch(searchQuery.trim(), "search");
                 }
               }}
-              className="absolute left-3 md:left-3.5 top-1/2 -translate-y-1/2 text-outline hover:text-primary transition-colors flex items-center justify-center p-1 rounded-full hover:bg-white/10 cursor-pointer"
+              className="absolute left-2.5 sm:left-3.5 top-1/2 -translate-y-1/2 text-outline hover:text-primary transition-colors flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full hover:bg-white/10 cursor-pointer active:scale-95"
               title="Search"
             >
-              <span className="material-symbols-outlined text-[18px] md:text-[20px]">
+              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
                 search
               </span>
             </button>
@@ -1394,7 +1396,7 @@ function SearchContent() {
                 }
               }}
               placeholder="Search any song, artist, album, playlist (e.g. Asal, Hridayam, Anirudh, Arijit)..."
-              className="w-full bg-surface-container/90 border border-white/10 hover:border-white/20 focus:border-primary/50 text-white placeholder:text-outline text-xs md:text-base rounded-full pl-10 md:pl-12 pr-10 md:pr-12 py-2.5 md:py-3.5 shadow-inner outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              className="w-full bg-surface-container/90 border border-white/10 hover:border-white/20 focus:border-primary/50 text-white placeholder:text-outline text-sm sm:text-base rounded-full pl-11 sm:pl-13 pr-10 sm:pr-12 py-3 sm:py-3.5 shadow-inner outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               autoFocus
             />
             {searchQuery && (
@@ -1404,16 +1406,16 @@ function SearchContent() {
                   setSelectedGenre(null);
                   router.replace("/search", { scroll: false });
                 }}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 md:w-6 md:h-6 rounded-full bg-surface-container-highest hover:bg-white/20 text-outline hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-surface-container-highest hover:bg-white/20 text-outline hover:text-white flex items-center justify-center transition-colors cursor-pointer"
                 title="Clear search"
               >
-                <span className="material-symbols-outlined text-[14px] md:text-[16px]">close</span>
+                <span className="material-symbols-outlined text-[15px] sm:text-[17px]">close</span>
               </button>
             )}
           </div>
 
           {/* Category Filter Pills (All, Songs, Albums, Playlists, Artists) */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5 py-1">
             {categoryFilters.map((cat) => {
               const isSelected = activeFilter === cat;
               return (
@@ -1421,8 +1423,8 @@ function SearchContent() {
                   key={cat}
                   type="button"
                   onClick={() => setActiveFilter(cat)}
-                  className={`px-3 md:px-4 py-1 md:py-1.5 rounded-full text-xs font-semibold transition-all select-none whitespace-nowrap cursor-pointer ${isSelected
-                    ? "bg-white text-surface-container-lowest shadow-sm font-bold scale-105"
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all select-none whitespace-nowrap cursor-pointer min-h-[36px] sm:min-h-[40px] flex items-center justify-center ${isSelected
+                    ? "bg-white text-surface-container-lowest shadow-md font-bold scale-105"
                     : "bg-surface-container/70 text-on-surface-variant hover:text-white hover:bg-surface-container-high border border-white/10"
                     }`}
                 >

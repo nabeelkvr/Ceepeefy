@@ -24,12 +24,21 @@ export function PWAProvider({ children }) {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   useEffect(() => {
-    // 1. Detect if running as standalone PWA
+    // 1. Detect if running as standalone PWA or installed
     const checkStandalone = () => {
-      const isStandaloneMedia = window.matchMedia("(display-mode: standalone)").matches;
-      const isNavigatorStandalone = window.navigator.standalone === true;
-      const isAndroidApp = document.referrer.includes("android-app://");
-      return Boolean(isStandaloneMedia || isNavigatorStandalone || isAndroidApp);
+      try {
+        const isStandaloneMedia =
+          window.matchMedia("(display-mode: standalone)").matches ||
+          window.matchMedia("(display-mode: fullscreen)").matches ||
+          window.matchMedia("(display-mode: minimal-ui)").matches ||
+          window.matchMedia("(display-mode: window-controls-overlay)").matches;
+        const isNavigatorStandalone = window.navigator.standalone === true;
+        const isAndroidApp = document.referrer?.includes("android-app://") || false;
+        const storedInstalled = localStorage.getItem("ceepeefy_pwa_installed") === "true";
+        return Boolean(isStandaloneMedia || isNavigatorStandalone || isAndroidApp || storedInstalled);
+      } catch (e) {
+        return false;
+      }
     };
 
     const standalone = checkStandalone();
@@ -45,7 +54,7 @@ export function PWAProvider({ children }) {
     // 3. Listen for display-mode changes
     const mediaMatcher = window.matchMedia("(display-mode: standalone)");
     const handleDisplayChange = (e) => {
-      setIsInstalled(e.matches);
+      setIsInstalled(e.matches || checkStandalone());
     };
     mediaMatcher.addEventListener("change", handleDisplayChange);
 
@@ -64,6 +73,9 @@ export function PWAProvider({ children }) {
       setIsInstallable(false);
       setDeferredPrompt(null);
       setIsInstallModalOpen(false);
+      try {
+        localStorage.setItem("ceepeefy_pwa_installed", "true");
+      } catch (e) {}
       console.log("[PWA] App installed successfully!");
     };
     window.addEventListener("appinstalled", handleAppInstalled);
@@ -130,6 +142,9 @@ export function PWAProvider({ children }) {
         console.log("[PWA] User accepted the install prompt");
         setIsInstalled(true);
         setIsInstallable(false);
+        try {
+          localStorage.setItem("ceepeefy_pwa_installed", "true");
+        } catch (e) {}
       } else {
         console.log("[PWA] User dismissed the install prompt");
       }

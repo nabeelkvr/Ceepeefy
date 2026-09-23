@@ -121,9 +121,6 @@ export default function Header({ onToggleMobileMenu }) {
           <span className="font-extrabold text-[17px] tracking-tight text-white flex items-center gap-1.5">
             Ceepeefy
           </span>
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary font-bold tracking-wider uppercase">
-            • Studio
-          </span>
         </div>
 
         {/* Desktop Brand Identity */}
@@ -252,7 +249,7 @@ export default function Header({ onToggleMobileMenu }) {
           <button
             type="button"
             onClick={promptInstall}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_12px_rgba(76,215,246,0.15)]"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_12px_rgba(76,215,246,0.15)]"
             title="Install Ceepeefy App"
           >
             <span className="material-symbols-outlined text-[17px]">download</span>

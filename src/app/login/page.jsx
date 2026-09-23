@@ -200,25 +200,6 @@ export default function LoginPage() {
             <span>{isLoading ? "Authenticating..." : "Sign In to Studio Mode"}</span>
           </button>
         </form>
-
-        {/* Divider */}
-        <div className="flex items-center gap-3">
-          <div className="h-px bg-white/10 flex-1" />
-          <span className="text-[10px] uppercase font-mono tracking-widest text-outline">Owner Access</span>
-          <div className="h-px bg-white/10 flex-1" />
-        </div>
-
-        {/* 1-Click Quick Owner Login Button */}
-        <button
-          type="button"
-          onClick={handleQuickOwnerSignIn}
-          disabled={isLoading}
-          className="w-full py-2.5 px-4 rounded-xl bg-surface-container-high/80 hover:bg-surface-container-highest border border-white/10 text-xs font-semibold text-white/90 hover:text-white transition-all flex items-center justify-center gap-2 group cursor-pointer"
-        >
-          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] group-hover:scale-125 transition-transform" />
-          <span>Quick Owner Login ({DEFAULT_USER_ID})</span>
-        </button>
-
         {/* Footer */}
         <div className="text-center pt-1">
           <p className="text-[10px] text-outline">
