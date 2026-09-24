@@ -26,8 +26,8 @@ export default function PlaylistsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
 
-  const createdList = customPlaylists || [];
-  const addedList = addedPlaylists || [];
+  const createdList = (customPlaylists || []).filter((pl) => !pl.isSelfMix);
+  const addedList = (addedPlaylists || []).filter((pl) => !pl.isSelfMix);
 
   const totalCount = createdList.length + addedList.length;
 

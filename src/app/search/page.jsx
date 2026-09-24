@@ -135,7 +135,7 @@ function SearchContent() {
   // Merge these two data sources into a single array (putting user's local matching playlists first)
   const mergedPlaylists = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
-    const localList = [...(customPlaylists || []), ...(selfMixes || [])];
+    const localList = (customPlaylists || []).filter((pl) => !pl.isSelfMix);
     const matchingLocal = localList
       .filter((pl) => {
         if (!q) return true;
@@ -668,17 +668,17 @@ function SearchContent() {
             {track.durationFormatted || formatTime(track.duration || 210)}
           </span>
 
-          {/* Download Button (desktop only; on mobile download is accessible via the 3-dot menu) */}
-          <div className="hidden md:block">
-            <DownloadButton
-              track={track}
-              onDownloadStart={() => {
-                if (searchQuery.trim()) {
-                  addRecentSearch(searchQuery.trim(), "search");
-                }
-              }}
-            />
-          </div>
+          {/* Download Button (displayed in mobile responsive and desktop) */}
+          <DownloadButton
+            track={track}
+            buttonSize="p-1 sm:p-1.5"
+            iconSize="text-[17px] sm:text-[18px]"
+            onDownloadStart={() => {
+              if (searchQuery.trim()) {
+                addRecentSearch(searchQuery.trim(), "search");
+              }
+            }}
+          />
 
           {/* Heart / Like Button */}
           <button
@@ -892,7 +892,7 @@ function SearchContent() {
     router.push(`/playlist/${encodeURIComponent(pl.id)}?play=true`);
   };
 
-  // Small Album Card Component for left column (Image 4 side-by-side 2-column grid)
+  // Small Album Card Component (matches Image 4 style: 2-column grid, badge top-left, telemetry capsule bottom)
   const renderSmallAlbumCard = (album) => {
     const isThisAlbumPlaying =
       isPlaying &&
@@ -904,49 +904,77 @@ function SearchContent() {
       <div
         key={album.id}
         onClick={(e) => handleMovieCardClick(album, e)}
-        className="group p-2.5 rounded-xl bg-surface-container/70 hover:bg-surface-container border border-white/5 hover:border-primary/40 transition-all duration-300 cursor-pointer shadow-md flex flex-col justify-between select-none"
+        className="group flex flex-col gap-2.5 glass-card p-3 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 shadow-lg select-none cursor-pointer"
       >
-        <div>
-          <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-surface-container-highest shadow-inner mb-2 border border-white/10">
-            <img
-              src={album.image || album.thumbnail || album.coverUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80"}
-              alt={album.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              loading="lazy"
-            />
-            {/* Top-right badge */}
-            <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-[8px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-emerald-400">
-              {album.isMovie ? "Film" : "Album"}
-            </div>
-            {/* Hover play button */}
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_12px_rgba(76,215,246,0.8)]">
-                <span className="material-symbols-outlined text-[18px]">
-                  {isThisAlbumPlaying ? "pause" : "play_arrow"}
-                </span>
-              </div>
-            </div>
-            {isThisAlbumPlaying && (
-              <div className="absolute bottom-1 right-1 flex items-end gap-[1.5px] h-2.5 px-1 py-0.5 rounded bg-black/70 backdrop-blur-sm">
-                <span className="w-0.5 bg-primary animate-pulse rounded-full h-full" />
-                <span className="w-0.5 bg-primary animate-pulse rounded-full h-2/3 delay-75" />
-                <span className="w-0.5 bg-primary animate-pulse rounded-full h-1/2 delay-150" />
-              </div>
-            )}
+        {/* Cover Image */}
+        <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+          <img
+            src={album.image || album.thumbnail || album.coverUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80"}
+            alt={album.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+          />
+          {/* Top-left Badge */}
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[9px] font-bold text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-md">
+            <span className="material-symbols-outlined text-[12px]">{album.isMovie ? "movie" : "album"}</span>
+            <span>{album.isMovie ? "FILM" : "ALBUM"}</span>
           </div>
 
-          <h4 className="text-xs font-bold text-white group-hover:text-primary transition-colors truncate">
+          {/* Hover / Playing Play Button */}
+          <div
+            className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 transition-opacity duration-300 ${
+              isThisAlbumPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
+          >
+            <div className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300">
+              <span className="material-symbols-outlined text-[18px]">
+                {isThisAlbumPlaying ? "pause" : "play_arrow"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Title & Subtitle */}
+        <div className="flex flex-col min-w-0">
+          <h3 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
             {album.title}
-          </h4>
-          <p className="text-[10px] text-on-surface-variant truncate mt-0.5">
-            {album.year || (album.isMovie ? "Soundtrack" : "Album")} • {songCount} songs
+          </h3>
+          <p className="text-[10.5px] sm:text-xs text-on-surface-variant truncate mt-0.5">
+            {album.isMovie ? "Film Soundtrack" : "Album"} • {album.artist || "Soundtrack"}
           </p>
+        </div>
+
+        {/* Modern Audio Telemetry Capsule (Image 4 exact match) */}
+        <div className="mt-auto pt-1.5">
+          <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
+            {/* Pill 1: Equalizer Soundwave + Songs count */}
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
+              <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
+                <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
+                <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
+                <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
+              </div>
+              <span className="tabular-nums whitespace-nowrap">
+                {songCount} {songCount === 1 ? "song" : "songs"}
+              </span>
+            </div>
+
+            {/* Pill 2: Year or Soundtrack */}
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-white/5 border border-white/10 text-on-surface-variant text-[9.5px] font-semibold flex-shrink-0">
+              <span className="material-symbols-outlined text-[11px] text-outline">
+                {album.year ? "calendar_today" : "album"}
+              </span>
+              <span className="tabular-nums truncate max-w-[50px]">
+                {album.year || "Studio"}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
-  // Small Artist Card Component for left column (Image 4 side-by-side 2-column grid)
+  // Small Artist Card Component (matches Image 4 style: 2-column grid, badge top-left, telemetry capsule bottom)
   const renderSmallArtistCard = (artist) => {
     const isThisArtistPlaying =
       isPlaying &&
@@ -958,44 +986,69 @@ function SearchContent() {
       <div
         key={artist.id || artist.name}
         onClick={(e) => handleArtistCardClick(artist, e)}
-        className="group p-2.5 rounded-xl bg-surface-container/70 hover:bg-surface-container border border-white/5 hover:border-primary/40 transition-all duration-300 cursor-pointer shadow-md flex flex-col justify-between select-none"
+        className="group flex flex-col gap-2.5 glass-card p-3 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 shadow-lg select-none cursor-pointer"
       >
-        <div>
-          <div className="relative w-full aspect-square rounded-full overflow-hidden bg-surface-container-highest shadow-inner mb-2 border border-white/10">
-            <ArtistAvatar
-              name={artist.name}
-              avatar={artist.avatar || artist.image}
-              className="w-full h-full"
-              imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_12px_rgba(76,215,246,0.8)]">
-                <span className="material-symbols-outlined text-[18px]">
-                  {isThisArtistPlaying ? "pause" : "play_arrow"}
-                </span>
-              </div>
-            </div>
-            {isThisArtistPlaying && (
-              <div className="absolute bottom-1 right-1 flex items-end gap-[1.5px] h-2.5 px-1 py-0.5 rounded bg-black/70 backdrop-blur-sm">
-                <span className="w-0.5 bg-primary animate-pulse rounded-full h-full" />
-                <span className="w-0.5 bg-primary animate-pulse rounded-full h-2/3 delay-75" />
-                <span className="w-0.5 bg-primary animate-pulse rounded-full h-1/2 delay-150" />
-              </div>
-            )}
+        {/* Cover Image */}
+        <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+          <ArtistAvatar
+            name={artist.name}
+            avatar={artist.avatar || artist.image}
+            className="w-full h-full"
+            imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+          {/* Top-left Badge */}
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1 shadow-md">
+            <span className="material-symbols-outlined text-[12px]">mic</span>
+            <span>ARTIST</span>
           </div>
 
-          <h4 className="text-xs font-bold text-white group-hover:text-primary transition-colors truncate text-center">
+          {/* Hover / Playing Play Button */}
+          <div
+            className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 transition-opacity duration-300 ${
+              isThisArtistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
+          >
+            <div className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300">
+              <span className="material-symbols-outlined text-[18px]">
+                {isThisArtistPlaying ? "pause" : "play_arrow"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Title & Subtitle */}
+        <div className="flex flex-col min-w-0">
+          <h3 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
             {artist.name}
-          </h4>
-          <p className="text-[10px] text-on-surface-variant truncate mt-0.5 text-center">
-            {artist.role || artist.genre || "Artist"}
+          </h3>
+          <p className="text-[10.5px] sm:text-xs text-on-surface-variant truncate mt-0.5">
+            Artist • {artist.role || artist.genre || "Verified Artist"}
           </p>
+        </div>
+
+        {/* Modern Audio Telemetry Capsule (Image 4 exact match) */}
+        <div className="mt-auto pt-1.5">
+          <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
+            {/* Pill 1: Verified badge with pulse */}
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
+              <span className="material-symbols-outlined text-[11px] text-primary">verified</span>
+              <span className="whitespace-nowrap">Verified</span>
+            </div>
+
+            {/* Pill 2: Role / Genre */}
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-white/5 border border-white/10 text-on-surface-variant text-[9.5px] font-semibold flex-shrink-0">
+              <span className="material-symbols-outlined text-[11px] text-outline">graphic_eq</span>
+              <span className="tabular-nums truncate max-w-[50px]">
+                {artist.genre || artist.role || "Artist"}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
-  // Small Playlist Card Component for left column (Image 4 side-by-side 2-column grid)
+  // Small Playlist Card Component (matches Image 4 style: 2-column grid, badge top-left, telemetry capsule bottom)
   const renderSmallPlaylistCard = (pl) => {
     const trackCount = pl.trackCount || pl.tracks?.length || pl.songsCount || (pl.isCustom ? 0 : 25);
     const isThisPlaylistPlaying =
@@ -1005,38 +1058,69 @@ function SearchContent() {
       <div
         key={pl.id}
         onClick={(e) => handlePlaylistClick(pl, e)}
-        className="group p-2.5 rounded-xl bg-surface-container/70 hover:bg-surface-container border border-white/5 hover:border-primary/40 transition-all duration-300 cursor-pointer shadow-md flex flex-col justify-between select-none"
+        className="group flex flex-col gap-2.5 glass-card p-3 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 shadow-lg select-none cursor-pointer"
       >
-        <div>
-          <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-surface-container-highest shadow-inner mb-2 border border-white/10">
-            <img
-              src={pl.coverUrl || pl.image || pl.thumbnail || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"}
-              alt={pl.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              loading="lazy"
-            />
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_12px_rgba(76,215,246,0.8)]">
-                <span className="material-symbols-outlined text-[18px]">
-                  {isThisPlaylistPlaying ? "pause" : "play_arrow"}
-                </span>
-              </div>
-            </div>
-            {isThisPlaylistPlaying && (
-              <div className="absolute bottom-1 right-1 flex items-end gap-[1.5px] h-2.5 px-1 py-0.5 rounded bg-black/70 backdrop-blur-sm">
-                <span className="w-0.5 bg-primary animate-pulse rounded-full h-full" />
-                <span className="w-0.5 bg-primary animate-pulse rounded-full h-2/3 delay-75" />
-                <span className="w-0.5 bg-primary animate-pulse rounded-full h-1/2 delay-150" />
-              </div>
-            )}
+        {/* Cover Image */}
+        <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+          <img
+            src={pl.coverUrl || pl.image || pl.thumbnail || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"}
+            alt={pl.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+          />
+          {/* Top-left Badge */}
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1 shadow-md">
+            <span className="material-symbols-outlined text-[12px]">queue_music</span>
+            <span>{pl.isCustom ? "BY YOU" : "PLAYLIST"}</span>
           </div>
 
-          <h4 className="text-xs font-bold text-white group-hover:text-primary transition-colors truncate">
+          {/* Hover / Playing Play Button */}
+          <div
+            className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 transition-opacity duration-300 ${
+              isThisPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
+          >
+            <div className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300">
+              <span className="material-symbols-outlined text-[18px]">
+                {isThisPlaylistPlaying ? "pause" : "play_arrow"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Title & Subtitle */}
+        <div className="flex flex-col min-w-0">
+          <h3 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
             {pl.title}
-          </h4>
-          <p className="text-[10px] text-on-surface-variant truncate mt-0.5">
-            {trackCount} tracks
+          </h3>
+          <p className="text-[10.5px] sm:text-xs text-on-surface-variant truncate mt-0.5">
+            {pl.subtitle || pl.curator || pl.description || "Curated Playlist"}
           </p>
+        </div>
+
+        {/* Modern Audio Telemetry Capsule (Image 4 exact match) */}
+        <div className="mt-auto pt-1.5">
+          <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
+            {/* Pill 1: Equalizer Soundwave + Tracks count */}
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
+              <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
+                <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
+                <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
+                <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
+              </div>
+              <span className="tabular-nums whitespace-nowrap">
+                {trackCount} {trackCount === 1 ? "track" : "tracks"}
+              </span>
+            </div>
+
+            {/* Pill 2: Duration / Lossless */}
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-white/5 border border-white/10 text-on-surface-variant text-[9.5px] font-semibold flex-shrink-0">
+              <span className="material-symbols-outlined text-[11px] text-outline">schedule</span>
+              <span className="tabular-nums truncate max-w-[50px]">
+                {pl.duration || "Lossless"}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1517,11 +1601,127 @@ function SearchContent() {
                     </div>
                   ) : (
                     <div className="flex flex-col gap-8">
-                      {/* Top 2-Column Section */}
-                      <div className="flex flex-col lg:flex-row gap-6 items-start w-full">
+                      {/* Mobile Responsive 'All' Layout: 1. Songs List First -> 2. Albums (Image 4 2-col) -> 3. Artists (Image 4 2-col) -> 4. Playlists (Image 4 2-col) */}
+                      <div className="flex flex-col gap-6 lg:hidden w-full">
+                        {/* 1. Songs List First */}
+                        <div className="flex flex-col gap-2.5">
+                          <div className="flex items-center justify-between pb-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-primary text-[18px]">audiotrack</span>
+                              <h2 className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+                                Songs
+                              </h2>
+                              {liveTracks.length > 0 && (
+                                <span className="text-[11px] font-mono text-outline">({liveTracks.length})</span>
+                              )}
+                            </div>
+                            {liveTracks.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setActiveFilter("Songs")}
+                                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>See all</span>
+                                <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {liveTracks.length > 0 ? (
+                            <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 border border-white/5">
+                              {liveTracks.slice(0, 15).map((track, idx) => renderSongRow(track, idx))}
+                            </div>
+                          ) : (
+                            <div className="p-6 rounded-2xl bg-surface-container/40 border border-white/5 text-center text-outline text-xs">
+                              No matching songs found
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 2. Albums (Image 4 small cards in 2-col grid) */}
+                        {allAlbums.length > 0 && (
+                          <div className="flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between pb-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-tertiary text-[18px]">album</span>
+                                <h2 className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+                                  Albums
+                                </h2>
+                                <span className="text-[11px] font-mono text-outline">({allAlbums.length})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setActiveFilter("Albums")}
+                                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>See all</span>
+                                <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              {allAlbums.slice(0, 6).map((album) => renderSmallAlbumCard(album))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 3. Artists (Image 4 small cards in 2-col grid) */}
+                        {allArtists.length > 0 && (
+                          <div className="flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between pb-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-primary text-[18px]">mic</span>
+                                <h2 className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+                                  Artists
+                                </h2>
+                                <span className="text-[11px] font-mono text-outline">({allArtists.length})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setActiveFilter("Artists")}
+                                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>See all</span>
+                                <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              {allArtists.slice(0, 6).map((artist) => renderSmallArtistCard(artist))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 4. Playlists (Image 4 small cards in 2-col grid) */}
+                        {mergedPlaylists.length > 0 && (
+                          <div className="flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between pb-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-primary text-[18px]">queue_music</span>
+                                <h2 className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+                                  Playlists
+                                </h2>
+                                <span className="text-[11px] font-mono text-outline">({mergedPlaylists.length})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setActiveFilter("Playlists")}
+                                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>See all</span>
+                                <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              {mergedPlaylists.slice(0, 6).map((pl) => renderSmallPlaylistCard(pl))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Desktop 'All' Layout: Preserved 2-column view (Left: Spotlight & Small Cards, Right: Songs) */}
+                      <div className="hidden lg:flex flex-row gap-6 items-start w-full">
                         {/* Left Column: Big Spot Album -> Other Albums (Image 4 2-col grid) -> Big Spot Artists -> Other Artists -> Playlists */}
                         {(spotlightAlbum || spotlightArtist || otherAlbums.length > 0 || otherArtists.length > 0 || leftPlaylists.length > 0) && (
-                          <div className="w-full sm:max-w-[290px] lg:w-[275px] xl:w-[290px] flex-shrink-0 flex flex-col gap-5">
+                          <div className="w-[275px] xl:w-[290px] flex-shrink-0 flex flex-col gap-5">
                             {/* 1. Big Card: Spot Album (Do NOT change size, exact Image 1) */}
                             {spotlightAlbum && (
                               <div className="flex flex-col gap-2">
@@ -1652,9 +1852,9 @@ function SearchContent() {
                         </div>
                       </div>
 
-                      {/* Horizontal Carousel: Matching Artists */}
+                      {/* Horizontal Carousel: Matching Artists (Desktop only) */}
                       {allArtists.length > 0 && (
-                        <div className="flex flex-col gap-3 pt-2">
+                        <div className="hidden lg:flex flex-col gap-3 pt-2">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="material-symbols-outlined text-primary text-[20px]">mic</span>
@@ -1701,9 +1901,9 @@ function SearchContent() {
                         </div>
                       )}
 
-                      {/* Horizontal Carousel: Matching Albums & Soundtracks */}
+                      {/* Horizontal Carousel: Matching Albums & Soundtracks (Desktop only) */}
                       {allAlbums.length > 0 && (
-                        <div className="flex flex-col gap-3 pt-2">
+                        <div className="hidden lg:flex flex-col gap-3 pt-2">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="material-symbols-outlined text-tertiary text-[20px]">album</span>
@@ -1811,9 +2011,17 @@ function SearchContent() {
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 sm:gap-6">
-                      {allAlbums.map((album) => renderAlbumCard(album, false))}
-                    </div>
+                    <>
+                      {/* Mobile Responsive: Small Cards in 2-column grid like Image 4 */}
+                      <div className="grid grid-cols-2 gap-3 sm:hidden">
+                        {allAlbums.map((album) => renderSmallAlbumCard(album))}
+                      </div>
+
+                      {/* Desktop / Tablet: Responsive grid with full cards */}
+                      <div className="hidden sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 sm:gap-6">
+                        {allAlbums.map((album) => renderAlbumCard(album, false))}
+                      </div>
+                    </>
                   )}
                 </div>
               )}
@@ -1843,9 +2051,17 @@ function SearchContent() {
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 sm:gap-6">
-                      {allArtists.map((artist) => renderArtistCard(artist, false))}
-                    </div>
+                    <>
+                      {/* Mobile Responsive: Small Cards in 2-column grid like Image 4 */}
+                      <div className="grid grid-cols-2 gap-3 sm:hidden">
+                        {allArtists.map((artist) => renderSmallArtistCard(artist))}
+                      </div>
+
+                      {/* Desktop / Tablet */}
+                      <div className="hidden sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 sm:gap-6">
+                        {allArtists.map((artist) => renderArtistCard(artist, false))}
+                      </div>
+                    </>
                   )}
                 </div>
               )}
@@ -1875,9 +2091,17 @@ function SearchContent() {
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 sm:gap-6">
-                      {mergedPlaylists.map((pl) => renderPlaylistCard(pl, false))}
-                    </div>
+                    <>
+                      {/* Mobile Responsive: Small Cards in 2-column grid like Image 4 */}
+                      <div className="grid grid-cols-2 gap-3 sm:hidden">
+                        {mergedPlaylists.map((pl) => renderSmallPlaylistCard(pl))}
+                      </div>
+
+                      {/* Desktop / Tablet */}
+                      <div className="hidden sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 sm:gap-6">
+                        {mergedPlaylists.map((pl) => renderPlaylistCard(pl, false))}
+                      </div>
+                    </>
                   )}
                 </div>
               )}

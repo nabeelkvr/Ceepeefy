@@ -414,11 +414,10 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Playlists Grid - Only user created playlists & self mixes (no default mock playlists) */}
+        {/* Playlists Grid - Only user created playlists (self mixes only appear in /self-mix) */}
         {(() => {
           const userPlaylists = [
-            ...(user ? (selfMixes || []) : []),
-            ...(user ? (customPlaylists || []) : []),
+            ...(user ? (customPlaylists || []).filter((pl) => !pl.isSelfMix) : []),
           ];
 
           if (userPlaylists.length === 0) {

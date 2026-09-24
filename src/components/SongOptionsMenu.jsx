@@ -372,7 +372,7 @@ export default function SongOptionsMenu({
                   isDownloaded ? "text-cyan-400" : "text-neutral-400 group-hover:text-primary"
                 }`}
               >
-                {isDownloaded ? "download_done" : "download_for_offline"}
+                {isDownloaded ? "download_done" : "download"}
               </span>
             )}
             <span className="font-medium text-[13px]">

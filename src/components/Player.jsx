@@ -195,7 +195,7 @@ export default function Player() {
 
           {/* Photo or Mini Synchronized Lyrics View */}
           {lyricsMode === "mini" ? (
-            <div className="flex-1 min-h-0 my-2">
+            <div className="flex-1 min-h-0 my-2 flex flex-col w-full h-full">
               <MiniLyricsView />
             </div>
           ) : (
