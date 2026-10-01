@@ -9,6 +9,11 @@ export default {
   ],
   theme: {
     extend: {
+      spacing: {
+        84: "21rem",
+        88: "22rem",
+        92: "23rem",
+      },
       colors: {
         surface: "#0b1326",
         "surface-dim": "#0b1326",

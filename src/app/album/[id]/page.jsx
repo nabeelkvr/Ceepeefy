@@ -28,6 +28,8 @@ export default function AlbumPage() {
     addRecentSearch,
     isPlaylistPinned,
     togglePinPlaylist,
+    downloadPlaylist,
+    showOfflineNotice,
   } = useMusic();
 
   const [album, setAlbum] = useState(null);
@@ -36,6 +38,7 @@ export default function AlbumPage() {
   const [error, setError] = useState(null);
   const [isAlbumLiked, setIsAlbumLiked] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
+  const [isDownloadingAlbum, setIsDownloadingAlbum] = useState(false);
 
   // Fetch album details from API
   useEffect(() => {
@@ -159,6 +162,35 @@ export default function AlbumPage() {
       console.error("Audio download error:", err);
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handleDownloadAlbumOffline = async () => {
+    if (!tracks || tracks.length === 0 || isDownloadingAlbum) return;
+    setIsDownloadingAlbum(true);
+    if (showOfflineNotice) {
+      showOfflineNotice(`Downloading "${album?.title || "album"}" for offline playback...`);
+    }
+
+    try {
+      if (downloadPlaylist) {
+        await downloadPlaylist({
+          id: String(album?.id || albumId),
+          title: album?.title || "Album",
+          coverUrl: album?.image || album?.thumbnail || album?.coverUrl || "",
+          tracks,
+        });
+      }
+      if (showOfflineNotice) {
+        showOfflineNotice(`✓ "${album?.title || "Album"}" ready for offline listening`);
+      }
+    } catch (err) {
+      console.error("Album download error:", err);
+      if (showOfflineNotice) {
+        showOfflineNotice("Encountered an issue downloading album");
+      }
+    } finally {
+      setIsDownloadingAlbum(false);
     }
   };
 
@@ -299,10 +331,19 @@ export default function AlbumPage() {
 
           {/* Download for offline */}
           <button
-            className="w-10 h-10 rounded-full flex items-center justify-center text-outline hover:text-white bg-surface-container/60 hover:bg-surface-container transition-all cursor-pointer"
-            title="Download album"
+            type="button"
+            onClick={handleDownloadAlbumOffline}
+            disabled={isDownloadingAlbum || tracks.length === 0}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+              isDownloadingAlbum
+                ? "text-primary bg-primary/10 border border-primary/40 animate-pulse"
+                : "text-outline hover:text-white bg-surface-container/60 hover:bg-surface-container"
+            }`}
+            title="Download album for offline playback"
           >
-            <span className="material-symbols-outlined text-[22px]">download_for_offline</span>
+            <span className={`material-symbols-outlined text-[22px] ${isDownloadingAlbum ? "animate-spin" : ""}`}>
+              {isDownloadingAlbum ? "progress_activity" : "download_for_offline"}
+            </span>
           </button>
 
           {/* More options */}

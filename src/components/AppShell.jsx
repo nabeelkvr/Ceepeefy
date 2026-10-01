@@ -2,22 +2,66 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import dynamic from "next/dynamic";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import Player from "./Player";
 import QueueDrawer from "./QueueDrawer";
-import FullLyricsPanel from "./FullLyricsPanel";
-import DeviceModal from "./DeviceModal";
-import SettingsModal from "./SettingsModal";
-import AuthModal from "./AuthModal";
 import MobileBottomNav from "./MobileBottomNav";
+import AppSkeleton from "./AppSkeleton";
 import { useMusic } from "../context/MusicContext";
+
+const FullLyricsPanel = dynamic(() => import("./FullLyricsPanel"), { ssr: false });
+const DeviceModal = dynamic(() => import("./DeviceModal"), { ssr: false });
+const SettingsModal = dynamic(() => import("./SettingsModal"), { ssr: false });
+const AuthModal = dynamic(() => import("./AuthModal"), { ssr: false });
 
 export default function AppShell({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isAppReady, setIsAppReady] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(true);
   const { currentTrack, lyricsMode, minimizeLyricsToCard, user, openAuthModal } = useMusic();
+
+  // Wait for fonts & critical layout resources before revealing actual UI (eliminates FOUT & CLS)
+  useEffect(() => {
+    let cancelled = false;
+
+    const waitForResources = async () => {
+      try {
+        if (typeof document !== "undefined" && document.fonts) {
+          await document.fonts.ready;
+        }
+      } catch (e) {
+        console.warn("Fonts ready check:", e);
+      }
+
+      if (!cancelled) {
+        setIsAppReady(true);
+        setTimeout(() => {
+          if (!cancelled) setShowSkeleton(false);
+        }, 350);
+      }
+    };
+
+    // Safe timeout fallback: max 600ms so loading is never unnecessarily long
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) {
+        setIsAppReady(true);
+        setTimeout(() => {
+          if (!cancelled) setShowSkeleton(false);
+        }, 350);
+      }
+    }, 600);
+
+    waitForResources();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+    };
+  }, []);
 
   // When navigating between pages, automatically minimize full-screen lyrics to Image 2 floating card
   useEffect(() => {
@@ -69,52 +113,71 @@ export default function AppShell({ children }) {
     <div
       onClickCapture={handleGlobalClickCapture}
       onKeyDownCapture={handleGlobalKeyDownCapture}
-      className="h-[100dvh] h-screen w-screen flex flex-col bg-[#0b1326] text-on-surface font-sans overflow-hidden selection:bg-primary-container selection:text-on-primary-container"
+      className="h-[100dvh] h-screen w-screen flex flex-col bg-[#0b1326] text-on-surface font-sans overflow-hidden selection:bg-primary-container selection:text-on-primary-container relative"
     >
-      {/* Upper area: Sidebar + Main Content */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Desktop Sidebar */}
-        <Sidebar className="hidden md:flex" />
-
-        {/* Mobile Backdrop */}
-        {isMobileSidebarOpen && (
-          <div
-            onClick={() => setIsMobileSidebarOpen(false)}
-            className="md:hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-40 transition-opacity"
-          />
-        )}
-
-        {/* Mobile Slide-over Sidebar */}
+      {/* Skeleton Loading Screen Overlay: visible immediately on Mobile PWA & Web until fonts and layout ready */}
+      {showSkeleton && (
         <div
-          className={`md:hidden fixed inset-y-0 left-0 w-72 z-50 transform transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
-            }`}
+          className={`fixed inset-0 z-[100] transition-opacity duration-300 ease-out pointer-events-none ${
+            isAppReady ? "opacity-0" : "opacity-100 pointer-events-auto"
+          }`}
+          aria-hidden={isAppReady}
         >
-          <Sidebar
-            className="h-full w-full"
-            onClose={() => setIsMobileSidebarOpen(false)}
-          />
+          <AppSkeleton />
+        </div>
+      )}
+
+      {/* Actual Application Content */}
+      <div
+        className={`flex-1 flex flex-col h-full w-full overflow-hidden transition-opacity duration-300 ${
+          isAppReady ? "opacity-100" : "opacity-0 invisible"
+        }`}
+      >
+        {/* Upper area: Sidebar + Main Content */}
+        <div className="flex-1 flex overflow-hidden relative">
+          {/* Desktop Sidebar */}
+          <Sidebar className="hidden md:flex" />
+
+          {/* Mobile Backdrop */}
+          {isMobileSidebarOpen && (
+            <div
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="md:hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-40 transition-opacity"
+            />
+          )}
+
+          {/* Mobile Slide-over Sidebar */}
+          <div
+            className={`md:hidden fixed inset-y-0 left-0 w-72 z-50 transform transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+              }`}
+          >
+            <Sidebar
+              className="h-full w-full"
+              onClose={() => setIsMobileSidebarOpen(false)}
+            />
+          </div>
+
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-[#0b1326] via-[#0d172e] to-[#070e1e] md:my-2 md:mr-2 md:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5">
+            <Header onToggleMobileMenu={() => setIsMobileSidebarOpen((prev) => !prev)} />
+            <main className={`flex-1 overflow-y-auto ${currentTrack ? "pb-[calc(9.5rem+env(safe-area-inset-bottom,0px))] md:pb-28" : "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8"} scroll-smooth transition-[padding] duration-300`}>
+              {children}
+            </main>
+
+            {/* Full-Width Lyrics View (takes width of main content area, Image 3) */}
+            {lyricsMode === "full" && <FullLyricsPanel />}
+          </div>
+
+          {/* Up-Next Queue Drawer */}
+          <QueueDrawer />
         </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-[#0b1326] via-[#0d172e] to-[#070e1e] md:my-2 md:mr-2 md:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5">
-          <Header onToggleMobileMenu={() => setIsMobileSidebarOpen((prev) => !prev)} />
-          <main className={`flex-1 overflow-y-auto ${currentTrack ? "pb-[calc(9.5rem+env(safe-area-inset-bottom,0px))] md:pb-28" : "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8"} scroll-smooth transition-[padding] duration-300`}>
-            {children}
-          </main>
+        {/* Persistent Bottom Player Bar */}
+        <Player />
 
-          {/* Full-Width Lyrics View (takes width of main content area, Image 3) */}
-          {lyricsMode === "full" && <FullLyricsPanel />}
-        </div>
-
-        {/* Up-Next Queue Drawer */}
-        <QueueDrawer />
+        {/* Mobile Fixed Bottom Navigation Bar */}
+        <MobileBottomNav />
       </div>
-
-      {/* Persistent Bottom Player Bar */}
-      <Player />
-
-      {/* Mobile Fixed Bottom Navigation Bar */}
-      <MobileBottomNav />
 
       {/* Floating Modals */}
       <DeviceModal />

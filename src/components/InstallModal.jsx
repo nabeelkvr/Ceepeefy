@@ -40,7 +40,7 @@ export default function InstallModal() {
           </div>
           <div>
             <h3 className="text-xl font-bold text-white tracking-tight">Install Ceepeefy</h3>
-            <p className="text-xs text-primary font-medium tracking-wide">STUDIO MODE PWA</p>
+            <p className="text-xs text-primary font-medium tracking-wide">PWA APPLICATION</p>
           </div>
         </div>
 

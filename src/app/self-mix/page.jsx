@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useState, useRef, useEffect, Suspense } from "react";
+import React, { useState, useRef, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMusic } from "../../context/MusicContext";
 import { formatPlaylistDuration } from "../../utils/playlistUtils";
+import { getAccountUserId, DEFAULT_USER_ID } from "../../config/authConfig";
 import DownloadButton from "../../components/DownloadButton";
 import SongOptionsMenu from "../../components/SongOptionsMenu";
 import {
   saveLocalAudioFile,
   getAudioFileDuration,
   formatFileSize,
+  getAllLocalAudioRecords,
 } from "../../services/localAudioStorage";
 import {
   isSupabaseConfigured,
@@ -47,10 +49,14 @@ function SelfMixContent() {
     deleteSelfMix,
     addLocalTracksToSelfMix,
     removeTrackFromPlaylist,
+    user,
   } = useMusic();
 
-  // Cloud State
+  const currentUserId = getAccountUserId(user);
+
+  // Cloud & Local Audio State
   const [cloudMixes, setCloudMixes] = useState([]);
+  const [localRecords, setLocalRecords] = useState([]);
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
   const [isCloudConfigured, setIsCloudConfigured] = useState(false);
   const [cloudUploadProgress, setCloudUploadProgress] = useState("");
@@ -78,19 +84,28 @@ function SelfMixContent() {
     setSelectedMixId(activeParamId || null);
   }, [activeParamId]);
 
-  // Check Supabase configuration & load cloud tracks on page mount
+  // Check Supabase configuration & load cloud/local tracks on page mount / user change
   useEffect(() => {
     const configured = isSupabaseConfigured();
     setIsCloudConfigured(configured);
     loadCloudTracks();
-  }, []);
+  }, [currentUserId]);
 
   const loadCloudTracks = async () => {
     setIsLoadingCloud(true);
     setUploadError(null);
     try {
+      // 1. Fetch local audio records from IndexedDB
+      try {
+        const localRecs = await getAllLocalAudioRecords();
+        setLocalRecords(localRecs || []);
+      } catch (err) {
+        console.warn("Failed to load local audio records:", err);
+      }
+
+      // 2. Fetch cloud mixes if Supabase is configured
       if (isSupabaseConfigured()) {
-        const records = await fetchSelfMixesFromCloud("nabeeyl");
+        const records = await fetchSelfMixesFromCloud(currentUserId);
         setCloudMixes(records || []);
       } else {
         setCloudMixes([]);
@@ -208,7 +223,7 @@ function SelfMixContent() {
             setCloudUploadProgress(
               `Uploading ${item.file.name} to cloud storage (${i + 1}/${pendingFiles.length})...`
             );
-            const { publicUrl } = await uploadAudioToCloud(item.file, "nabeeyl");
+            const { publicUrl } = await uploadAudioToCloud(item.file, currentUserId);
             audioUrl = publicUrl;
             isCloud = true;
 
@@ -216,7 +231,7 @@ function SelfMixContent() {
               id: trackId,
               title: item.title,
               audioUrl: publicUrl,
-              owner: "nabeeyl",
+              owner: currentUserId,
               duration: item.duration || 180,
               durationFormatted: item.durationFormatted || "3:00",
               fileName: item.file.name,
@@ -257,6 +272,7 @@ function SelfMixContent() {
 
       // Create Self Mix Playlist with the selected cover art and playlist title
       const created = createSelfMix(playlistTitle, tracks, selectedCover);
+      getAllLocalAudioRecords().then((recs) => setLocalRecords(recs || []));
       setNewTitle("");
       setPendingFiles([]);
       setShowCreateModal(false);
@@ -405,8 +421,95 @@ function SelfMixContent() {
     );
   });
 
+  const allPlaylists = useMemo(() => {
+    const list = [...(selfMixes || [])];
+    const existingTrackIds = new Set(
+      list.flatMap((m) => (m.tracks || []).map((t) => String(t.id)))
+    );
+
+    // 1. Recover orphan local audio records from IndexedDB
+    if (localRecords && localRecords.length > 0) {
+      const orphanLocal = localRecords.filter(
+        (rec) => !existingTrackIds.has(String(rec.trackId))
+      );
+      if (orphanLocal.length > 0 && !list.some((m) => m.id === "local-uploads-playlist")) {
+        list.unshift({
+          id: "local-uploads-playlist",
+          title: "Device Uploads",
+          subtitle: `By You • ${orphanLocal.length} tracks`,
+          description: "Audio tracks uploaded and stored on this device in Ceepeefy Studio Mode",
+          curator: "You",
+          coverUrl: COVER_ART_OPTIONS[0],
+          tracks: orphanLocal.map((rec) => {
+            const cleanTitle = (rec.fileName || "Uploaded Audio")
+              .replace(/\.[^/.]+$/, "")
+              .replace(/[_]+/g, " ");
+            return {
+              id: rec.trackId,
+              title: cleanTitle,
+              artist: "Self Mix Upload",
+              album: "Device Uploads",
+              duration: 180,
+              durationFormatted: "3:00",
+              coverUrl: COVER_ART_OPTIONS[0],
+              isLocal: true,
+              isCloud: false,
+              source: "local-upload",
+              fileName: rec.fileName || "upload.mp3",
+              fileSize: rec.fileSize || 0,
+              badge: "Self Mix",
+              badgeType: "cyan",
+            };
+          }),
+          isSelfMix: true,
+          isCustom: true,
+        });
+      }
+    }
+
+    // 2. Recover orphan cloud tracks
+    if (cloudMixes && cloudMixes.length > 0) {
+      const updatedExistingTrackIds = new Set(
+        list.flatMap((m) => (m.tracks || []).map((t) => String(t.id)))
+      );
+      const orphanCloudTracks = cloudMixes.filter(
+        (cm) => !updatedExistingTrackIds.has(String(cm.id))
+      );
+      if (orphanCloudTracks.length > 0 && !list.some((m) => m.id === "cloud-archive-playlist")) {
+        list.unshift({
+          id: "cloud-archive-playlist",
+          title: "Cloud Audio Tracks",
+          subtitle: `By You • ${orphanCloudTracks.length} tracks`,
+          description: "Audio tracks synced from Supabase cloud storage",
+          curator: "You",
+          coverUrl: orphanCloudTracks[0]?.cover_url || COVER_ART_OPTIONS[0],
+          tracks: orphanCloudTracks.map((cm) => ({
+            id: cm.id,
+            title: cm.title,
+            artist: `@${cm.owner || currentUserId}`,
+            album: "Cloud Audio",
+            audioUrl: cm.audio_url,
+            duration: cm.duration || 180,
+            durationFormatted: cm.duration_formatted || "3:00",
+            coverUrl: cm.cover_url || COVER_ART_OPTIONS[0],
+            isCloud: true,
+            isLocal: false,
+            source: "supabase-cloud",
+            fileName: cm.file_name,
+            fileSize: cm.file_size,
+            badge: "Cloud Mix",
+            badgeType: "cyan",
+          })),
+          isSelfMix: true,
+          isCustom: true,
+        });
+      }
+    }
+    return list;
+  }, [selfMixes, cloudMixes, localRecords, currentUserId]);
+
   const activeMix = selectedMixId
-    ? (selfMixes || []).find((m) => String(m.id) === String(selectedMixId))
+    ? allPlaylists.find((m) => String(m.id) === String(selectedMixId))
     : null;
 
   // -------------------------------------------------------------
@@ -545,7 +648,7 @@ function SelfMixContent() {
                 let isCloud = false;
                 if (isSupabaseConfigured()) {
                   try {
-                    const { publicUrl } = await uploadAudioToCloud(file, "nabeeyl");
+                    const { publicUrl } = await uploadAudioToCloud(file, currentUserId);
                     audioUrl = publicUrl;
                     isCloud = true;
                   } catch (err) {
@@ -578,6 +681,7 @@ function SelfMixContent() {
                 });
               }
               addLocalTracksToSelfMix(activeMix.id, newTracks);
+              getAllLocalAudioRecords().then((recs) => setLocalRecords(recs || []));
             }
           }}
         />
@@ -717,48 +821,8 @@ function SelfMixContent() {
   }
 
   // -------------------------------------------------------------
-  // VIEW 2: Grid of all Self Mixes (Cloud First)
-  // -------------------------------------------------------------
-  // -------------------------------------------------------------
   // VIEW 2: Grid of all Self Mix Playlists
   // -------------------------------------------------------------
-  const allPlaylists = [...(selfMixes || [])];
-  if (cloudMixes && cloudMixes.length > 0) {
-    const existingTrackIds = new Set(
-      allPlaylists.flatMap((m) => (m.tracks || []).map((t) => String(t.id)))
-    );
-    const orphanCloudTracks = cloudMixes.filter(
-      (cm) => !existingTrackIds.has(String(cm.id))
-    );
-    if (orphanCloudTracks.length > 0 && !allPlaylists.some((m) => m.id === "cloud-archive-playlist")) {
-      allPlaylists.push({
-        id: "cloud-archive-playlist",
-        title: "Cloud Audio Tracks",
-        subtitle: `By You • ${orphanCloudTracks.length} tracks`,
-        description: "Audio tracks synced from Supabase cloud storage",
-        curator: "You",
-        coverUrl: orphanCloudTracks[0]?.cover_url || COVER_ART_OPTIONS[0],
-        tracks: orphanCloudTracks.map((cm) => ({
-          id: cm.id,
-          title: cm.title,
-          artist: `@${cm.owner || "nabeeyl"}`,
-          album: "Cloud Audio",
-          audioUrl: cm.audio_url,
-          duration: cm.duration || 180,
-          durationFormatted: cm.duration_formatted || "3:00",
-          coverUrl: cm.cover_url || COVER_ART_OPTIONS[0],
-          isCloud: true,
-          isLocal: false,
-          source: "supabase-cloud",
-          fileName: cm.file_name,
-          fileSize: cm.file_size,
-          badge: "Cloud Mix",
-          badgeType: "cyan",
-        })),
-        isSelfMix: true,
-      });
-    }
-  }
 
   const filteredPlaylists = allPlaylists.filter((mix) => {
     if (!searchQuery.trim()) return true;

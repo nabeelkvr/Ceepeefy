@@ -198,10 +198,56 @@ export default function SongOptionsMenu({
       if (showOfflineNotice) {
         showOfflineNotice(`Downloading "${track.title}" to device...`);
       }
-      const res = await downloadTrack(track);
-      setIsDownloading(false);
-      if (res?.success && showOfflineNotice) {
-        showOfflineNotice(`"${track.title}" saved to device offline storage`);
+      try {
+        // 1. Save track to in-app offline storage (IndexedDB)
+        await downloadTrack(track);
+
+        // 2. Trigger native file download to device's downloads folder
+        const params = new URLSearchParams({
+          trackId: String(track.id || track.trackId || ""),
+          audioUrl: track.audioUrl || "",
+          title: track.title || "",
+          artist: track.artist || "",
+          album: track.album || "",
+          year: track.year ? String(track.year) : "",
+          coverUrl: track.coverUrl || track.thumbnail || track.image || "",
+          quality: "premium",
+        });
+
+        const dlRes = await fetch(`/api/audio/download?${params.toString()}`);
+        if (dlRes.ok) {
+          const blob = await dlRes.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          const safeArtist = (track.artist || "").replace(/[\/\\?%*:|"<>]/g, "").trim();
+          const safeTitle = (track.title || "Track").replace(/[\/\\?%*:|"<>]/g, "").trim();
+          const ext = blob.type.includes("mp4") ? "m4a" : "mp3";
+          link.download = safeArtist ? `${safeTitle} - ${safeArtist}.${ext}` : `${safeTitle}.${ext}`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+        } else if (track.audioUrl) {
+          const link = document.createElement("a");
+          link.href = track.audioUrl;
+          link.download = `${track.title || "audio"}.mp3`;
+          link.target = "_blank";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+
+        if (showOfflineNotice) {
+          showOfflineNotice(`"${track.title}" downloaded and saved to offline library`);
+        }
+      } catch (err) {
+        console.error("Audio download error:", err);
+        if (track.audioUrl) {
+          window.open(track.audioUrl, "_blank");
+        }
+      } finally {
+        setIsDownloading(false);
       }
     }
     setIsOpen(false);

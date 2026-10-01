@@ -17,6 +17,7 @@ import { searchMusicTracks } from "../services/audioService";
 import ArtistAvatar from "../components/ArtistAvatar";
 import DownloadButton from "../components/DownloadButton";
 import SongOptionsMenu from "../components/SongOptionsMenu";
+import PlaylistCover from "../components/PlaylistCover";
 import { formatPlaylistDuration } from "../utils/playlistUtils";
 
 export default function HomePage() {
@@ -36,6 +37,7 @@ export default function HomePage() {
     selfMixes,
     user,
     openAuthModal,
+    clearRecentlyPlayed,
   } = useMusic();
 
   const filterChips = [
@@ -169,8 +171,7 @@ export default function HomePage() {
 
   const artistCategories = ["Trending Now", "Malayalam", "Rap", "Hindi", "Tamil"];
   const [artistCategory, setArtistCategory] = useState("Trending Now");
-  const [refreshSeed, setRefreshSeed] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshSeed] = useState(0);
   const [liveTrendingArtists, setLiveTrendingArtists] = useState([]);
 
   // Fetch live trending artists from API on load
@@ -193,22 +194,6 @@ export default function HomePage() {
     const oneDay = 1000 * 60 * 60 * 24;
     const dayOfYear = Math.floor(diff / oneDay);
     return now.getFullYear() * 1000 + dayOfYear;
-  };
-
-  const handleRefreshTrending = () => {
-    setIsRefreshing(true);
-    setRefreshSeed((prev) => prev + 1);
-    fetch("/api/artist/trending")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.success && Array.isArray(data.artists) && data.artists.length > 0) {
-          setLiveTrendingArtists(data.artists);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        setTimeout(() => setIsRefreshing(false), 450);
-      });
   };
 
   // Automatically rotates every day based on the calendar day seed + interactive refresh
@@ -269,7 +254,18 @@ export default function HomePage() {
               Recently played songs
             </h2>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {displayRecentlyPlayed.length > 0 && (
+              <button
+                type="button"
+                onClick={clearRecentlyPlayed}
+                className="flex items-center gap-1 text-xs font-semibold text-outline hover:text-white hover:border-white/20 transition-all px-2.5 py-1 rounded-lg bg-surface-container/60 hover:bg-surface-container border border-white/5 cursor-pointer active:scale-95"
+                title="Clear recently played history"
+              >
+                <span className="material-symbols-outlined text-[15px]">delete_sweep</span>
+                <span>Clear</span>
+              </button>
+            )}
             {displayRecentlyPlayed.length > 3 && (
               <div className="hidden sm:flex items-center gap-1.5">
                 <button
@@ -327,6 +323,8 @@ export default function HomePage() {
                     <img
                       alt={track.title}
                       src={track.coverUrl}
+                      loading="lazy"
+                      decoding="async"
                       onError={(e) => {
                         e.currentTarget.src =
                           "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
@@ -446,7 +444,7 @@ export default function HomePage() {
           }
 
           return (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
+            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 sm:gap-4 md:gap-5 pb-3 pt-1 -mx-2 px-2 sm:mx-0 sm:px-0 sm:overflow-visible">
               {userPlaylists.map((pl) => {
                 const tracks = pl.tracks || [];
                 const isPlaylistPlaying =
@@ -457,38 +455,39 @@ export default function HomePage() {
                   <div
                     key={pl.id}
                     onClick={() => router.push(targetUrl)}
-                    className="group flex flex-col gap-3 glass-card p-3.5 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
+                    className="w-[145px] sm:w-auto flex-shrink-0 sm:flex-shrink group flex flex-col gap-2 md:gap-3 glass-card p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
                   >
                     {/* Playlist Cover Image with Hover Play */}
-                    <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
-                      <img
-                        src={pl.coverUrl}
+                    <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+                      <PlaylistCover
+                        tracks={tracks}
+                        fallbackUrl={pl.coverUrl}
                         alt={pl.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        className="group-hover:scale-105 transition-transform duration-500"
                       />
                       {pl.isSelfMix ? (
-                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-cyan-950/80 backdrop-blur-md text-[9px] font-bold text-cyan-300 border border-cyan-700/60 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[12px]">equalizer</span>
+                        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 px-1.5 sm:px-2 py-0.5 rounded-md bg-cyan-950/80 backdrop-blur-md text-[8.5px] sm:text-[9px] font-bold text-cyan-300 border border-cyan-700/60 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[10px] sm:text-[12px]">equalizer</span>
                           <span>SELF MIX</span>
                         </div>
                       ) : pl.isCustom ? (
-                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[12px]">person</span>
+                        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 px-1.5 sm:px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[8.5px] sm:text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[10px] sm:text-[12px]">person</span>
                           <span>BY YOU</span>
                         </div>
                       ) : null}
                       <div
-                        className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-3 transition-opacity duration-300 ${
+                        className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 sm:p-3 transition-opacity duration-300 ${
                           isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                         }`}
                       >
                         <button
                           type="button"
                           onClick={(e) => handlePlaylistPlay(pl, e)}
-                          className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95"
+                          className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95"
                           title={isPlaylistPlaying ? "Pause" : "Play"}
                         >
-                          <span className="material-symbols-outlined text-[24px]">
+                          <span className="material-symbols-outlined text-[18px] sm:text-[24px]">
                             {isPlaylistPlaying ? "pause" : "play_arrow"}
                           </span>
                         </button>
@@ -497,23 +496,23 @@ export default function HomePage() {
 
                     {/* Playlist Title & Curator */}
                     <div className="flex flex-col min-w-0">
-                      <h3 className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
+                      <h3 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
                         {pl.title}
                       </h3>
-                      <p className="text-xs text-on-surface-variant truncate mt-0.5">
+                      <p className="text-[11px] sm:text-xs text-on-surface-variant truncate mt-0.5">
                         {pl.subtitle || pl.description}
                       </p>
                     </div>
 
                     {/* Modern Audio Telemetry Capsule for Track Count & Duration */}
-                    <div className="mt-auto pt-2">
-                      <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
+                    <div className="mt-auto pt-1 sm:pt-2">
+                      <div className="flex items-center justify-between gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
                         {/* Track Count Badge with Animated Soundwave Equalizer */}
-                        <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[10px] sm:text-[10.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
-                          <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
-                            <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
-                            <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
-                            <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
+                        <div className="flex items-center gap-1 sm:gap-1.5 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9px] sm:text-[10.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
+                          <div className="flex items-end gap-[1.5px] h-2 sm:h-2.5 flex-shrink-0">
+                            <span className="w-[1.5px] sm:w-[2px] h-full bg-primary rounded-full animate-pulse" />
+                            <span className="w-[1.5px] sm:w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
+                            <span className="w-[1.5px] sm:w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
                           </div>
                           <span className="tabular-nums whitespace-nowrap">
                             {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
@@ -521,8 +520,8 @@ export default function HomePage() {
                         </div>
 
                         {/* Duration Pill */}
-                        <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-white/80 text-[10px] sm:text-[10.5px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
-                          <span className="material-symbols-outlined text-[12px] text-outline flex-shrink-0">schedule</span>
+                        <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9px] sm:text-[10.5px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
+                          <span className="material-symbols-outlined text-[10px] sm:text-[12px] text-outline flex-shrink-0">schedule</span>
                           <span className="truncate">{formatPlaylistDuration(tracks)}</span>
                         </div>
                       </div>
@@ -564,23 +563,6 @@ export default function HomePage() {
             </h2>
           </div>
           <div className="flex items-center gap-3 self-start sm:self-auto">
-            <button
-              onClick={handleRefreshTrending}
-              disabled={isRefreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/40 text-xs font-semibold text-on-surface-variant hover:text-white transition-all shadow-sm active:scale-95 group cursor-pointer"
-              title="Refresh and bring new trending artists"
-            >
-              <span
-                className={`material-symbols-outlined text-[16px] text-primary transition-transform duration-500 ${
-                  isRefreshing ? "animate-spin" : "group-hover:rotate-180"
-                }`}
-              >
-                autorenew
-              </span>
-              <span className="whitespace-nowrap font-mono text-[11px]">
-                {isRefreshing ? "Refreshing..." : "New Artists"}
-              </span>
-            </button>
             <Link
               href="/artists"
               className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold group"
@@ -609,9 +591,9 @@ export default function HomePage() {
           ))}
         </div>
 
-        {/* Dynamic Artist Avatars Grid / Horizontal Scroll on mobile */}
-        <div className={`flex flex-row overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-5 sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 pb-2 -mx-2 px-2 transition-all duration-300 ${isRefreshing ? "opacity-40 scale-[0.99]" : "opacity-100 scale-100"}`}>
-          {displayedArtists.map((artist) => {
+        {/* Dynamic Artist Avatars Grid: 2 rows on mobile (3 cols x 2 rows), grid on tablet/desktop */}
+        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4 md:gap-5 pb-2 transition-all duration-300">
+          {displayedArtists.map((artist, index) => {
             const isArtistPlaying =
               isPlaying &&
               currentTrack?.artist?.toLowerCase().includes(artist.name.toLowerCase());
@@ -620,9 +602,11 @@ export default function HomePage() {
               <Link
                 key={artist.id}
                 href={`/artist/${artist.id}`}
-                className="w-28 sm:w-auto flex-shrink-0 sm:flex-shrink group flex flex-col items-center text-center gap-2 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/80 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none relative"
+                className={`w-full group flex flex-col items-center text-center gap-1.5 sm:gap-2 p-2 sm:p-4 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/80 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none relative ${
+                  index >= 6 ? "hidden sm:flex" : "flex"
+                }`}
               >
-                <div className="relative w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full bg-surface-container-highest shadow-md p-0.5 sm:p-1 ring-2 ring-primary/20 group-hover:ring-primary group-hover:shadow-[0_0_20px_rgba(76,215,246,0.3)] transition-all">
+                <div className="relative w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full bg-surface-container-highest shadow-md p-0.5 sm:p-1 ring-2 ring-primary/20 group-hover:ring-primary group-hover:shadow-[0_0_20px_rgba(76,215,246,0.3)] transition-all">
                   <div className="w-full h-full rounded-full overflow-hidden">
                     <ArtistAvatar
                       name={artist.name}
@@ -630,13 +614,18 @@ export default function HomePage() {
                       className="w-full h-full"
                     />
                   </div>
-                  {/* Persistent Mini Play Badge on bottom right of Avatar (Matches Image 1 & 2) */}
+                  {/* Persistent Mini Play Badge on bottom right of Avatar */}
                   <button
                     onClick={(e) => handleArtistPlay(artist, e)}
-                    className="absolute bottom-0 right-0 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_10px_rgba(76,215,246,0.6)] hover:scale-110 active:scale-95 transition-all z-10"
+                    className="absolute bottom-0 right-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_10px_rgba(76,215,246,0.6)] hover:scale-110 active:scale-95 transition-all z-10"
                     title={isArtistPlaying ? "Pause audio" : `Play ${artist.name}`}
                   >
-                    <span className="material-symbols-outlined text-[15px] sm:text-[18px]">
+                    <span
+                      className={`material-symbols-outlined text-[12px] sm:text-[15px] flex items-center justify-center leading-none ${
+                        !isArtistPlaying ? "translate-x-[0.5px] sm:translate-x-[1px]" : ""
+                      }`}
+                      style={{ fontVariationSettings: "'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20" }}
+                    >
                       {isArtistPlaying ? "pause" : "play_arrow"}
                     </span>
                   </button>
@@ -729,6 +718,8 @@ export default function HomePage() {
                               "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80"
                             }
                             alt={mix.title}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-cover"
                           />
                           {isMixPlaying && (

@@ -110,14 +110,15 @@ export default function LoginPage() {
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary to-cyan-300 flex items-center justify-center text-surface-container-lowest shadow-[0_0_24px_rgba(76,215,246,0.5)]">
-              <span className="material-symbols-outlined text-[26px]">graphic_eq</span>
+            <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+              <img
+                src="/logo.png"
+                alt="Ceepeefy"
+                className="w-full h-full object-contain filter drop-shadow-[0_0_16px_rgba(0,229,255,0.5)]"
+              />
             </div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-black tracking-tight text-white">Ceepeefy</h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono tracking-widest uppercase bg-primary/15 text-primary border border-primary/30">
-                Studio
-              </span>
             </div>
           </div>
 

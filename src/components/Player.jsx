@@ -30,6 +30,8 @@ export default function Player() {
     togglePlay,
     handleNextTrack,
     handlePrevTrack,
+    hasNextTrack,
+    hasPrevTrack,
     seekTo,
     toggleLike,
     isLiked,
@@ -53,7 +55,51 @@ export default function Player() {
   const cardVolumeBarRef = useRef(null);
   const cardRef = useRef(null);
 
-  // Click outside big card closes it back to mini player ONLY if not in synchronized lyrics mode
+  const previousPlayerModeRef = useRef("bar");
+
+  // Track previous playerMode before entering "card"
+  useEffect(() => {
+    if (playerMode !== "card") {
+      previousPlayerModeRef.current = playerMode;
+    }
+  }, [playerMode]);
+
+  // Handle browser/device back button & history push when card opens
+  useEffect(() => {
+    if (playerMode !== "card") return;
+
+    if (typeof window !== "undefined") {
+      // Push history state if not already in card state
+      if (window.history.state?.playerModal !== "card") {
+        window.history.pushState({ ...window.history.state, playerModal: "card" }, "");
+      }
+
+      const handlePopState = () => {
+        if (lyricsMode === "mini") {
+          setLyricsMode("hidden");
+        }
+        setPlayerMode(previousPlayerModeRef.current || "bar");
+      };
+
+      window.addEventListener("popstate", handlePopState);
+      return () => {
+        window.removeEventListener("popstate", handlePopState);
+      };
+    }
+  }, [playerMode, lyricsMode]);
+
+  const handleCardBack = () => {
+    if (lyricsMode === "mini") {
+      setLyricsMode("hidden");
+    }
+    if (typeof window !== "undefined" && window.history.state?.playerModal === "card") {
+      window.history.back();
+    } else {
+      setPlayerMode(previousPlayerModeRef.current || "bar");
+    }
+  };
+
+  // Click outside big card closes it back to previous state ONLY if not in synchronized lyrics mode
   useEffect(() => {
     if (playerMode !== "card") return;
     if (lyricsMode === "mini") return; // Keep synchronized lyrics card visible while browsing!
@@ -61,13 +107,13 @@ export default function Player() {
     const handleClickOutside = (event) => {
       if (typeof window !== "undefined" && window.innerWidth < 768) return;
       if (cardRef.current && !cardRef.current.contains(event.target)) {
-        setPlayerMode("mini");
+        handleCardBack();
       }
     };
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
-        setPlayerMode("bar");
+        handleCardBack();
       }
     };
 
@@ -122,6 +168,21 @@ export default function Player() {
     else setRepeatMode("off");
   };
 
+  // Lock body scroll on mobile while full-screen Now Playing card is open to prevent scroll leaking & accidental browser back gestures
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (playerMode === "card") {
+      const originalOverflow = document.body.style.overflow;
+      const originalOverscroll = document.body.style.overscrollBehavior;
+      document.body.style.overflow = "hidden";
+      document.body.style.overscrollBehavior = "none";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        document.body.style.overscrollBehavior = originalOverscroll;
+      };
+    }
+  }, [playerMode]);
+
   if (!currentTrack) return null;
 
   return (
@@ -130,22 +191,22 @@ export default function Player() {
       {playerMode === "card" && (
         <aside
           ref={cardRef}
-          className="fixed inset-0 z-50 w-full h-full rounded-none bg-[#070e1e]/98 backdrop-blur-3xl border-none p-5 sm:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex flex-col justify-between overflow-y-auto select-none animate-slide-up md:fixed md:bottom-5 md:right-5 md:top-auto md:left-auto md:w-80 md:h-auto md:max-h-[calc(100vh-6rem)] md:rounded-2xl md:border md:border-white/20 md:p-3.5 md:gap-2.5 md:shadow-[0_16px_50px_rgba(0,0,0,0.85)] md:overflow-hidden"
+          onTouchMove={(e) => e.stopPropagation()}
+          className={`fixed inset-0 z-50 w-full h-full rounded-none bg-[#070e1e]/98 backdrop-blur-3xl border-none p-5 sm:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex flex-col justify-between overflow-y-auto overscroll-contain touch-pan-y select-none animate-slide-up md:fixed md:bottom-5 ${
+            isQueueOpen ? "md:right-[400px] lg:right-[420px]" : "md:right-5"
+          } md:top-auto md:left-auto md:w-80 md:h-auto md:max-h-[calc(100vh-6rem)] md:rounded-2xl md:border md:border-white/20 md:p-3.5 md:gap-2.5 md:shadow-[0_16px_50px_rgba(0,0,0,0.85)] md:overflow-hidden transition-all duration-300`}
+          style={{ overscrollBehavior: "contain", overscrollBehaviorY: "contain", WebkitOverflowScrolling: "touch" }}
           aria-label="Now Playing Card"
         >
           {/* Header Bar */}
           <div className="flex items-center justify-between pb-1 flex-shrink-0">
-            {/* Mobile Downward Chevron Minimize Button */}
+            {/* Mobile Downward Chevron Minimize / Back Button */}
             <button
-              onClick={() => {
-                if (lyricsMode === "mini") {
-                  setLyricsMode("hidden");
-                }
-                setPlayerMode("bar");
-              }}
+              type="button"
+              onClick={handleCardBack}
               className="md:hidden p-1.5 -ml-1.5 rounded-full text-outline hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-              title="Minimize player"
-              aria-label="Minimize"
+              title="Back"
+              aria-label="Back"
             >
               <span className="material-symbols-outlined text-[30px]">keyboard_arrow_down</span>
             </button>
@@ -162,6 +223,7 @@ export default function Player() {
 
             <div className="flex items-center gap-1">
               <button
+                type="button"
                 onClick={() => {
                   if (lyricsMode === "mini") {
                     setPlayerMode("bar");
@@ -177,16 +239,11 @@ export default function Player() {
                 <span className="material-symbols-outlined text-[17px]">open_in_full</span>
               </button>
               <button
-                onClick={() => {
-                  if (lyricsMode === "mini") {
-                    setLyricsMode("hidden");
-                  } else {
-                    setPlayerMode("bar");
-                  }
-                }}
+                type="button"
+                onClick={handleCardBack}
                 className="p-1.5 rounded-full text-outline hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                title="Minimize player"
-                aria-label="Close"
+                title="Back / Close"
+                aria-label="Back"
               >
                 <span className="material-symbols-outlined text-[22px] md:text-[17px]">close</span>
               </button>
@@ -292,9 +349,15 @@ export default function Player() {
             </button>
 
             <button
+              type="button"
               onClick={handlePrevTrack}
-              className="text-on-surface hover:text-primary transition-colors p-2 md:p-1 rounded-full hover:bg-surface-container active:scale-90"
-              title="Previous track"
+              disabled={!hasPrevTrack}
+              className={`p-2 md:p-1 rounded-full transition-all active:scale-90 ${
+                hasPrevTrack
+                  ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
+                  : "opacity-30 text-white/40 cursor-not-allowed"
+              }`}
+              title={hasPrevTrack ? "Previous track" : "No previous track"}
             >
               <span className="material-symbols-outlined text-[28px] md:text-[22px]">skip_previous</span>
             </button>
@@ -316,9 +379,15 @@ export default function Player() {
             </button>
 
             <button
+              type="button"
               onClick={handleNextTrack}
-              className="text-on-surface hover:text-primary transition-colors p-2 md:p-1 rounded-full hover:bg-surface-container active:scale-90"
-              title="Next track"
+              disabled={!hasNextTrack}
+              className={`p-2 md:p-1 rounded-full transition-all active:scale-90 ${
+                hasNextTrack
+                  ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
+                  : "opacity-30 text-white/40 cursor-not-allowed"
+              }`}
+              title={hasNextTrack ? "Next track" : "No next track in queue"}
             >
               <span className="material-symbols-outlined text-[28px] md:text-[22px]">skip_next</span>
             </button>
@@ -414,7 +483,7 @@ export default function Player() {
       {playerMode !== "card" && currentTrack && (
         <aside
           onClick={() => setPlayerMode("card")}
-          className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 w-full h-[74px] bg-[#091224]/95 backdrop-blur-2xl border-t border-b border-white/10 px-4 py-2.5 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group shadow-xl"
+          className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 w-full h-[74px] bg-[#080f1e] border-t border-b border-white/10 px-4 py-2.5 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group shadow-xl"
           role="region"
           aria-label="Mobile Mini Player"
         >
@@ -502,12 +571,20 @@ export default function Player() {
               </span>
             </button>
 
-            {/* Next Track Button (from Image 5) */}
+            {/* Next Track Button (Image 2 active state) */}
             <button
               type="button"
-              onClick={handleNextTrack}
-              className="p-2 text-on-surface hover:text-primary transition-colors rounded-full hover:bg-surface-container active:scale-90 cursor-pointer"
-              title="Next track"
+              disabled={!hasNextTrack}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNextTrack();
+              }}
+              className={`p-2 transition-all active:scale-90 rounded-full cursor-pointer ${
+                hasNextTrack
+                  ? "text-white hover:text-primary"
+                  : "opacity-30 text-white/40 cursor-not-allowed"
+              }`}
+              title={hasNextTrack ? "Next track" : "No next track"}
               aria-label="Next track"
             >
               <span className="material-symbols-outlined text-[26px]">skip_next</span>
@@ -689,9 +766,15 @@ export default function Player() {
               </button>
 
               <button
+                type="button"
                 onClick={handlePrevTrack}
-                className="text-on-surface hover:text-primary transition-colors p-1.5 rounded-full hover:bg-surface-container"
-                title="Previous track"
+                disabled={!hasPrevTrack}
+                className={`p-1.5 rounded-full transition-all active:scale-95 ${
+                  hasPrevTrack
+                    ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
+                    : "opacity-30 text-white/40 cursor-not-allowed"
+                }`}
+                title={hasPrevTrack ? "Previous track" : "No previous track"}
               >
                 <span className="material-symbols-outlined text-[20px] md:text-[24px]">skip_previous</span>
               </button>
@@ -711,9 +794,15 @@ export default function Player() {
               </button>
 
               <button
+                type="button"
                 onClick={handleNextTrack}
-                className="text-on-surface hover:text-primary transition-colors p-1.5 rounded-full hover:bg-surface-container"
-                title="Next track"
+                disabled={!hasNextTrack}
+                className={`p-1.5 rounded-full transition-all active:scale-95 ${
+                  hasNextTrack
+                    ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
+                    : "opacity-30 text-white/40 cursor-not-allowed"
+                }`}
+                title={hasNextTrack ? "Next track" : "No next track in queue"}
               >
                 <span className="material-symbols-outlined text-[20px] md:text-[24px]">skip_next</span>
               </button>

@@ -6,6 +6,7 @@ import { useMusic } from "../../../context/MusicContext";
 import { NOCTURNE_PLAYLISTS, NOCTURNE_TRACKS, getPlaylistById } from "../../../data/nocturneData";
 import DownloadButton from "../../../components/DownloadButton";
 import SongOptionsMenu from "../../../components/SongOptionsMenu";
+import PlaylistCover from "../../../components/PlaylistCover";
 import { formatPlaylistDuration } from "../../../utils/playlistUtils";
 import { searchMusicTracks } from "../../../services/audioService";
 import useDebounce from "../../../hooks/useDebounce";
@@ -355,8 +356,9 @@ export default function PlaylistPage() {
         <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 max-w-6xl">
           {/* Cover Art */}
           <div className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group mx-auto md:mx-0">
-            <img
-              src={playlist.coverUrl}
+            <PlaylistCover
+              tracks={tracks}
+              fallbackUrl={playlist.coverUrl}
               alt={playlist.title}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />

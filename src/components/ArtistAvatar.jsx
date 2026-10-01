@@ -80,6 +80,11 @@ export default function ArtistAvatar({
       className={`relative w-full h-full rounded-full overflow-hidden flex items-center justify-center select-none ${className}`}
       style={{ width: "100%", height: "100%", borderRadius: "50%" }}
     >
+      {/* Skeleton Shimmer placeholder while image is resolving/loading */}
+      {isLoading && (
+        <div className="absolute inset-0 w-full h-full rounded-full skeleton-shimmer bg-white/10 z-10" />
+      )}
+
       {/* 1. Graceful Error / Missing Fallback: Initials UI */}
       {(hasError || !imageUrl) ? (
         <div
@@ -99,15 +104,20 @@ export default function ArtistAvatar({
         <img
           src={imageUrl}
           alt={name}
-          onError={() => setHasError(true)}
+          onLoad={() => setIsLoading(false)}
+          onError={() => {
+            setHasError(true);
+            setIsLoading(false);
+          }}
           style={{
             width: "100%",
             height: "100%",
             borderRadius: "50%",
             objectFit: "cover",
           }}
-          className={`w-full h-full rounded-full object-cover group-hover:scale-105 transition-transform duration-500 ${imgClassName}`}
+          className={`w-full h-full rounded-full object-cover group-hover:scale-105 transition-all duration-500 ${isLoading ? "opacity-0 scale-95" : "opacity-100 scale-100"} ${imgClassName}`}
           loading="lazy"
+          decoding="async"
         />
       )}
     </div>

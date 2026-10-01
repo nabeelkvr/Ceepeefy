@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { downloadTrack } from "../services/offlineStorage";
 
 const QUALITY_OPTIONS = [
   {
@@ -80,6 +81,21 @@ export default function DownloadButton({
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
 
+    const isInsideCard = Boolean(buttonRef.current.closest("aside[aria-label='Now Playing Card']"));
+    const isMobile = viewportWidth < 768;
+
+    if (isInsideCard || isMobile) {
+      // In mobile or inside full screen card:
+      // Position nicely above the button, ensuring it stays well within viewport
+      let left = Math.max(12, Math.min(rect.right - menuWidth, viewportWidth - menuWidth - 12));
+      let top = rect.top - menuHeight - 10;
+      if (top < 12) {
+        top = Math.max(12, rect.bottom + 8);
+      }
+      setCoords({ top, left });
+      return;
+    }
+
     // 1. Navbar boundary (Top): ensure menu never cuts behind the header
     const headerEl = document.querySelector("header");
     const headerRect = headerEl?.getBoundingClientRect();
@@ -109,41 +125,25 @@ export default function DownloadButton({
     const maxRight = viewportWidth - 12;
 
     // Horizontal positioning:
-    // Prefer aligning right edge of dropdown with right edge of button
     let left = rect.right - menuWidth;
-    // If extending to the left crosses into the sidebar, flip to align with button's left edge
     if (left < minLeft) {
       left = rect.left;
     }
-    // Clamp strictly within safe content boundaries [minLeft, maxRight - menuWidth]
     left = Math.max(minLeft, Math.min(left, maxRight - menuWidth));
 
-    // Check if Now Playing card is open and overlaps this menu column
-    const playingCardEl = document.querySelector("aside[aria-label='Now Playing Card']");
-    if (playingCardEl) {
-      const cRect = playingCardEl.getBoundingClientRect();
-      if (cRect.top > 0 && left < cRect.right && left + menuWidth > cRect.left) {
-        maxBottom = Math.min(maxBottom, cRect.top - 8);
-      }
-    }
-
     // Vertical positioning:
-    // By default, open downwards below the button
     let top = rect.bottom + 8;
-
-    // If opening downwards exceeds maxBottom (too close to player bar or card):
     if (top + menuHeight > maxBottom) {
       const topAbove = rect.top - menuHeight - 8;
       if (topAbove >= minTop) {
         top = topAbove;
       } else {
-        // Safe clamp if neither fits completely
         top = Math.max(minTop, Math.min(top, maxBottom - menuHeight));
       }
     }
 
-    // Auto-close if the trigger button has scrolled off-screen
-    if (rect.bottom < minTop - 20 || rect.top > maxBottom + 20) {
+    // Auto-close only if trigger button has scrolled off-screen
+    if (rect.bottom < 0 || rect.top > viewportHeight) {
       setIsOpen(false);
       return;
     }
@@ -215,6 +215,9 @@ export default function DownloadButton({
       onDownloadStart(track, qualityOpt);
     }
 
+    // Also cache track in in-app offline storage for seamless offline listening
+    downloadTrack(track).catch((e) => console.warn("Offline cache error:", e));
+
     try {
       const params = new URLSearchParams({
         trackId: track.id || "",
@@ -248,10 +251,12 @@ export default function DownloadButton({
       }
 
       if (!filename) {
-        const safeArtist = (track.artist || "Unknown").replace(/[\/\\?%*:|"<>]/g, "").trim();
+        const safeArtist = (track.artist || "").replace(/[\/\\?%*:|"<>]/g, "").trim();
         const safeTitle = (track.title || "Track").replace(/[\/\\?%*:|"<>]/g, "").trim();
         const ext = blob.type.includes("mp4") ? "m4a" : "mp3";
-        filename = `${safeArtist} - ${safeTitle} [${qualityOpt.label}].${ext}`;
+        filename = safeArtist
+          ? `${safeTitle} - ${safeArtist} [${qualityOpt.label}].${ext}`
+          : `${safeTitle} [${qualityOpt.label}].${ext}`;
       }
 
       link.download = filename;

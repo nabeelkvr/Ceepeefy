@@ -9,6 +9,7 @@ import {
   searchMusicAutocomplete,
   searchMusicTracks,
   fetchAlbumDetails,
+  fetchArtistDetails,
   parsePlayCount,
 } from "../../services/audioService";
 import { NOCTURNE_GENRES, NOCTURNE_PLAYLISTS } from "../../data/nocturneData";
@@ -34,6 +35,7 @@ function SearchContent() {
     toggleLike,
     isLiked,
     formatTime,
+    addToQueue,
     customPlaylists,
     selfMixes,
   } = useMusic();
@@ -452,7 +454,7 @@ function SearchContent() {
   }, [extraArtists, matchedArtist]);
 
   // Lazy Audio Resolution: Click handler sends track ID to HTML5 audio service for direct 320kbps stream
-  const handleTrackClick = (track) => {
+  const handleTrackClick = (track, trackList = null) => {
     if (!track) return;
     if (searchQuery.trim()) {
       addRecentSearch(searchQuery.trim(), "search");
@@ -460,12 +462,13 @@ function SearchContent() {
     if (currentTrack?.id === track.id) {
       togglePlay();
     } else {
-      // Use played track as seed for intelligent recommendation queue, not the search results list
-      playTrack(track, null, { fromSearch: true });
+      // Create priority queue following: Same Movie -> Same Album -> Same Artist -> Same Language -> Related -> Autoplay
+      const sourceList = trackList || (liveTracks && liveTracks.length > 0 ? liveTracks : null);
+      playTrack(track, sourceList, { context: "search", generatePriorityQueue: true });
     }
   };
 
-  const handleMovieCardClick = async (movie, e) => {
+  const handlePlayAlbumQuick = async (movie, e) => {
     e?.stopPropagation?.();
     e?.preventDefault?.();
     if (!movie) return;
@@ -489,14 +492,24 @@ function SearchContent() {
     if (tracksToPlay.length > 0) {
       playTrack(tracksToPlay[0], tracksToPlay);
     } else if (liveTracks.length > 0) {
-      playTrack(liveTracks[0], null, { fromSearch: true });
+      playTrack(liveTracks[0], liveTracks, { context: "search" });
+    }
+  };
+
+  const handleMovieCardClick = (movie, e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    if (!movie) return;
+
+    if (searchQuery.trim()) {
+      addRecentSearch(searchQuery.trim(), "search");
     }
 
     const albumId = movie.id || encodeURIComponent(movie.title);
     router.push(`/album/${albumId}`);
   };
 
-  const handleArtistCardClick = async (artist, e) => {
+  const handlePlayArtistQuick = async (artist, e) => {
     e?.stopPropagation?.();
     e?.preventDefault?.();
     if (!artist) return;
@@ -508,9 +521,14 @@ function SearchContent() {
     let tracksToPlay = artistTracks || [];
     if (!tracksToPlay || tracksToPlay.length === 0) {
       try {
-        const recentTracks = await searchMusicTracks(artist.name, { sort: "recent" });
-        if (recentTracks && recentTracks.length > 0) {
-          tracksToPlay = recentTracks;
+        const details = await fetchArtistDetails(artist.id, artist.name);
+        if (details?.tracks && details.tracks.length > 0) {
+          tracksToPlay = details.tracks;
+        } else {
+          const recentTracks = await searchMusicTracks(artist.name, { sort: "recent" });
+          if (recentTracks && recentTracks.length > 0) {
+            tracksToPlay = recentTracks;
+          }
         }
       } catch (err) {
         console.warn("Could not fetch artist tracks:", err);
@@ -520,10 +538,47 @@ function SearchContent() {
     if (tracksToPlay.length > 0) {
       playTrack(tracksToPlay[0], tracksToPlay);
     } else if (liveTracks.length > 0) {
-      playTrack(liveTracks[0], null, { fromSearch: true });
+      playTrack(liveTracks[0], liveTracks, { context: "search" });
+    }
+  };
+
+  const handleArtistCardClick = (artist, e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    if (!artist) return;
+
+    if (searchQuery.trim()) {
+      addRecentSearch(searchQuery.trim(), "search");
     }
 
-    router.push(`/artists/${artist.id}`);
+    const nameParam = artist.name ? `?name=${encodeURIComponent(artist.name)}` : "";
+    router.push(`/artists/${encodeURIComponent(artist.id)}${nameParam}`);
+  };
+
+  const handlePlayPlaylistQuick = (pl, e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    if (!pl) return;
+
+    if (searchQuery.trim()) {
+      addRecentSearch(searchQuery.trim(), "search");
+    }
+
+    if (pl.tracks && pl.tracks.length > 0) {
+      playTrack(pl.tracks[0], pl.tracks);
+    }
+  };
+
+  const handlePlaylistClick = (pl, e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    if (!pl) return;
+
+    if (searchQuery.trim()) {
+      addRecentSearch(searchQuery.trim(), "search");
+    }
+
+    router.push(`/playlist/${encodeURIComponent(pl.id)}`);
   };
 
   const handleDownload = async (track, e) => {
@@ -603,7 +658,7 @@ function SearchContent() {
     return (
       <div
         key={track.id || idx}
-        onClick={() => handleTrackClick(track)}
+        onClick={() => handleTrackClick(track, liveTracks)}
         className={`group flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer border ${isCurrent
           ? "bg-white/10 border-primary/30"
           : "hover:bg-white/5 border-transparent hover:border-white/5"
@@ -680,6 +735,19 @@ function SearchContent() {
             }}
           />
 
+          {/* Quick Add to Queue Button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              addToQueue(track);
+            }}
+            className="p-1 sm:p-1.5 rounded-lg text-outline hover:text-primary hover:bg-white/10 transition-colors cursor-pointer"
+            title="Add to Queue"
+          >
+            <span className="material-symbols-outlined text-[18px]">playlist_add</span>
+          </button>
+
           {/* Heart / Like Button */}
           <button
             type="button"
@@ -741,7 +809,10 @@ function SearchContent() {
             </div>
             {/* Glowing Hover Play Button */}
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <div className="w-12 h-12 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_22px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300">
+              <div
+                onClick={(e) => handlePlayAlbumQuick(album, e)}
+                className="w-12 h-12 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_22px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
+              >
                 <span className="material-symbols-outlined text-[28px]">
                   {isThisAlbumPlaying ? "pause" : "play_arrow"}
                 </span>
@@ -773,7 +844,7 @@ function SearchContent() {
               )}
             </div>
             <span className="text-[11px] text-primary font-semibold flex items-center gap-0.5 hover:underline flex-shrink-0">
-              <span>Play & Open</span>
+              <span>Open Album</span>
               <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
             </span>
           </div>
@@ -829,7 +900,10 @@ function SearchContent() {
             </div>
             {/* Glowing Hover Play Button */}
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <div className="w-12 h-12 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_22px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300">
+              <div
+                onClick={(e) => handlePlayArtistQuick(artist, e)}
+                className="w-12 h-12 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_22px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
+              >
                 <span className="material-symbols-outlined text-[28px]">
                   {isThisArtistPlaying ? "pause" : "play_arrow"}
                 </span>
@@ -879,19 +953,6 @@ function SearchContent() {
     );
   };
 
-  const handlePlaylistClick = (pl, e) => {
-    e?.stopPropagation?.();
-    e?.preventDefault?.();
-    if (!pl) return;
-    if (searchQuery.trim()) {
-      addRecentSearch(searchQuery.trim(), "search");
-    }
-    if (pl.tracks && pl.tracks.length > 0) {
-      playTrack(pl.tracks[0], pl.tracks);
-    }
-    router.push(`/playlist/${encodeURIComponent(pl.id)}?play=true`);
-  };
-
   // Small Album Card Component (matches Image 4 style: 2-column grid, badge top-left, telemetry capsule bottom)
   const renderSmallAlbumCard = (album) => {
     const isThisAlbumPlaying =
@@ -926,7 +987,10 @@ function SearchContent() {
               isThisAlbumPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}
           >
-            <div className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300">
+            <div
+              onClick={(e) => handlePlayAlbumQuick(album, e)}
+              className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300 cursor-pointer"
+            >
               <span className="material-symbols-outlined text-[18px]">
                 {isThisAlbumPlaying ? "pause" : "play_arrow"}
               </span>
@@ -1008,7 +1072,10 @@ function SearchContent() {
               isThisArtistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}
           >
-            <div className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300">
+            <div
+              onClick={(e) => handlePlayArtistQuick(artist, e)}
+              className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300 cursor-pointer"
+            >
               <span className="material-symbols-outlined text-[18px]">
                 {isThisArtistPlaying ? "pause" : "play_arrow"}
               </span>
@@ -1080,7 +1147,10 @@ function SearchContent() {
               isThisPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}
           >
-            <div className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300">
+            <div
+              onClick={(e) => handlePlayPlaylistQuick(pl, e)}
+              className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300 cursor-pointer"
+            >
               <span className="material-symbols-outlined text-[18px]">
                 {isThisPlaylistPlaying ? "pause" : "play_arrow"}
               </span>
@@ -1163,7 +1233,10 @@ function SearchContent() {
             </div>
             {/* Glowing Hover Play Button */}
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <div className="w-12 h-12 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_22px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300">
+              <div
+                onClick={(e) => handlePlayPlaylistQuick(pl, e)}
+                className="w-12 h-12 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_22px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
+              >
                 <span className="material-symbols-outlined text-[28px]">
                   {isThisPlaylistPlaying ? "pause" : "play_arrow"}
                 </span>
@@ -1200,7 +1273,7 @@ function SearchContent() {
               )}
             </div>
             <span className="text-[11px] text-primary font-semibold flex items-center gap-0.5 hover:underline flex-shrink-0">
-              <span>Play & Open</span>
+              <span>Open Playlist</span>
               <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
             </span>
           </div>
@@ -1208,7 +1281,7 @@ function SearchContent() {
           {/* Bottom Action Button (Image 2 exact match) */}
           <button
             type="button"
-            onClick={handlePlaylistClick}
+            onClick={(e) => handlePlaylistClick(pl, e)}
             className="w-full mt-3 py-2 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
           >
             <div className="flex items-center gap-1.5 min-w-0">
@@ -1249,7 +1322,10 @@ function SearchContent() {
                 <span className="uppercase tracking-wider font-bold">Artist</span>
               </div>
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300">
+                <div
+                  onClick={(e) => handlePlayArtistQuick(matchedArtist, e)}
+                  className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
+                >
                   <span className="material-symbols-outlined text-[24px]">
                     {isArtistPlaying ? "pause" : "play_arrow"}
                   </span>
@@ -1274,7 +1350,7 @@ function SearchContent() {
                 <span>{artistTracks.length > 0 ? `${artistTracks.length} Songs` : "Verified Artist"}</span>
               </div>
               <span className="text-[11px] text-primary font-semibold flex items-center gap-0.5 hover:underline flex-shrink-0">
-                <span>Play & Open</span>
+                <span>Open Artist</span>
                 <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
               </span>
             </div>
@@ -1319,7 +1395,10 @@ function SearchContent() {
                 </span>
               </div>
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300">
+                <div
+                  onClick={(e) => handlePlayAlbumQuick(alb, e)}
+                  className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
+                >
                   <span className="material-symbols-outlined text-[24px]">
                     {isAlbumPlaying || isMoviePlaying ? "pause" : "play_arrow"}
                   </span>
@@ -1350,7 +1429,7 @@ function SearchContent() {
                 )}
               </div>
               <span className="text-[11px] text-primary font-semibold flex items-center gap-0.5 hover:underline flex-shrink-0">
-                <span>Play & Open</span>
+                <span>Open Album</span>
                 <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
               </span>
             </div>
@@ -1378,7 +1457,7 @@ function SearchContent() {
       const isTopPlaying = currentTrack?.id === topSong.id && isPlaying;
       return (
         <div
-          onClick={() => handleTrackClick(topSong)}
+          onClick={() => handleTrackClick(topSong, liveTracks)}
           className="group relative p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/40 bg-surface-container/80 hover:bg-surface-container transition-all cursor-pointer shadow-lg flex flex-col justify-between select-none w-full"
         >
           <div>
@@ -1424,7 +1503,7 @@ function SearchContent() {
 
             <button
               type="button"
-              onClick={() => handleTrackClick(topSong)}
+              onClick={() => handleTrackClick(topSong, liveTracks)}
               className="w-full mt-2.5 py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
             >
               <div className="flex items-center gap-1.5 min-w-0">
@@ -1518,10 +1597,10 @@ function SearchContent() {
             })}
           </div>
 
-          {/* Recent Search History Chips (Visible only when search input is empty) */}
+          {/* Recent Search History Chips (Visible only when search input is empty - max 2 rows on mobile) */}
           {!searchQuery.trim() && recentSearches.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 text-xs">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-start sm:items-center justify-between gap-2 py-1 text-xs">
+              <div className="flex-1 min-w-0 grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar max-h-[72px] sm:max-h-[78px] md:flex md:flex-wrap md:max-h-none md:overflow-visible">
                 {recentSearches.map((item) => {
                   const labelText = typeof item === "string" ? item : item.label;
                   const itemId = typeof item === "string" ? item : item.id;
@@ -1529,12 +1608,12 @@ function SearchContent() {
                     <div
                       key={itemId}
                       onClick={() => setSearchQuery(labelText)}
-                      className="group flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container/70 hover:bg-surface-container-high text-on-surface-variant hover:text-white border border-white/10 transition-all cursor-pointer shadow-sm"
+                      className="group flex items-center gap-1.5 sm:gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-surface-container/70 hover:bg-surface-container-high text-on-surface-variant hover:text-white border border-white/10 transition-all cursor-pointer shadow-sm"
                     >
-                      <span className="material-symbols-outlined text-[15px] text-outline group-hover:text-primary transition-colors">
+                      <span className="material-symbols-outlined text-[14px] sm:text-[15px] text-outline group-hover:text-primary transition-colors">
                         search
                       </span>
-                      <span className="font-medium text-xs truncate max-w-[140px]">
+                      <span className="font-medium text-xs truncate max-w-[110px] sm:max-w-[140px]">
                         {labelText}
                       </span>
                       <button
@@ -1546,7 +1625,7 @@ function SearchContent() {
                         className="text-outline hover:text-white transition-colors flex items-center justify-center ml-0.5 cursor-pointer"
                         title="Remove"
                       >
-                        <span className="material-symbols-outlined text-[14px]">close</span>
+                        <span className="material-symbols-outlined text-[13px] sm:text-[14px]">close</span>
                       </button>
                     </div>
                   );
@@ -1554,7 +1633,7 @@ function SearchContent() {
               </div>
               <button
                 onClick={clearAllRecentSearches}
-                className="ml-auto text-xs text-outline hover:text-white font-medium whitespace-nowrap cursor-pointer transition-colors px-2 py-1"
+                className="text-xs text-outline hover:text-white font-medium whitespace-nowrap cursor-pointer transition-colors px-2 py-1 flex-shrink-0 self-center"
               >
                 Clear all
               </button>
@@ -2375,7 +2454,7 @@ function SearchContent() {
                 {selectedGenre.curatedArtists.map((artist) => (
                   <Link
                     key={artist.id}
-                    href={`/artists/${artist.id}`}
+                    href={`/artists/${artist.id}?name=${encodeURIComponent(artist.name)}`}
                     className="group p-4 rounded-2xl bg-surface-container/40 hover:bg-surface-container-high border border-white/5 hover:border-white/20 transition-all flex flex-col items-center text-center gap-3 cursor-pointer shadow-md"
                   >
                     <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden shadow-xl border-2 border-white/10 group-hover:border-primary/50 group-hover:scale-105 transition-all">

@@ -136,6 +136,7 @@ export default function Sidebar({ className = "", onClose }) {
     { label: "Self Mix", href: "/self-mix", icon: "equalizer" },
     { label: "Liked Songs", href: "/liked", icon: "favorite" },
     { label: "Offline Songs", href: "/offline", icon: "download_for_offline" },
+    { label: "Music Player", href: "/music-player", icon: "music_note" },
   ];
 
   return (
@@ -147,10 +148,12 @@ export default function Sidebar({ className = "", onClose }) {
         {/* Brand Header */}
         <div className="px-6 flex items-center justify-between">
           <Link href="/" onClick={handleNavClick} className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary via-cyan-500 to-secondary-container flex items-center justify-center shadow-[0_0_16px_rgba(6,182,212,0.45)] group-hover:scale-105 transition-transform">
-              <span className="material-symbols-outlined text-surface-container-lowest text-[22px] font-bold">
-                graphic_eq
-              </span>
+            <div className="w-9 h-9 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+              <img
+                src="/logo.png"
+                alt="Ceepeefy"
+                className="w-full h-full object-contain filter drop-shadow-[0_0_10px_rgba(0,229,255,0.45)]"
+              />
             </div>
             <span className="font-headline-md text-[20px] font-extrabold tracking-tight text-white flex items-center gap-1.5">
               Ceepeefy
@@ -178,7 +181,8 @@ export default function Sidebar({ className = "", onClose }) {
                 : pathname === item.href ||
                 (item.href === "/playlists" && pathname.startsWith("/playlist") && !pathname.startsWith("/playlist-mix")) ||
                 (item.href === "/self-mix" &&
-                  (pathname.startsWith("/self-mix") || pathname.startsWith("/artists") || pathname.startsWith("/artist")));
+                  (pathname.startsWith("/self-mix") || pathname.startsWith("/artists") || pathname.startsWith("/artist"))) ||
+                (item.href === "/music-player" && pathname.startsWith("/music-player"));
             return (
               <Link
                 key={item.href}

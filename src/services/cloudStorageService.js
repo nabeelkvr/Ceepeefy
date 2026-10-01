@@ -71,24 +71,29 @@ export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
     // 4. Assemble UI-compatible playlist objects
     const assembled = playlistsData.map((pl) => {
       const plTracks = tracksByPlaylist[pl.id] || [];
+      const isSelfMix = pl.badge === "SELF MIX" || pl.badge_variant === "cyan" || plTracks.some((t) => t.isCloud || t.source === "supabase-cloud");
+
       return {
         id: pl.id,
         title: pl.title,
         subtitle: `By ${pl.curator || "You"} • ${plTracks.length} tracks`,
-        description: pl.description || `Personal playlist "${pl.title}" created in Ceepeefy Studio Mode. High-resolution lossless playback.`,
+        description: pl.description || (isSelfMix
+          ? `Personal self mix "${pl.title}" blended by You in Ceepeefy Studio Mode.`
+          : `Personal playlist "${pl.title}" created in Ceepeefy Studio Mode. High-resolution lossless playback.`),
         curator: pl.curator || "You",
         curatorAvatar: pl.curator_avatar || "https://lh3.googleusercontent.com/aida-public/AB6AXuB0776cuJDNwyUTJA-rmqEC0bmxGrVq2yheMO1LRRjEKa8X3Cf3UEDu0hJn4mdmjyKKeTpXvIjAXGckcnVAnrz3t0pLZyIHxk3oSWIBKnTAewK0vZY8jNgt5WWU1mB33uzQZJtQJNQfehNFMnRCim5JQVgBeDcIsQ21sOVpfHhvACpeifEiQ9VMkYu25PbaQ5RDOCGsSjDtlsMuC8kifyPcZ62qnvBUyplbvUNIWKL7azjlQ_ONJ0ZS",
         songsCount: plTracks.length,
         duration: formatPlaylistDuration(plTracks),
         updatedDate: "Created today",
-        fidelity: pl.fidelity || "Personal Playlist • Hi-Res Lossless",
+        fidelity: pl.fidelity || (isSelfMix ? "Self Mix • Hi-Res Lossless" : "Personal Playlist • Hi-Res Lossless"),
         spec: pl.spec || "24-Bit • 192kHz",
-        badge: pl.badge || "CUSTOM",
-        badgeVariant: pl.badge_variant || "purple",
+        badge: pl.badge || (isSelfMix ? "SELF MIX" : "CUSTOM"),
+        badgeVariant: pl.badge_variant || (isSelfMix ? "cyan" : "purple"),
         stat: "1 Like",
         coverUrl: pl.cover_url || "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
         tracks: plTracks,
         isCustom: true,
+        isSelfMix: isSelfMix,
       };
     });
 
@@ -117,9 +122,9 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
       cover_url: playlist.coverUrl || playlist.cover_url || "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
       curator: playlist.curator || "You",
       curator_avatar: playlist.curatorAvatar || playlist.curator_avatar || "",
-      badge: playlist.badge || "CUSTOM",
-      badge_variant: playlist.badgeVariant || playlist.badge_variant || "purple",
-      fidelity: playlist.fidelity || "Personal Playlist • Hi-Res Lossless",
+      badge: playlist.badge || (playlist.isSelfMix ? "SELF MIX" : "CUSTOM"),
+      badge_variant: playlist.badgeVariant || playlist.badge_variant || (playlist.isSelfMix ? "cyan" : "purple"),
+      fidelity: playlist.fidelity || (playlist.isSelfMix ? "Self Mix • Hi-Res Lossless" : "Personal Playlist • Hi-Res Lossless"),
       spec: playlist.spec || "24-Bit • 192kHz",
       updated_at: new Date().toISOString(),
     };
@@ -447,6 +452,30 @@ export const recordRecentlyPlayedToCloud = async (track, userId = DEFAULT_USER_I
     return true;
   } catch (err) {
     console.error("[CloudService] Exception in recordRecentlyPlayedToCloud:", err);
+    return false;
+  }
+};
+
+/**
+ * Clears all recently played records for a user in Supabase
+ * @param {string} userId
+ * @returns {Promise<boolean>}
+ */
+export const clearRecentlyPlayedInCloud = async (userId = DEFAULT_USER_ID) => {
+  if (!supabase || !isSupabaseConfigured()) return false;
+  try {
+    const { error } = await supabase
+      .from("recently_played")
+      .delete()
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("[CloudService] Failed to clear recently_played:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[CloudService] Exception in clearRecentlyPlayedInCloud:", err);
     return false;
   }
 };

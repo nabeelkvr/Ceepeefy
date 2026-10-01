@@ -1,6 +1,6 @@
 export default function manifest() {
   return {
-    name: "Ceepeefy — Studio Music Player",
+    name: "Ceepeefy",
     short_name: "Ceepeefy",
     description: "Cinematic, high-fidelity music streaming progressive web application.",
     start_url: "/",

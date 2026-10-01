@@ -2271,6 +2271,9 @@ export const getArtistByIdOrSlug = (idOrSlug) => {
   if (dynamicArtistsCache.has(cleanId)) return dynamicArtistsCache.get(cleanId);
   if (dynamicArtistsCache.has(slugified)) return dynamicArtistsCache.get(slugified);
 
+  // If cleanId is purely numeric (e.g. JioSaavn artist ID), do not synthesize a fake numeric name
+  if (/^\d+$/.test(cleanId)) return null;
+
   // Synthesize artist profile if user navigates to an artist not yet in the curated list
   const cleanNameForSynth = cleanId.replace(/-/g, " ");
   const formattedName = cleanNameForSynth

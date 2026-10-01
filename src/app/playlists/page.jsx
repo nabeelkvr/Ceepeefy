@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMusic } from "../../context/MusicContext";
 import { formatPlaylistDuration } from "../../utils/playlistUtils";
+import PlaylistCover from "../../components/PlaylistCover";
 
 export default function PlaylistsPage() {
   const router = useRouter();
@@ -154,142 +155,41 @@ export default function PlaylistsPage() {
           </span>
         </div>
 
-        {/* 1. Mobile Horizontal List (< md) matching Image 2 */}
-        <div className="flex flex-col gap-2.5 md:hidden">
-          {/* 'Create New Playlist' Horizontal Card */}
+        {/* Playlist Card Grid (matching recent played songs card style on mobile & desktop) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap items-start justify-start gap-3 sm:gap-4 md:gap-5">
+          {/* 'Create New Playlist' Card */}
           <div
             onClick={() => {
               setNewTitle("");
               setShowCreateModal(true);
             }}
-            className="flex items-center gap-3.5 p-3 rounded-2xl glass-card border border-dashed border-cyan-500/40 hover:border-cyan-400 active:scale-[0.98] transition-all cursor-pointer shadow-lg group"
-          >
-            <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary flex-shrink-0 group-hover:scale-105 group-hover:bg-primary group-hover:text-surface-container-lowest transition-all">
-              <span className="material-symbols-outlined text-[24px]">add</span>
-            </div>
-            <div className="flex flex-col min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
-                  Create New Playlist
-                </span>
-                <span className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/30 flex-shrink-0">
-                  LOSSLESS
-                </span>
-              </div>
-              <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                Start a personal collection
-              </p>
-            </div>
-            <span className="material-symbols-outlined text-outline text-[20px] mr-1">
-              chevron_right
-            </span>
-          </div>
-
-          {/* User Created Playlists Horizontal Cards */}
-          {filteredCreated.map((pl) => {
-            const tracks = pl.tracks || [];
-            const isPlaylistPlaying =
-              isPlaying && tracks.some((t) => t.id === currentTrack?.id);
-
-            return (
-              <div
-                key={pl.id}
-                onClick={() => router.push(`/playlist/${pl.id}`)}
-                className="flex items-center gap-3.5 p-3 rounded-2xl glass-card border border-white/5 hover:border-primary/40 active:scale-[0.98] transition-all cursor-pointer shadow-lg group"
-              >
-                <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-surface-container-highest flex-shrink-0 shadow border border-white/10">
-                  <img
-                    src={pl.coverUrl}
-                    alt={pl.title}
-                    className="w-full h-full object-cover"
-                  />
-                  {isPlaylistPlaying && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-primary text-[16px] animate-pulse">
-                        graphic_eq
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-col min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
-                      {pl.title}
-                    </h3>
-                    <span className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/40 flex-shrink-0">
-                      YOU
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                    {tracks.length} tracks • {formatPlaylistDuration(tracks)}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={(e) => handlePlaylistPlay(pl, e)}
-                    className="w-9 h-9 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_12px_rgba(76,215,246,0.5)] active:scale-90 transition-transform cursor-pointer"
-                    title={isPlaylistPlaying ? "Pause Playlist" : "Play Playlist"}
-                  >
-                    <span className="material-symbols-outlined text-[20px]">
-                      {isPlaylistPlaying ? "pause" : "play_arrow"}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteCustomPlaylist(pl.id)}
-                    className="w-8 h-8 rounded-full text-outline hover:text-red-400 hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
-                    title="Delete playlist"
-                  >
-                    <span className="material-symbols-outlined text-[17px]">delete</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 2. Desktop Grid (md:) */}
-        <div className="hidden md:flex md:flex-wrap items-start justify-start gap-5">
-          {/* First Card: 'Create New Playlist' Box */}
-          <div
-            onClick={() => {
-              setNewTitle("");
-              setShowCreateModal(true);
-            }}
-            className="w-full sm:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border border-white/10 hover:border-primary/50 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
+            className="w-full md:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 hover:bg-surface-container/90 active:scale-[0.98] transition-all duration-300 hover:-translate-y-1.5 shadow-xl cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
           >
             <div>
-              {/* Aspect Square Area matching playlist cover box */}
-              <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden border-2 border-dashed border-white/15 group-hover:border-primary/60 bg-surface-container-high/40 group-hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1 sm:gap-1.5 mb-2.5 sm:mb-3">
-                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-primary/10 border border-primary/30 group-hover:scale-110 group-hover:bg-primary text-primary group-hover:text-surface-container-lowest flex items-center justify-center transition-all shadow-[0_0_20px_rgba(76,215,246,0.3)]">
-                  <span className="material-symbols-outlined text-[20px] sm:text-[24px]">add</span>
+              <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden border border-dashed border-white/15 group-hover:border-primary/60 bg-surface-container-high/40 group-hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-1 sm:gap-1.5 mb-2 sm:mb-3">
+                <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-primary/10 border border-primary/30 group-hover:scale-110 group-hover:bg-primary text-primary group-hover:text-surface-container-lowest flex items-center justify-center transition-all shadow-[0_0_20px_rgba(76,215,246,0.3)]">
+                  <span className="material-symbols-outlined text-[18px] sm:text-[24px]">add</span>
                 </div>
-                <span className="text-xs font-bold text-white/90 group-hover:text-primary transition-colors">
+                <span className="text-[11px] sm:text-xs font-bold text-white/90 group-hover:text-primary transition-colors">
                   New Playlist
                 </span>
-                <span className="text-[9px] sm:text-[10px] text-outline font-mono uppercase tracking-wider">
-                  Click to create
+                <span className="text-[8.5px] sm:text-[10px] text-outline font-mono uppercase tracking-wider">
+                  Create Collection
                 </span>
               </div>
-
-              {/* Title and metadata matching playlist card structure */}
-              <div className="flex flex-col">
+              <div className="flex flex-col min-w-0">
                 <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
                   Create New Playlist
                 </h3>
                 <p className="text-[10px] sm:text-[11px] text-on-surface-variant mt-0.5 truncate">
-                  Start a personal collection
+                  Start personal collection
                 </p>
               </div>
             </div>
-
             <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-outline mt-2">
               <span className="flex items-center gap-1 font-mono text-[9px] sm:text-[10px] text-primary">
-                <span className="material-symbols-outlined text-[12px] sm:text-[13px]">queue_music</span>
-                Custom Playlist
+                <span className="material-symbols-outlined text-[11px] sm:text-[13px]">queue_music</span>
+                Custom
               </span>
               <span className="font-mono text-[9px] sm:text-[10px]">Lossless</span>
             </div>
@@ -302,24 +202,24 @@ export default function PlaylistsPage() {
               isPlaying && tracks.some((t) => t.id === currentTrack?.id);
 
             return (
-              <Link
+              <div
                 key={pl.id}
-                href={`/playlist/${pl.id}`}
-                className="w-full sm:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
+                onClick={() => router.push(`/playlist/${pl.id}`)}
+                className="w-full md:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
               >
                 <div>
-                  {/* Playlist Cover Image with Play Overlay */}
-                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-3">
-                    <img
-                      src={pl.coverUrl}
+                  <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2 sm:mb-3">
+                    <PlaylistCover
+                      tracks={tracks}
+                      fallbackUrl={pl.coverUrl}
                       alt={pl.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="group-hover:scale-105 transition-transform duration-500"
                     />
 
                     {/* Badge top-left */}
-                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-md backdrop-blur-md border bg-primary/20 text-primary border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.3)] flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[11px]">person</span>
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap z-10">
+                      <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-primary/20 text-primary border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.3)] flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[10px] sm:text-[11px]">person</span>
                         YOU
                       </span>
                     </div>
@@ -332,21 +232,25 @@ export default function PlaylistsPage() {
                         e.stopPropagation();
                         deleteCustomPlaylist(pl.id);
                       }}
-                      className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10"
+                      className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center transition-all cursor-pointer z-10"
                       title="Delete playlist"
                     >
-                      <span className="material-symbols-outlined text-[15px]">delete</span>
+                      <span className="material-symbols-outlined text-[14px]">delete</span>
                     </button>
 
                     {/* Play Button Overlay */}
-                    <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div
+                      className={`absolute inset-0 bg-black/40 flex items-end justify-end p-2.5 sm:p-3 transition-opacity duration-300 ${
+                        isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                      }`}
+                    >
                       <button
                         type="button"
                         onClick={(e) => handlePlaylistPlay(pl, e)}
-                        className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.8)] hover:scale-110 active:scale-95 transition-all"
+                        className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95 z-10"
                         title={isPlaylistPlaying ? "Pause Playlist" : "Play Playlist"}
                       >
-                        <span className="material-symbols-outlined text-[24px]">
+                        <span className="material-symbols-outlined text-[18px] sm:text-[24px]">
                           {isPlaylistPlaying ? "pause" : "play_arrow"}
                         </span>
                       </button>
@@ -354,37 +258,31 @@ export default function PlaylistsPage() {
                   </div>
 
                   {/* Playlist Metadata */}
-                  <div className="flex flex-col">
-                    <h3 className="text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
+                  <div className="flex flex-col min-w-0">
+                    <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
                       {pl.title}
                     </h3>
-                    <p className="text-[11px] text-on-surface-variant line-clamp-1 mt-0.5">
+                    <p className="text-[10px] sm:text-[11px] text-on-surface-variant line-clamp-1 mt-0.5">
                       {pl.description || `Playlist by ${pl.curator || "You"}`}
                     </p>
                   </div>
                 </div>
 
-                {/* Modern Audio Telemetry Capsule for Track Count & Duration */}
-                <div className="pt-2 mt-2">
-                  <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
-                    <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] sm:text-[10px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
-                      <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
-                        <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
-                        <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
-                        <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
-                      </div>
+                {/* Telemetry capsule */}
+                <div className="pt-2 mt-auto">
+                  <div className="flex items-center justify-between gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
+                    <div className="flex items-center gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9px] sm:text-[10px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
                       <span className="tabular-nums whitespace-nowrap">
                         {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
                       </span>
                     </div>
-
-                    <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9.5px] sm:text-[10px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
-                      <span className="material-symbols-outlined text-[12px] text-outline flex-shrink-0">schedule</span>
+                    <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9px] sm:text-[10px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
+                      <span className="material-symbols-outlined text-[10px] sm:text-[12px] text-outline flex-shrink-0">schedule</span>
                       <span className="truncate">{formatPlaylistDuration(tracks)}</span>
                     </div>
                   </div>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>
@@ -426,8 +324,8 @@ export default function PlaylistsPage() {
           </div>
         ) : (
           <>
-            {/* 1. Mobile Horizontal List (< md) matching Image 2 */}
-            <div className="flex flex-col gap-2.5 md:hidden">
+            {/* Added by you Card Grid (matching recent played songs card style on mobile & desktop) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap items-start justify-start gap-3 sm:gap-4 md:gap-5">
               {filteredAdded.map((pl) => {
                 const tracks = pl.tracks || [];
                 const isPlaylistPlaying =
@@ -439,99 +337,26 @@ export default function PlaylistsPage() {
                   <div
                     key={pl.id}
                     onClick={() => router.push(linkUrl)}
-                    className="flex items-center gap-3.5 p-3 rounded-2xl glass-card border border-white/5 hover:border-primary/40 active:scale-[0.98] transition-all cursor-pointer shadow-lg group"
-                  >
-                    <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-surface-container-highest flex-shrink-0 shadow border border-white/10">
-                      <img
-                        src={pl.coverUrl}
-                        alt={pl.title}
-                        className="w-full h-full object-cover"
-                      />
-                      {isPlaylistPlaying && (
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                          <span className="material-symbols-outlined text-primary text-[16px] animate-pulse">
-                            graphic_eq
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
-                          {pl.title}
-                        </h3>
-                        <span className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-950/80 text-primary border border-primary/50 flex-shrink-0">
-                          PINNED
-                        </span>
-                        {isAlbum && (
-                          <span className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-600/40 flex-shrink-0">
-                            ALBUM
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                        {pl.trackCount || tracks.length || 0} tracks • {pl.curator || "Official"}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={(e) => handlePlaylistPlay(pl, e)}
-                        className="w-9 h-9 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_12px_rgba(76,215,246,0.5)] active:scale-90 transition-transform cursor-pointer"
-                        title={isPlaylistPlaying ? "Pause" : "Play"}
-                      >
-                        <span className="material-symbols-outlined text-[20px]">
-                          {isPlaylistPlaying ? "pause" : "play_arrow"}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeAddedPlaylist(pl.id)}
-                        className="w-8 h-8 rounded-full text-outline hover:text-amber-400 hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
-                        title="Unpin from library"
-                      >
-                        <span className="material-symbols-outlined text-[17px]">close</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 2. Desktop Grid (md:) */}
-            <div className="hidden md:flex md:flex-wrap items-start justify-start gap-5">
-              {filteredAdded.map((pl) => {
-                const tracks = pl.tracks || [];
-                const isPlaylistPlaying =
-                  isPlaying && tracks.some((t) => t.id === currentTrack?.id);
-                const isAlbum = pl.type === "album" || pl.isAlbum;
-                const linkUrl = isAlbum ? `/album/${pl.id}` : `/playlist/${pl.id}`;
-
-                return (
-                  <Link
-                    key={pl.id}
-                    href={linkUrl}
-                    className="w-full sm:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
+                    className="w-full md:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
                   >
                     <div>
                       {/* Cover Image with Play Overlay */}
-                      <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-3">
-                        <img
-                          src={pl.coverUrl}
+                      <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2 sm:mb-3">
+                        <PlaylistCover
+                          tracks={tracks}
+                          fallbackUrl={pl.coverUrl}
                           alt={pl.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          className="group-hover:scale-105 transition-transform duration-500"
                         />
 
                         {/* Badges top-left */}
-                        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/80 text-primary border-primary/50 shadow-[0_0_12px_rgba(76,215,246,0.3)] flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[11px] rotate-45">push_pin</span>
+                        <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap z-10">
+                          <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/80 text-primary border-primary/50 shadow-[0_0_12px_rgba(76,215,246,0.3)] flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[10px] sm:text-[11px] rotate-45">push_pin</span>
                             PINNED
                           </span>
                           {isAlbum && (
-                            <span className="text-[8.5px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded-md backdrop-blur-md border bg-amber-950/80 text-amber-300 border-amber-600/40">
+                            <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-amber-950/80 text-amber-300 border-amber-600/40">
                               ALBUM
                             </span>
                           )}
@@ -545,21 +370,25 @@ export default function PlaylistsPage() {
                             e.stopPropagation();
                             removeAddedPlaylist(pl.id);
                           }}
-                          className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10"
+                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center transition-all cursor-pointer z-10"
                           title="Unpin from library"
                         >
-                          <span className="material-symbols-outlined text-[15px]">close</span>
+                          <span className="material-symbols-outlined text-[14px]">close</span>
                         </button>
 
                         {/* Play Button Overlay */}
-                        <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div
+                          className={`absolute inset-0 bg-black/40 flex items-end justify-end p-2.5 sm:p-3 transition-opacity duration-300 ${
+                            isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                          }`}
+                        >
                           <button
                             type="button"
                             onClick={(e) => handlePlaylistPlay(pl, e)}
-                            className="w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.8)] hover:scale-110 active:scale-95 transition-all"
+                            className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95 z-10"
                             title={isPlaylistPlaying ? "Pause" : "Play"}
                           >
-                            <span className="material-symbols-outlined text-[24px]">
+                            <span className="material-symbols-outlined text-[18px] sm:text-[24px]">
                               {isPlaylistPlaying ? "pause" : "play_arrow"}
                             </span>
                           </button>
@@ -567,37 +396,32 @@ export default function PlaylistsPage() {
                       </div>
 
                       {/* Metadata */}
-                      <div className="flex flex-col">
-                        <h3 className="text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
+                      <div className="flex flex-col min-w-0">
+                        <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
                           {pl.title}
                         </h3>
-                        <p className="text-[11px] text-on-surface-variant line-clamp-1 mt-0.5">
+                        <p className="text-[10px] sm:text-[11px] text-on-surface-variant line-clamp-1 mt-0.5">
                           {pl.curator || pl.description || "Curated collection"}
                         </p>
                       </div>
                     </div>
 
-                    {/* Modern Audio Telemetry Capsule for Track Count & Duration */}
-                    <div className="pt-2 mt-2">
-                      <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
-                        <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] sm:text-[10px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
-                          <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
-                            <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
-                            <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
-                            <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
-                          </div>
+                    {/* Telemetry Capsule for Track Count & Duration */}
+                    <div className="pt-2 mt-auto">
+                      <div className="flex items-center justify-between gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
+                        <div className="flex items-center gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9px] sm:text-[10px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
                           <span className="tabular-nums whitespace-nowrap">
                             {pl.trackCount || tracks.length} {(pl.trackCount || tracks.length) === 1 ? "track" : "tracks"}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9.5px] sm:text-[10px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
-                          <span className="material-symbols-outlined text-[12px] text-outline flex-shrink-0">schedule</span>
+                        <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9px] sm:text-[10px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
+                          <span className="material-symbols-outlined text-[10px] sm:text-[12px] text-outline flex-shrink-0">schedule</span>
                           <span className="truncate">{formatPlaylistDuration(tracks)}</span>
                         </div>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 );
               })}
             </div>

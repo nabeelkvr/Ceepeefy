@@ -8,7 +8,7 @@ import {
   getArtistByIdOrSlug,
   getTracksByArtist,
 } from "../../../data/nocturneData";
-import { searchMusicTracks, fetchArtistImage } from "../../../services/audioService";
+import { searchMusicTracks, fetchArtistDetails, fetchArtistImage } from "../../../services/audioService";
 import DownloadButton from "../../../components/DownloadButton";
 import SongOptionsMenu from "../../../components/SongOptionsMenu";
 
@@ -16,6 +16,7 @@ export default function ArtistPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const rawId = params?.id || "artist-kendrick";
+  const nameParam = searchParams?.get("name");
   const shouldAutoPlay = searchParams?.get("play") === "true";
   const hasAutoPlayedRef = useRef(false);
 
@@ -37,124 +38,96 @@ export default function ArtistPage() {
   const [isLoadingSongs, setIsLoadingSongs] = useState(true);
   const [downloadingId, setDownloadingId] = useState(null);
 
-  // Resolve artist by ID, slug, or synthesized profile
-  const artist = getArtistByIdOrSlug(rawId) || {
-    id: "artist-kendrick",
-    name: "Kendrick Lamar",
-    role: "Artist",
-    genre: "Hip-Hop",
-    followers: "42.8M",
-    monthlyListeners: "68,410,200",
-    avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuDAoDFYuXN19sLqP_GrcesAcAuwLsE1AP14GF-sKp_jT5FXug1Vrw5EhjLnWEwRqKjEya4utnmCPI451cYilIC7N1kSIlW01XHl-sSKjsZL1oKW8yx6waaFSs8uyHVr6IVpSF3c_XlCGbrzfTWYpq81AAfs179zeSz5iEpKHH7w1va0qzxc2NU00p-odZphmeaUCzhrIzV6-NThvsQTEY_GrUiE_dj5waV_S8ah5tbNIbyrJje2e3QR",
-    bio: "Pulitzer Prize-winning musical visionary bridging experimental poetry with seismic low-end frequencies."
-  };
+  // Initial artist object (either from Nocturne catalog or placeholder while fetching)
+  const initialArtist = (() => {
+    const local = getArtistByIdOrSlug(rawId);
+    if (local && !/^\d+$/.test(local.name)) return local;
+    const initialName = nameParam || (/^\d+$/.test(rawId) ? "" : rawId.replace(/^artist[-_]/i, "").replace(/-/g, " "));
+    return {
+      id: rawId,
+      name: initialName,
+      role: "Artist",
+      genre: "Music",
+      followers: "1.2M",
+      monthlyListeners: "3,200,000",
+      avatar: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+      bio: "Acclaimed recording artist renowned for captivating vocal performances and studio-grade acoustics.",
+    };
+  })();
 
-  const [artistAvatar, setArtistAvatar] = useState(artist?.avatar);
+  const [artist, setArtist] = useState(initialArtist);
+  const [artistAvatar, setArtistAvatar] = useState(initialArtist.avatar);
 
-  // Fetch dynamic high-resolution profile photo
+  // Normalize song title to filter duplicates
+  function normalizeSongTitle(title) {
+    if (!title) return "";
+    return title
+      .replace(/&quot;/g, "")
+      .replace(/&#039;/g, "")
+      .replace(/&#39;/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/\s*[\(\[](?:from|feat\.?|ft\.?|with|original|soundtrack|telugu|tamil|hindi|kannada|malayalam|version|remix|lyrical|video|audio|extended|slowed|reverb|ost|bgm)[^\)\]]*[\)\]]/gi, "")
+      .replace(/\s*-\s*(?:from|telugu|tamil|hindi|kannada|malayalam|remix|lyrical|version|soundtrack)[^\-]*/gi, "")
+      .replace(/\s*[\(\[][^\)\]]*[\)\]]/g, "")
+      .replace(/[^a-zA-Z0-9\s]/g, "")
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+
+  // Automatically fetch full artist details & songs
   useEffect(() => {
     let isCancelled = false;
-    if (!artist?.name) return;
 
-    const resolvePhoto = async () => {
-      try {
-        const photo = await fetchArtistImage(artist.name);
-        if (!isCancelled && photo) {
-          setArtistAvatar(photo);
-        }
-      } catch (err) {
-        console.warn("Could not fetch artist avatar:", err);
-      }
-    };
-
-    resolvePhoto();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [artist?.name]);
-
-/**
- * Normalizes song title to filter out duplicate movie variants and releases
- */
-function normalizeSongTitle(title) {
-  if (!title) return "";
-  return title
-    .replace(/&quot;/g, "")
-    .replace(/&#039;/g, "")
-    .replace(/&#39;/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/\s*[\(\[](?:from|feat\.?|ft\.?|with|original|soundtrack|telugu|tamil|hindi|kannada|malayalam|version|remix|lyrical|video|audio|extended|slowed|reverb|ost|bgm)[^\)\]]*[\)\]]/gi, "")
-    .replace(/\s*-\s*(?:from|telugu|tamil|hindi|kannada|malayalam|remix|lyrical|version|soundtrack)[^\-]*/gi, "")
-    .replace(/\s*[\(\[][^\)\]]*[\)\]]/g, "")
-    .replace(/[^a-zA-Z0-9\s]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
-}
-
-  // Automatically fetch live popular songs for this artist via the live search API
-  useEffect(() => {
-    let isCancelled = false;
-    if (!artist?.name) return;
-
-    const fetchSongs = async () => {
+    const loadArtistData = async () => {
       setIsLoadingSongs(true);
       try {
-        const liveResults = await searchMusicTracks(artist.name, { sort: "recent" });
-        if (!isCancelled) {
-          if (liveResults && liveResults.length > 0) {
-            // 1. Sort by:
-            // a) Primary artist match (tracks by this artist first)
-            // b) Recency (latest release year first)
-            const aName = (artist.name || "").toLowerCase();
-            const sortedByRecency = [...liveResults].sort((a, b) => {
-              const aMatch = a.artist?.toLowerCase().includes(aName);
-              const bMatch = b.artist?.toLowerCase().includes(aName);
-              if (aMatch && !bMatch) return -1;
-              if (!aMatch && bMatch) return 1;
+        const details = await fetchArtistDetails(rawId, nameParam || artist?.name);
+        if (!isCancelled && details && details.artist) {
+          setArtist(details.artist);
+          if (details.artist.avatar) {
+            setArtistAvatar(details.artist.avatar);
+          }
 
-              const yearA = parseInt(a.year || "0", 10);
-              const yearB = parseInt(b.year || "0", 10);
-              if (yearB !== yearA) return yearB - yearA;
+          let tracks = details.tracks || [];
 
-              return 0;
-            });
-
-            // 2. Strictly deduplicate to only keep original, unique songs (no duplicates)
-            const seen = new Set();
-            const uniqueTracks = [];
-            for (const t of sortedByRecency) {
-              const norm = normalizeSongTitle(t.title);
-              if (!norm || seen.has(norm)) continue;
-              seen.add(norm);
-              uniqueTracks.push(t);
+          // If we got fewer than 10 tracks, also search by artist name to gather any other popular releases
+          if (tracks.length < 10 && details.artist.name && !/^\d+$/.test(details.artist.name)) {
+            try {
+              const liveResults = await searchMusicTracks(details.artist.name, { sort: "recent" });
+              if (liveResults && liveResults.length > 0) {
+                const seenIds = new Set(tracks.map((t) => t.id));
+                const seenTitles = new Set(tracks.map((t) => normalizeSongTitle(t.title)));
+                for (const t of liveResults) {
+                  const norm = normalizeSongTitle(t.title);
+                  if (!seenIds.has(t.id) && !seenTitles.has(norm)) {
+                    seenIds.add(t.id);
+                    seenTitles.add(norm);
+                    tracks.push(t);
+                  }
+                }
+              }
+            } catch (extraErr) {
+              console.warn("Could not fetch extra tracks:", extraErr);
             }
+          }
 
-            // Cap at 20 unique recent tracks
-            const finalTracks = uniqueTracks.slice(0, 20);
-            setArtistTracks(finalTracks);
+          if (tracks.length === 0) {
+            const localTracks = getTracksByArtist(details.artist.id);
+            tracks = localTracks.length > 0 ? localTracks : NOCTURNE_TRACKS.slice(0, 15);
+          }
 
-            if (shouldAutoPlay && !hasAutoPlayedRef.current && finalTracks.length > 0) {
-              hasAutoPlayedRef.current = true;
-              playTrack(finalTracks[0], finalTracks);
-            }
-          } else {
-            // Fallback to local catalog
-            const localTracks = getTracksByArtist(artist.id);
-            const resolved = localTracks.length > 0 ? localTracks : NOCTURNE_TRACKS.slice(0, 8);
-            setArtistTracks(resolved.slice(0, 20));
+          setArtistTracks(tracks);
 
-            if (shouldAutoPlay && !hasAutoPlayedRef.current && resolved.length > 0) {
-              hasAutoPlayedRef.current = true;
-              playTrack(resolved[0], resolved);
-            }
+          if (shouldAutoPlay && !hasAutoPlayedRef.current && tracks.length > 0) {
+            hasAutoPlayedRef.current = true;
+            playTrack(tracks[0], tracks);
           }
         }
       } catch (err) {
+        console.warn("Failed to load artist details:", err);
         if (!isCancelled) {
-          console.warn("Failed to fetch live artist songs, using local catalog:", err);
-          const localTracks = getTracksByArtist(artist.id);
+          const localTracks = getTracksByArtist(rawId);
           setArtistTracks((localTracks.length > 0 ? localTracks : NOCTURNE_TRACKS.slice(0, 8)).slice(0, 20));
         }
       } finally {
@@ -164,18 +137,18 @@ function normalizeSongTitle(title) {
       }
     };
 
-    fetchSongs();
+    loadArtistData();
 
     return () => {
       isCancelled = true;
     };
-  }, [artist?.name, artist?.id, shouldAutoPlay]);
+  }, [rawId, nameParam, shouldAutoPlay]);
 
   const displayTracks = artistTracks;
 
   const isCurrentArtistPlaying =
     isPlaying &&
-    (currentTrack?.artist?.toLowerCase().includes(artist.name.toLowerCase()) ||
+    (currentTrack?.artist?.toLowerCase().includes((artist.name || "").toLowerCase()) ||
       displayTracks.some((t) => t.id === currentTrack?.id));
 
   const handleMasterPlay = () => {
@@ -215,9 +188,9 @@ function normalizeSongTitle(title) {
       const link = document.createElement("a");
       link.href = blobUrl;
 
-      const safeArtist = (track.artist || artist.name || "Unknown Artist").replace(/[\/\\?%*:|"<>]/g, "").trim();
+      const safeArtist = (track.artist || artist.name || "").replace(/[\/\\?%*:|"<>]/g, "").trim();
       const safeTitle = (track.title || "Track").replace(/[\/\\?%*:|"<>]/g, "").trim();
-      const filename = safeArtist && safeTitle ? `${safeArtist} - ${safeTitle}.m4a` : `${safeTitle || "audio"}.m4a`;
+      const filename = safeArtist ? `${safeTitle} - ${safeArtist}.m4a` : `${safeTitle || "audio"}.m4a`;
       link.download = filename;
 
       document.body.appendChild(link);

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   NOCTURNE_TRACKS,
   NOCTURNE_ARTISTS,
@@ -12,8 +12,10 @@ import { getDirectAudioStreamUrl } from "../services/audioService";
 import {
   getLocalAudioUrl,
   deleteLocalAudioFile,
-  deleteLocalAudioFiles
+  deleteLocalAudioFiles,
+  getAllLocalAudioRecords,
 } from "../services/localAudioStorage";
+import { getLocalDeviceTrackUrl } from "../services/localMusicService";
 import {
   getOfflineAudioUrl,
   getOfflineTracks,
@@ -44,9 +46,14 @@ import {
   removeLikedSongFromCloud,
   fetchRecentlyPlayedFromCloud,
   recordRecentlyPlayedToCloud,
+  clearRecentlyPlayedInCloud,
   migrateLocalDataToSupabase,
 } from "../services/cloudStorageService";
-import { deleteSelfMixFromCloud } from "../services/supabaseClient";
+import {
+  deleteSelfMixFromCloud,
+  fetchSelfMixesFromCloud,
+} from "../services/supabaseClient";
+import { generateRecommendedQueue } from "../utils/recommendationEngine";
 
 export const DEFAULT_MOCK_TRACK_IDS = new Set([
   "track-midnight-pulse",
@@ -197,15 +204,28 @@ export const MusicProvider = ({ children }) => {
       await migrateLocalDataToSupabase(userId);
 
       // 2. Query fresh cloud data from Supabase
-      const [cloudPlaylists, cloudLiked, cloudRecents] = await Promise.all([
+      const [cloudPlaylists, cloudLiked, cloudRecents, cloudSelfMixes] = await Promise.all([
         fetchUserPlaylistsFromCloud(userId),
         fetchLikedSongsFromCloud(userId),
         fetchRecentlyPlayedFromCloud(userId),
+        fetchSelfMixesFromCloud(userId).catch(() => []),
       ]);
 
       // 3. Apply state updates if queries were successful
       if (cloudPlaylists !== null) {
-        setCustomPlaylists(cloudPlaylists);
+        const customOnly = cloudPlaylists.filter((pl) => !pl.isSelfMix && pl.badge !== "SELF MIX");
+        const selfMixPlaylists = cloudPlaylists.filter((pl) => pl.isSelfMix || pl.badge === "SELF MIX");
+        setCustomPlaylists(customOnly);
+        if (selfMixPlaylists.length > 0) {
+          setSelfMixes((prev) => {
+            const map = new Map();
+            selfMixPlaylists.forEach((p) => map.set(String(p.id), { ...p, isSelfMix: true }));
+            (prev || []).forEach((p) => {
+              if (!map.has(String(p.id))) map.set(String(p.id), p);
+            });
+            return Array.from(map.values());
+          });
+        }
       }
       if (cloudLiked !== null) {
         setLikedSongIds(cloudLiked.likedSongIds || []);
@@ -217,6 +237,51 @@ export const MusicProvider = ({ children }) => {
           .filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)));
         setRecentlyPlayedTracks(valid);
         setRecentlyPlayed(valid.map((t) => t.id));
+      }
+      if (Array.isArray(cloudSelfMixes) && cloudSelfMixes.length > 0) {
+        setSelfMixes((prev) => {
+          const currentList = Array.isArray(prev) ? prev : [];
+          const existingTrackIds = new Set(
+            currentList.flatMap((m) => (m.tracks || []).map((t) => String(t.id)))
+          );
+          const orphanCloudTracks = cloudSelfMixes.filter(
+            (cm) => !existingTrackIds.has(String(cm.id))
+          );
+          if (orphanCloudTracks.length === 0) return currentList;
+
+          const cloudArchivePlaylist = {
+            id: "cloud-archive-playlist",
+            title: "Cloud Audio Tracks",
+            subtitle: `By You • ${orphanCloudTracks.length} tracks`,
+            description: "Audio tracks synced from Supabase cloud storage",
+            curator: "You",
+            coverUrl: orphanCloudTracks[0]?.cover_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+            tracks: orphanCloudTracks.map((cm) => ({
+              id: cm.id,
+              title: cm.title,
+              artist: `@${cm.owner || userId}`,
+              album: "Cloud Audio",
+              audioUrl: cm.audio_url,
+              duration: cm.duration || 180,
+              durationFormatted: cm.duration_formatted || "3:00",
+              coverUrl: cm.cover_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+              isCloud: true,
+              isLocal: false,
+              source: "supabase-cloud",
+              fileName: cm.file_name,
+              fileSize: cm.file_size,
+              badge: "Cloud Mix",
+              badgeType: "cyan",
+            })),
+            isSelfMix: true,
+            isCustom: true,
+          };
+
+          return [
+            cloudArchivePlaylist,
+            ...currentList.filter((m) => m.id !== "cloud-archive-playlist"),
+          ];
+        });
       }
     } catch (err) {
       console.error("[MusicContext] Cloud sync error:", err);
@@ -257,13 +322,39 @@ export const MusicProvider = ({ children }) => {
           setRecentlyPlayedTracks(valid);
           setRecentlyPlayed(valid.map((t) => t.id));
         }
-        if (Array.isArray(accountData.selfMixes)) setSelfMixes(accountData.selfMixes);
+        let mixesToRestore = [];
+        if (Array.isArray(accountData.selfMixes) && accountData.selfMixes.length > 0) {
+          mixesToRestore = accountData.selfMixes;
+        } else {
+          try {
+            const standaloneMixes = JSON.parse(localStorage.getItem("ceepeefy_self_mixes") || "[]");
+            if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
+              mixesToRestore = standaloneMixes;
+            }
+          } catch {}
+        }
+        setSelfMixes(mixesToRestore);
+
+        // Recover any orphaned local audio records from IndexedDB
+        recoverLocalUploadedTracksAsMix(mixesToRestore).then((recovered) => {
+          if (recovered && recovered.length > mixesToRestore.length) {
+            setSelfMixes(recovered);
+            persistAccountData({ selfMixes: recovered });
+          }
+        });
       } else {
 
         const legacyLiked = JSON.parse(localStorage.getItem("nocturne_liked") || "[]");
         const legacyLikedMap = JSON.parse(localStorage.getItem("nocturne_liked_map") || "{}");
         const legacyPlaylists = JSON.parse(localStorage.getItem("nocturne_custom_playlists") || "[]");
         const legacyRecents = JSON.parse(localStorage.getItem("nocturne_recent_tracks") || "[]");
+        let fallbackMixes = [];
+        try {
+          const standaloneMixes = JSON.parse(localStorage.getItem("ceepeefy_self_mixes") || "[]");
+          if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
+            fallbackMixes = standaloneMixes;
+          }
+        } catch {}
 
         const initialAccountData = {
           likedSongIds: Array.isArray(legacyLiked) && legacyLiked.length > 0
@@ -277,7 +368,7 @@ export const MusicProvider = ({ children }) => {
           recentlyPlayed: Array.isArray(legacyRecents) && legacyRecents.length > 0
             ? legacyRecents.map((t) => t.id).filter((id) => !DEFAULT_MOCK_TRACK_IDS.has(String(id)))
             : [],
-          selfMixes: [],
+          selfMixes: fallbackMixes,
         };
         localStorage.setItem(accountStorageKey, JSON.stringify(initialAccountData));
         setLikedSongIds(initialAccountData.likedSongIds);
@@ -285,6 +376,14 @@ export const MusicProvider = ({ children }) => {
         setCustomPlaylists(initialAccountData.customPlaylists);
         setRecentlyPlayedTracks(initialAccountData.recentlyPlayedTracks);
         setRecentlyPlayed(initialAccountData.recentlyPlayed);
+        setSelfMixes(fallbackMixes);
+
+        recoverLocalUploadedTracksAsMix(fallbackMixes).then((recovered) => {
+          if (recovered && recovered.length > fallbackMixes.length) {
+            setSelfMixes(recovered);
+            persistAccountData({ selfMixes: recovered });
+          }
+        });
       }
 
       // Sync cloud state in the background immediately on login
@@ -306,11 +405,12 @@ export const MusicProvider = ({ children }) => {
     setCustomPlaylists([]);
     setRecentlyPlayedTracks([]);
     setRecentlyPlayed([]);
+    setSelfMixes([]);
     try {
       localStorage.removeItem("isLoggedIn");
       localStorage.removeItem("activeUser");
       localStorage.removeItem("ceepeefy_user");
-    } catch (e) { }
+    } catch (e) {}
   };
 
   // Audiophile App & Playback Settings
@@ -348,9 +448,63 @@ export const MusicProvider = ({ children }) => {
     });
   };
 
-  // Queue & Tracklist
-  const [queue, setQueue] = useState([]);
+  // Segregated Queue Architecture:
+  // 1. Manual Queue: tracks added manually via "Add to Queue" (takes absolute priority)
+  // 2. Automatic Queue: tracks queued via 6-tier Priority Algorithm
+  const [manualQueue, setManualQueue] = useState([]);
+  const [autoQueue, setAutoQueue] = useState([]);
+  const queue = useMemo(() => [...manualQueue, ...autoQueue], [manualQueue, autoQueue]);
   const [currentTracklist, setCurrentTracklist] = useState(NOCTURNE_TRACKS);
+
+  // Restore persisted queue and player state
+  useEffect(() => {
+    try {
+      const savedManual = localStorage.getItem("ceepeefy_manual_queue");
+      if (savedManual) {
+        const parsed = JSON.parse(savedManual);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setManualQueue(parsed);
+        }
+      }
+      const savedAuto = localStorage.getItem("ceepeefy_auto_queue");
+      if (savedAuto) {
+        const parsed = JSON.parse(savedAuto);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setAutoQueue(parsed);
+        }
+      }
+      const savedTrack = localStorage.getItem("ceepeefy_current_track");
+      if (savedTrack && !currentTrackRef.current) {
+        const parsed = JSON.parse(savedTrack);
+        if (parsed && parsed.id) {
+          setCurrentTrack(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn("[MusicContext] Could not load persisted queue state:", e);
+    }
+  }, []);
+
+  // Persist queues to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("ceepeefy_manual_queue", JSON.stringify(manualQueue));
+    } catch (e) {}
+  }, [manualQueue]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("ceepeefy_auto_queue", JSON.stringify(autoQueue));
+    } catch (e) {}
+  }, [autoQueue]);
+
+  useEffect(() => {
+    if (currentTrack) {
+      try {
+        localStorage.setItem("ceepeefy_current_track", JSON.stringify(currentTrack));
+      } catch (e) {}
+    }
+  }, [currentTrack]);
 
   // Account-bound features: accessible only when logged in
   const [likedSongIds, setLikedSongIds] = useState([]);
@@ -452,6 +606,59 @@ export const MusicProvider = ({ children }) => {
     return await serviceGetPlaylistOfflineStatus(playlistId, tracks);
   };
 
+  const recoverLocalUploadedTracksAsMix = async (existingMixes = []) => {
+    try {
+      const records = await getAllLocalAudioRecords();
+      if (!Array.isArray(records) || records.length === 0) return existingMixes;
+
+      const currentList = Array.isArray(existingMixes) ? existingMixes : [];
+      const existingTrackIds = new Set(
+        currentList.flatMap((m) => (m.tracks || []).map((t) => String(t.id)))
+      );
+      const orphanRecords = records.filter(
+        (rec) => !existingTrackIds.has(String(rec.trackId))
+      );
+      if (orphanRecords.length === 0) return currentList;
+
+      const restoredMix = {
+        id: "local-uploads-playlist",
+        title: "Device Uploads",
+        subtitle: `By You • ${orphanRecords.length} tracks`,
+        description: "Audio tracks uploaded and stored on this device in Ceepeefy Studio Mode.",
+        curator: "You",
+        coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+        tracks: orphanRecords.map((rec) => {
+          const cleanTitle = (rec.fileName || "Uploaded Audio")
+            .replace(/\.[^/.]+$/, "")
+            .replace(/[_]+/g, " ");
+          return {
+            id: rec.trackId,
+            title: cleanTitle,
+            artist: "Self Mix Upload",
+            album: "Device Uploads",
+            duration: 180,
+            durationFormatted: "3:00",
+            coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+            isLocal: true,
+            isCloud: false,
+            source: "local-upload",
+            fileName: rec.fileName || "upload.mp3",
+            fileSize: rec.fileSize || 0,
+            badge: "Self Mix",
+            badgeType: "cyan",
+          };
+        }),
+        isCustom: true,
+        isSelfMix: true,
+      };
+
+      return [restoredMix, ...currentList.filter((m) => m.id !== "local-uploads-playlist")];
+    } catch (e) {
+      console.warn("Failed to recover local uploaded tracks:", e);
+      return existingMixes;
+    }
+  };
+
   // Central Account-Bound Data Persister (localStorage cache)
   const persistAccountData = (overrides = {}) => {
     if (typeof window === "undefined") return;
@@ -466,7 +673,18 @@ export const MusicProvider = ({ children }) => {
       const nextLikedMap = overrides.likedSongsMap ?? likedSongsMap;
       const nextPlaylists = overrides.customPlaylists ?? customPlaylists;
       const nextRecents = overrides.recentlyPlayedTracks ?? recentlyPlayedTracks;
-      const nextMixes = overrides.selfMixes ?? selfMixes;
+
+      let nextMixes = overrides.selfMixes ?? selfMixes;
+      if (!Array.isArray(nextMixes) || nextMixes.length === 0) {
+        try {
+          const standaloneMixes = JSON.parse(localStorage.getItem("ceepeefy_self_mixes") || "[]");
+          if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
+            nextMixes = standaloneMixes;
+          } else if (Array.isArray(currentStored.selfMixes) && currentStored.selfMixes.length > 0) {
+            nextMixes = currentStored.selfMixes;
+          }
+        } catch {}
+      }
 
       const accountData = {
         ...currentStored,
@@ -480,6 +698,9 @@ export const MusicProvider = ({ children }) => {
       };
 
       localStorage.setItem(accountStorageKey, JSON.stringify(accountData));
+      if (Array.isArray(nextMixes) && nextMixes.length > 0) {
+        localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(nextMixes));
+      }
       // Also update legacy fallback keys
       localStorage.setItem("nocturne_liked", JSON.stringify(nextLikedIds));
       localStorage.setItem("nocturne_liked_map", JSON.stringify(nextLikedMap));
@@ -527,13 +748,39 @@ export const MusicProvider = ({ children }) => {
             setRecentlyPlayedTracks(valid);
             setRecentlyPlayed(valid.map((t) => t.id));
           }
-          if (Array.isArray(accountData.selfMixes)) setSelfMixes(accountData.selfMixes);
+          let mixesToHydrate = [];
+          if (Array.isArray(accountData.selfMixes) && accountData.selfMixes.length > 0) {
+            mixesToHydrate = accountData.selfMixes;
+          } else {
+            try {
+              const standaloneMixes = JSON.parse(localStorage.getItem("ceepeefy_self_mixes") || "[]");
+              if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
+                mixesToHydrate = standaloneMixes;
+              }
+            } catch {}
+          }
+          setSelfMixes(mixesToHydrate);
+
+          // Recover any orphaned local audio records from IndexedDB
+          recoverLocalUploadedTracksAsMix(mixesToHydrate).then((recovered) => {
+            if (recovered && recovered.length > mixesToHydrate.length) {
+              setSelfMixes(recovered);
+              persistAccountData({ selfMixes: recovered });
+            }
+          });
         } else {
           // Fallback to legacy keys
           const legacyLiked = JSON.parse(localStorage.getItem("nocturne_liked") || "[]");
           const legacyLikedMap = JSON.parse(localStorage.getItem("nocturne_liked_map") || "{}");
           const legacyPlaylists = JSON.parse(localStorage.getItem("nocturne_custom_playlists") || "[]");
           const legacyRecents = JSON.parse(localStorage.getItem("nocturne_recent_tracks") || "[]");
+          let fallbackMixes = [];
+          try {
+            const standaloneMixes = JSON.parse(localStorage.getItem("ceepeefy_self_mixes") || "[]");
+            if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
+              fallbackMixes = standaloneMixes;
+            }
+          } catch {}
 
           const initialAccountData = {
             likedSongIds: Array.isArray(legacyLiked) && legacyLiked.length > 0
@@ -547,7 +794,7 @@ export const MusicProvider = ({ children }) => {
             recentlyPlayed: Array.isArray(legacyRecents) && legacyRecents.length > 0
               ? legacyRecents.map((t) => t.id).filter((id) => !DEFAULT_MOCK_TRACK_IDS.has(String(id)))
               : [],
-            selfMixes: [],
+            selfMixes: fallbackMixes,
           };
           localStorage.setItem(accountStorageKey, JSON.stringify(initialAccountData));
           setLikedSongIds(initialAccountData.likedSongIds);
@@ -555,6 +802,14 @@ export const MusicProvider = ({ children }) => {
           setCustomPlaylists(initialAccountData.customPlaylists);
           setRecentlyPlayedTracks(initialAccountData.recentlyPlayedTracks);
           setRecentlyPlayed(initialAccountData.recentlyPlayed);
+          setSelfMixes(fallbackMixes);
+
+          recoverLocalUploadedTracksAsMix(fallbackMixes).then((recovered) => {
+            if (recovered && recovered.length > fallbackMixes.length) {
+              setSelfMixes(recovered);
+              persistAccountData({ selfMixes: recovered });
+            }
+          });
         }
 
         // Fresh cloud state fetch from Supabase (cross-device sync)
@@ -716,7 +971,20 @@ export const MusicProvider = ({ children }) => {
       isSelfMix: true,
     };
 
-    setSelfMixes((prev) => [newMix, ...prev]);
+    setSelfMixes((prev) => {
+      const updated = [newMix, ...prev];
+      try {
+        localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(updated));
+      } catch {}
+      persistAccountData({ selfMixes: updated });
+      return updated;
+    });
+
+    // Sync Self Mix to Supabase cloud so it's accessible across all devices
+    savePlaylistToCloud(newMix, currentUserId).catch((err) => {
+      console.warn("[MusicContext] Cloud sync error for self mix:", err);
+    });
+
     return newMix;
   };
 
@@ -745,30 +1013,56 @@ export const MusicProvider = ({ children }) => {
       });
     }
 
-    setSelfMixes((prev) => prev.filter((m) => String(m.id) !== String(id)));
+    setSelfMixes((prev) => {
+      const updated = prev.filter((m) => String(m.id) !== String(id));
+      try {
+        localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(updated));
+      } catch {}
+      persistAccountData({ selfMixes: updated });
+      return updated;
+    });
     setCustomPlaylists((prev) => prev.filter((p) => String(p.id) !== String(id)));
+
+    // Delete from Supabase cloud
+    deletePlaylistFromCloud(id, currentUserId).catch((err) => {
+      console.warn("[MusicContext] Cloud delete error for self mix:", err);
+    });
   };
 
   const addLocalTracksToSelfMix = (mixId, newTracks = []) => {
     if (!mixId || !Array.isArray(newTracks) || newTracks.length === 0) return;
     const normalizedNew = newTracks.map(normalizeTrack).filter(Boolean);
 
-    setSelfMixes((prev) =>
-      prev.map((mix) => {
+    let updatedTarget = null;
+    setSelfMixes((prev) => {
+      const updated = prev.map((mix) => {
         if (mix.id !== mixId) return mix;
         const existing = mix.tracks || [];
         const existingIds = new Set(existing.map((t) => String(t.id)));
         const toAdd = normalizedNew.filter((t) => !existingIds.has(String(t.id)));
-        const updated = [...existing, ...toAdd];
-        return {
+        const nextTracks = [...existing, ...toAdd];
+        const nextMix = {
           ...mix,
-          tracks: updated,
-          songsCount: updated.length,
-          duration: formatPlaylistDuration(updated),
-          subtitle: `By You • ${updated.length} tracks`,
+          tracks: nextTracks,
+          songsCount: nextTracks.length,
+          duration: formatPlaylistDuration(nextTracks),
+          subtitle: `By You • ${nextTracks.length} tracks`,
         };
-      })
-    );
+        updatedTarget = nextMix;
+        return nextMix;
+      });
+      try {
+        localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(updated));
+      } catch {}
+      persistAccountData({ selfMixes: updated });
+      return updated;
+    });
+
+    if (updatedTarget) {
+      savePlaylistToCloud(updatedTarget, currentUserId).catch((err) => {
+        console.warn("[MusicContext] Cloud update error for self mix:", err);
+      });
+    }
   };
 
   const addTrackToPlaylist = (playlistId, track) => {
@@ -867,13 +1161,32 @@ export const MusicProvider = ({ children }) => {
   const repeatModeRef = useRef(repeatMode);
   const currentTrackRef = useRef(currentTrack);
   const currentTracklistRef = useRef(currentTracklist);
+  const manualQueueRef = useRef(manualQueue);
+  const autoQueueRef = useRef(autoQueue);
   const queueRef = useRef(queue);
   const isShuffleRef = useRef(isShuffle);
+
+  // Centralized Playback History (tracks played prior to current song)
+  const [playbackHistory, setPlaybackHistory] = useState([]);
+  const playbackHistoryRef = useRef([]);
+  useEffect(() => { playbackHistoryRef.current = playbackHistory; }, [playbackHistory]);
+
+  // Derived queue availability for Next/Previous button states across all devices
+  const hasNextTrack = Boolean((queue && queue.length > 0) || isAutoplayEnabled);
+  const hasPrevTrack = Boolean(
+    (playbackHistory && playbackHistory.length > 0) ||
+    (currentTracklist &&
+      currentTracklist.length > 0 &&
+      currentTracklist.findIndex((t) => String(t.id) === String(currentTrack?.id)) > 0) ||
+    currentTime > 3
+  );
 
   // Sync ref values to avoid stale closures in audio callbacks
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
   useEffect(() => { currentTracklistRef.current = currentTracklist; }, [currentTracklist]);
+  useEffect(() => { manualQueueRef.current = manualQueue; }, [manualQueue]);
+  useEffect(() => { autoQueueRef.current = autoQueue; }, [autoQueue]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
   useEffect(() => { isShuffleRef.current = isShuffle; }, [isShuffle]);
   useEffect(() => { isAutoplayEnabledRef.current = isAutoplayEnabled; }, [isAutoplayEnabled]);
@@ -895,6 +1208,178 @@ export const MusicProvider = ({ children }) => {
       } catch { }
     }
   }, [likedSongIds, likedSongsMap]);
+
+  // =========================================================================
+  // Background Queue Pre-download & Caching Engine
+  // Automatically pre-downloads/caches the exact next song in the playback queue
+  // while the current song is playing, guaranteeing zero-buffering transitions.
+  // =========================================================================
+  const prefetchCacheRef = useRef(new Map()); // Map<trackId, { audioUrl, blobUrl, preloader }>
+  const currentPrefetchAbortRef = useRef(null);
+  const currentPrefetchTrackIdRef = useRef(null);
+
+  // Computes the exact next track that will play based on strict queue priority:
+  // 1. Manual Queue -> 2. Auto Queue -> 3. Tracklist Sequence
+  const resolveNextTrackInQueue = useCallback(() => {
+    const mQ = manualQueueRef.current || [];
+    if (mQ.length > 0) {
+      return mQ[0];
+    }
+    const aQ = autoQueueRef.current || [];
+    if (aQ.length > 0) {
+      return aQ[0];
+    }
+    const cur = currentTrackRef.current;
+    const tracklist = currentTracklistRef.current || [];
+    if (cur && tracklist.length > 0) {
+      const idx = tracklist.findIndex((t) => String(t.id) === String(cur.id));
+      if (idx !== -1) {
+        if (idx + 1 < tracklist.length) {
+          return tracklist[idx + 1];
+        } else if (repeatModeRef.current === "all") {
+          return tracklist[0];
+        }
+      }
+    }
+    return null;
+  }, []);
+
+  // Pre-download effect: runs whenever current track, queue, or tracklist changes
+  useEffect(() => {
+    if (!currentTrack) return;
+
+    const nextTrack = resolveNextTrackInQueue();
+    if (!nextTrack || !nextTrack.id) return;
+
+    const nextTrackId = String(nextTrack.id);
+
+    // If next track is the song currently playing, skip
+    if (String(currentTrack.id) === nextTrackId) return;
+
+    // If next track is already the active prefetch and is already cached, skip
+    if (currentPrefetchTrackIdRef.current === nextTrackId && prefetchCacheRef.current.has(nextTrackId)) {
+      return;
+    }
+
+    // If the queue changed (e.g. user added song to queue), abort previous in-flight prefetch
+    if (currentPrefetchAbortRef.current && currentPrefetchTrackIdRef.current !== nextTrackId) {
+      try {
+        currentPrefetchAbortRef.current.abort();
+      } catch {}
+      currentPrefetchAbortRef.current = null;
+    }
+
+    // If next song is already downloaded in offline storage, do not download again
+    if (offlineTrackIds?.has(nextTrackId)) {
+      return;
+    }
+
+    // If already pre-cached in memory, do not download again
+    if (prefetchCacheRef.current.has(nextTrackId)) {
+      return;
+    }
+
+    currentPrefetchTrackIdRef.current = nextTrackId;
+    const abortController = new AbortController();
+    currentPrefetchAbortRef.current = abortController;
+
+    // Delay 650ms so current playing song cleanly establishes its connection without competition
+    const prefetchTimer = setTimeout(async () => {
+      if (abortController.signal.aborted) return;
+
+      try {
+        // 1. Check local audio storage (e.g. self mix)
+        let resolvedAudioUrl = nextTrack.audioUrl;
+        if (!resolvedAudioUrl) {
+          try {
+            const localUrl = await getLocalAudioUrl(nextTrack.id);
+            if (localUrl) resolvedAudioUrl = localUrl;
+          } catch {}
+        }
+
+        // 2. Resolve remote streaming URL via audio search service
+        if (!resolvedAudioUrl && typeof navigator !== "undefined" && navigator.onLine) {
+          try {
+            const streamData = await getDirectAudioStreamUrl(
+              nextTrack.title,
+              nextTrack.artist,
+              nextTrack.id
+            );
+            if (streamData?.audioUrl) {
+              resolvedAudioUrl = streamData.audioUrl;
+            }
+          } catch (streamErr) {
+            console.warn("[Background Pre-download] Stream URL resolution skipped:", streamErr);
+          }
+        }
+
+        if (abortController.signal.aborted || !resolvedAudioUrl) return;
+
+        // 3. Cache entry object
+        const cacheEntry = {
+          trackId: nextTrackId,
+          audioUrl: resolvedAudioUrl,
+          blobUrl: null,
+          preloader: null,
+        };
+
+        // Cache eviction: keep max 3 entries in memory to prevent excessive storage/memory
+        if (prefetchCacheRef.current.size >= 3) {
+          const oldestKey = prefetchCacheRef.current.keys().next().value;
+          const oldEntry = prefetchCacheRef.current.get(oldestKey);
+          if (oldEntry?.blobUrl) {
+            try { URL.revokeObjectURL(oldEntry.blobUrl); } catch {}
+          }
+          if (oldEntry?.preloader) {
+            try { oldEntry.preloader.src = ""; } catch {}
+          }
+          prefetchCacheRef.current.delete(oldestKey);
+        }
+
+        // 4. Download and cache audio in background
+        try {
+          const resp = await fetch(resolvedAudioUrl, {
+            signal: abortController.signal,
+          });
+
+          if (resp.ok) {
+            const blob = await resp.blob();
+            if (!abortController.signal.aborted) {
+              cacheEntry.blobUrl = URL.createObjectURL(blob);
+            }
+          }
+        } catch (fetchErr) {
+          // If fetch fails (e.g. CORS), fallback to HTML5 Audio element background preloading
+          if (!abortController.signal.aborted && typeof window !== "undefined") {
+            try {
+              const bgAudio = new Audio();
+              bgAudio.preload = "auto";
+              bgAudio.src = resolvedAudioUrl;
+              bgAudio.load();
+              cacheEntry.preloader = bgAudio;
+            } catch {}
+          }
+        }
+
+        if (!abortController.signal.aborted) {
+          prefetchCacheRef.current.set(nextTrackId, cacheEntry);
+        }
+      } catch (err) {
+        if (!abortController.signal.aborted) {
+          console.warn("[Background Pre-download] Gracefully handled error:", err);
+        }
+      }
+    }, 650);
+
+    return () => {
+      clearTimeout(prefetchTimer);
+      if (abortController) {
+        try {
+          abortController.abort();
+        } catch {}
+      }
+    };
+  }, [currentTrack?.id, manualQueue, autoQueue, currentTracklist, repeatMode, offlineTrackIds, resolveNextTrackInQueue]);
 
   // Synchronized Lyrics Fetching
   useEffect(() => {
@@ -1144,18 +1629,35 @@ export const MusicProvider = ({ children }) => {
     }, 1500);
   };
 
-  // Error Event Listener: Recovers from Network drops (Error 1 or 2)
+  const consecutiveErrorsRef = useRef(0);
+
+  // Error Event Listener: Recovers from Network drops or skips unplayable tracks
   const handleAudioError = (e) => {
     const audio = audioRef.current;
     const err = audio?.error;
-    const code = err?.code; // 1 = MEDIA_ERR_ABORTED, 2 = MEDIA_ERR_NETWORK
+    const code = err?.code; // 1 = MEDIA_ERR_ABORTED, 2 = MEDIA_ERR_NETWORK, 3 = MEDIA_ERR_DECODE, 4 = MEDIA_ERR_SRC_NOT_SUPPORTED
     console.warn(`[AudioEngine] HTML5 audio error event triggered (code: ${code}):`, err?.message || e);
 
     if (code === 1 || code === 2 || !code) {
-      console.warn(`[AudioEngine] Network/Connection drop detected (Error ${code || "drop"}). Triggering automatic timestamp recovery...`);
-      recoverPlayback(`network_error_${code || "drop"}`);
+      if (retryCountRef.current < 2) {
+        retryCountRef.current++;
+        console.warn(`[AudioEngine] Network/Connection drop detected. Retrying playback attempt ${retryCountRef.current}...`);
+        recoverPlayback(`network_error_${code || "drop"}`);
+        return;
+      }
+    }
+
+    // Skip unplayable song if retries exhausted or decode/source error occurs (graceful recovery without infinite loop)
+    if (consecutiveErrorsRef.current < 3 && (queueRef.current?.length > 0 || isAutoplayEnabledRef.current)) {
+      consecutiveErrorsRef.current++;
+      console.warn(`[AudioEngine] Advancing to next track in queue due to unplayable audio source (attempt ${consecutiveErrorsRef.current}/3)...`);
+      setTimeout(() => {
+        handleNextTrack();
+      }, 350);
     } else {
+      consecutiveErrorsRef.current = 0;
       setIsBuffering(false);
+      setIsPlaying(false);
     }
   };
 
@@ -1310,19 +1812,21 @@ export const MusicProvider = ({ children }) => {
         if (mode === "initial") {
           console.log(
             `[Autoplay] Initializing intelligent queue with ${topRankedTracks.length} tracks for "${seedMeta.title}":`,
-            topRankedTracks.map((t) => `[Tier ${t.tier}] ${t.title}`).join(", ")
+            topRankedTracks.map((t) => `[Tier ${t.tier}: ${t.tierReason}] ${t.title}`).join(", ")
           );
-          setQueue((prev) => {
-            const manual = prev.filter((t) => t.isManual);
-            return [...manual, ...topRankedTracks];
-          });
+          // Set automatic queue, strictly preserving any manual queue items
+          setAutoQueue(topRankedTracks);
           setCurrentTracklist([...topRankedTracks]);
         } else if (mode === "append") {
           console.log(
             `[Autoplay] Silently appending ${topRankedTracks.length} ranked candidate tracks to the active queue:`,
-            topRankedTracks.map((t) => `[Tier ${t.tier}] ${t.title}`).join(", ")
+            topRankedTracks.map((t) => `[Tier ${t.tier}: ${t.tierReason}] ${t.title}`).join(", ")
           );
-          setQueue((prev) => [...prev, ...topRankedTracks]);
+          setAutoQueue((prev) => {
+            const existingIds = new Set(prev.map((t) => String(t.id)));
+            const fresh = topRankedTracks.filter((t) => !existingIds.has(String(t.id)));
+            return [...prev, ...fresh];
+          });
           setCurrentTracklist((prev) => [...prev, ...topRankedTracks]);
         } else if (mode === "transition") {
           const nextTrack = topRankedTracks[0];
@@ -1330,8 +1834,8 @@ export const MusicProvider = ({ children }) => {
           console.log(
             `[Autoplay] Seamlessly transitioning to: "${nextTrack.title}" [Tier ${nextTrack.tier}: ${nextTrack.tierReason}]. Queueing ${upcomingQueue.length} tracks.`
           );
+          setAutoQueue(upcomingQueue);
           setCurrentTracklist((prev) => [...prev, nextTrack, ...upcomingQueue]);
-          setQueue((prev) => [...prev, ...upcomingQueue]);
           await playTrack(nextTrack, null, { fromQueue: true });
         }
       } else {
@@ -1462,7 +1966,14 @@ export const MusicProvider = ({ children }) => {
   const playTrack = async (track, tracklist = null, options = {}) => {
     if (!track) return;
 
-    if (!user && !offlineTrackIds.has(String(track.id))) {
+    const isLocalTrack = Boolean(
+      track.isLocal ||
+      String(track.id).startsWith("local-") ||
+      track.source === "local-upload" ||
+      track.source === "local-device"
+    );
+
+    if (!user && !offlineTrackIds.has(String(track.id)) && !isLocalTrack) {
       openAuthModal("login");
       return;
     }
@@ -1482,27 +1993,46 @@ export const MusicProvider = ({ children }) => {
     setDuration(track.duration || 210);
     setIsBuffering(true);
 
-    if (tracklist && tracklist.length > 0 && !options?.fromSearch) {
+    // Record previous song to history for backwards navigation (unless navigating backwards)
+    if (!options?.fromHistory && currentTrackRef.current && String(currentTrackRef.current.id) !== String(track.id)) {
+      setPlaybackHistory((prev) => [...prev.slice(-30), currentTrackRef.current]);
+    }
+
+    if (tracklist && tracklist.length > 0 && options?.context !== "search" && !options?.generatePriorityQueue) {
       originalPlaylistTracksRef.current = tracklist;
       setCurrentTracklist(tracklist);
-      let remaining;
+      const trackIdStr = String(track.id);
+      const idx = tracklist.findIndex((t) => String(t.id) === trackIdStr);
+
       if (isShuffleRef.current) {
-        remaining = [...tracklist.filter((t) => String(t.id) !== String(track.id))].sort(() => Math.random() - 0.5);
+        const remaining = tracklist.filter((t) => String(t.id) !== trackIdStr).sort(() => Math.random() - 0.5);
+        setAutoQueue(remaining);
+      } else if (idx !== -1) {
+        // Normal playlist queue: all results after selected song become upcoming queue in exact order
+        const remaining = tracklist.slice(idx + 1);
+        setAutoQueue(remaining);
       } else {
-        const idx = tracklist.findIndex((t) => String(t.id) === String(track.id));
-        remaining = idx !== -1 ? tracklist.slice(idx + 1) : tracklist.filter((t) => String(t.id) !== String(track.id));
+        const remaining = tracklist.filter((t) => String(t.id) !== trackIdStr);
+        setAutoQueue(remaining);
       }
-      setQueue(remaining);
-    } else if (!options?.fromQueue) {
-      // Standalone track or played from search:
-      // Preserve manual tracks if any, and trigger immediate 6-tier intelligent queue generation!
-      const manual = (queueRef.current || []).filter((t) => t.isManual);
-      setQueue(manual);
-      fetchAndInjectAutoplayQueue(track, { mode: "initial" });
     } else if (options?.fromQueue) {
-      if (isAutoplayEnabledRef.current && queueRef.current.length <= 2) {
+      if (isAutoplayEnabledRef.current && autoQueueRef.current.length <= 2) {
         fetchAndInjectAutoplayQueue(track, { mode: "append" });
       }
+    } else {
+      // Standalone track or played from Search page:
+      // When a song is played, automatically queue upcoming songs using the 6-tier priority algorithm:
+      // 1. Same Movie -> 2. Same Album -> 3. Same Artist -> 4. Same Language -> 5. Related Songs -> 6. Autoplay
+      if (tracklist && tracklist.length > 0) {
+        // Immediate local priority ranking for 0ms instantaneous queue population
+        const immediateRanked = generateRecommendedQueue(track, tracklist, { maxResults: 15 });
+        if (immediateRanked.length > 0) {
+          setAutoQueue(immediateRanked);
+          setCurrentTracklist(immediateRanked);
+        }
+      }
+      // Fetch full enriched priority queue (same movie, album, artist, language, related, autoplay)
+      fetchAndInjectAutoplayQueue(track, { mode: "initial" });
     }
 
     // Reset retry counters on new track play
@@ -1516,11 +2046,6 @@ export const MusicProvider = ({ children }) => {
 
     // Add to recently played tracks with full metadata (local tracks are strictly isolated to their Self Mix)
     const norm = normalizeTrack(track);
-    const isLocalTrack = Boolean(
-      track.isLocal ||
-      String(track.id).startsWith("local-") ||
-      track.source === "local-upload"
-    );
 
     if (norm && !isLocalTrack) {
       // Record into current session history for filtering in ListenFree tiered recommendations
@@ -1569,6 +2094,16 @@ export const MusicProvider = ({ children }) => {
       // Hit IndexedDB for local offline audio, local uploads, or remote streams
       let rawAudioUrl = track.audioUrl;
 
+      // 0. Check Queue Background Pre-download Cache for 0ms Instant Playback!
+      const prefetchHit = prefetchCacheRef.current?.get(String(track.id));
+      if (prefetchHit) {
+        if (prefetchHit.blobUrl) {
+          rawAudioUrl = prefetchHit.blobUrl;
+        } else if (prefetchHit.audioUrl) {
+          rawAudioUrl = prefetchHit.audioUrl;
+        }
+      }
+
       // 1. Check local offline storage (IndexedDB)
       try {
         const offlineUrl = await getOfflineAudioUrl(track.id);
@@ -1579,12 +2114,17 @@ export const MusicProvider = ({ children }) => {
         console.warn("[OfflineStorage] Offline track check error:", offlineErr);
       }
 
-      // 2. Check local user uploads (Self Mix) if not found in offline storage
+      // 2. Check local user uploads (Self Mix & Local Music Player) if not found in offline storage
       if (!rawAudioUrl && isLocalTrack) {
         try {
           const localUrl = await getLocalAudioUrl(track.id);
           if (localUrl) {
             rawAudioUrl = localUrl;
+          } else {
+            const localDeviceUrl = await getLocalDeviceTrackUrl(track.id);
+            if (localDeviceUrl) {
+              rawAudioUrl = localDeviceUrl;
+            }
           }
         } catch (localErr) {
           console.warn("[LocalAudio] Error retrieving local audio from IndexedDB:", localErr);
@@ -1654,14 +2194,24 @@ export const MusicProvider = ({ children }) => {
     }
   };
 
-  // Next track
+  // Next track: Strict Manual Queue Priority over Automatic Priority Queue
   const handleNextTrack = () => {
-    const q = queueRef.current;
-    if (q.length > 0) {
-      const next = q[0];
-      const remaining = q.slice(1);
-      setQueue(remaining);
-      playTrack(next, null, { fromQueue: true });
+    const mQ = manualQueueRef.current || [];
+    const aQ = autoQueueRef.current || [];
+
+    // 1. Consume from Manual Queue first (Strict Priority Rule)
+    if (mQ.length > 0) {
+      const next = mQ[0];
+      setManualQueue((prev) => prev.slice(1));
+      playTrack(next, null, { fromQueue: true, wasManual: true });
+      return;
+    }
+
+    // 2. Consume from Automatic Priority Queue only after Manual Queue is empty
+    if (aQ.length > 0) {
+      const next = aQ[0];
+      setAutoQueue((prev) => prev.slice(1));
+      playTrack(next, null, { fromQueue: true, wasManual: false });
       return;
     }
 
@@ -1674,7 +2224,7 @@ export const MusicProvider = ({ children }) => {
       return;
     }
 
-    const currentIndex = tracklist.findIndex((t) => t.id === cur?.id);
+    const currentIndex = tracklist.findIndex((t) => String(t.id) === String(cur?.id));
     if (currentIndex !== -1) {
       let nextIndex = currentIndex + 1;
       if (nextIndex >= tracklist.length) {
@@ -1702,32 +2252,100 @@ export const MusicProvider = ({ children }) => {
 
   // Play upcoming item directly from queue
   const playFromQueue = (track, index) => {
-    const remaining = queueRef.current.slice(index + 1);
-    setQueue(remaining);
+    if (!track) return;
+    const tid = String(track.id);
+    const mQ = manualQueueRef.current || [];
+    const aQ = autoQueueRef.current || [];
+
+    const mIdx = mQ.findIndex((t) => String(t.id) === tid);
+    if (mIdx !== -1) {
+      // User clicked item inside Manual Queue: consume up to and including this item
+      setManualQueue((prev) => prev.slice(mIdx + 1));
+      playTrack(track, null, { fromQueue: true, wasManual: true });
+      return;
+    }
+
+    const aIdx = aQ.findIndex((t) => String(t.id) === tid);
+    if (aIdx !== -1) {
+      // User clicked into Automatic Queue: preceding manual queue was consumed/skipped
+      setManualQueue([]);
+      setAutoQueue((prev) => prev.slice(aIdx + 1));
+      playTrack(track, null, { fromQueue: true, wasManual: false });
+      return;
+    }
+
     playTrack(track, null, { fromQueue: true });
   };
 
   // Clear upcoming queue without stopping current playback
   const clearQueue = () => {
-    setQueue([]);
+    setManualQueue([]);
+    setAutoQueue([]);
   };
 
-  // Add track to queue: Append to the end of the upcoming queue
+  // Clear all recently played history (both locally and in cloud)
+  const clearRecentlyPlayed = () => {
+    setRecentlyPlayedTracks([]);
+    setRecentlyPlayed([]);
+    persistAccountData({ recentlyPlayedTracks: [], recentlyPlayed: [] });
+    try {
+      localStorage.removeItem("ceepeefy_recently_played_tracks");
+      localStorage.removeItem("ceepeefy_recently_played");
+    } catch {}
+    if (user?.id) {
+      clearRecentlyPlayedInCloud(user.id).catch((err) => {
+        console.warn("[MusicContext] Failed to clear cloud recents:", err);
+      });
+    }
+  };
+
+  // Remove specific track from queue
+  const removeFromQueue = (trackId, e) => {
+    e?.stopPropagation?.();
+    const tid = String(trackId);
+    setManualQueue((prev) => prev.filter((t) => String(t.id) !== tid));
+    setAutoQueue((prev) => prev.filter((t) => String(t.id) !== tid));
+  };
+
+  // Backward-compatible setQueue that preserves segregation
+  const setQueue = (action) => {
+    if (typeof action === "function") {
+      const currentCombined = [...manualQueueRef.current, ...autoQueueRef.current];
+      const result = action(currentCombined);
+      if (Array.isArray(result)) {
+        setManualQueue(result.filter((t) => t.isManual));
+        setAutoQueue(result.filter((t) => !t.isManual));
+      }
+    } else if (Array.isArray(action)) {
+      setManualQueue(action.filter((t) => t.isManual));
+      setAutoQueue(action.filter((t) => !t.isManual));
+    }
+  };
+
+  // Add track to queue: Append to the end of the existing manual queue
+  // Manual queue order: Song X -> Song Y -> Song Z ...
+  // Always precedes the automatic priority queue
   const addToQueue = (track) => {
     if (!track) return;
     const norm = normalizeTrack(track);
     if (!norm) return;
     const manualTrack = { ...norm, isManual: true };
-    setQueue((prev) => [...prev, manualTrack]);
+    setManualQueue((prev) => [...prev, manualTrack]);
+    if (showOfflineNotice) {
+      showOfflineNotice(`Added "${manualTrack.title}" to queue`);
+    }
   };
 
-  // Play track immediately next in queue: Insert immediately after current song, before other upcoming songs
+  // Play track immediately next in queue: Insert at head of manual queue
   const playNext = (track) => {
     if (!track) return;
     const norm = normalizeTrack(track);
     if (!norm) return;
     const manualTrack = { ...norm, isManual: true };
-    setQueue((prev) => [manualTrack, ...prev]);
+    setManualQueue((prev) => [manualTrack, ...prev]);
+    if (showOfflineNotice) {
+      showOfflineNotice(`Playing "${manualTrack.title}" next`);
+    }
   };
 
   // Playlist Shuffle: keeps currently playing track, shuffles upcoming without duplicates
@@ -1836,23 +2454,166 @@ export const MusicProvider = ({ children }) => {
     return pinnedPlaylistIds.includes(pid) || addedPlaylists.some((p) => String(p.id) === pid);
   };
 
-  // Previous track
+  // Previous track with history and tracklist support
   const handlePrevTrack = () => {
-    const cur = currentTrackRef.current;
-    if (!cur) return;
-    if (currentTime > 3) {
+    // If track has been playing for more than 3 seconds, restart current track (Standard Spotify behavior)
+    if (currentTime > 3 && audioRef.current) {
       seekTo(0);
       return;
     }
 
-    const tracklist = currentTracklistRef.current;
-    const currentIndex = tracklist.findIndex((t) => t.id === cur?.id);
-    if (currentIndex > 0) {
-      playTrack(tracklist[currentIndex - 1]);
-    } else {
-      seekTo(0);
+    const hist = playbackHistoryRef.current;
+    if (hist.length > 0) {
+      const prevTrack = hist[hist.length - 1];
+      const newHist = hist.slice(0, -1);
+      setPlaybackHistory(newHist);
+      if (currentTrackRef.current) {
+        setQueue((q) => [currentTrackRef.current, ...q]);
+      }
+      playTrack(prevTrack, null, { fromHistory: true });
+      return;
     }
+
+    const cur = currentTrackRef.current;
+    const tracklist = currentTracklistRef.current;
+    if (cur && tracklist.length > 0) {
+      const currentIndex = tracklist.findIndex((t) => String(t.id) === String(cur.id));
+      if (currentIndex > 0) {
+        const prevTrack = tracklist[currentIndex - 1];
+        if (currentTrackRef.current) {
+          setQueue((q) => [currentTrackRef.current, ...q]);
+        }
+        playTrack(prevTrack, tracklist, { fromHistory: true });
+        return;
+      }
+    }
+
+    seekTo(0);
   };
+
+  // Web Media Session API: Professional OS Notifications, Lock Screen Controls & Background Controls
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+
+    if (!currentTrack) {
+      try {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = "none";
+      } catch {}
+      return;
+    }
+
+    const title = currentTrack.title || "Unknown Title";
+    const artist = currentTrack.artist || "Ceepeefy Artist";
+    const album = currentTrack.album || currentTrack.movie || "Ceepeefy";
+    const cover = currentTrack.coverUrl || currentTrack.thumbnail || currentTrack.image || "/icon-512.png";
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title,
+        artist,
+        album,
+        artwork: [
+          { src: cover, sizes: "96x96", type: "image/jpeg" },
+          { src: cover, sizes: "128x128", type: "image/jpeg" },
+          { src: cover, sizes: "192x192", type: "image/jpeg" },
+          { src: cover, sizes: "256x256", type: "image/jpeg" },
+          { src: cover, sizes: "384x384", type: "image/jpeg" },
+          { src: cover, sizes: "512x512", type: "image/jpeg" },
+        ],
+      });
+    } catch (e) {
+      console.warn("[MediaSession] Metadata error:", e);
+    }
+
+    // Keep document title strictly "Ceepeefy" as required
+    try {
+      document.title = "Ceepeefy";
+    } catch {}
+  }, [currentTrack]);
+
+  // Sync Media Session Playback State
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+    try {
+      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+    } catch {}
+  }, [isPlaying]);
+
+  // Sync Media Session Playback Position
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+    if (!("setPositionState" in navigator.mediaSession)) return;
+    if (!duration || isNaN(duration) || duration <= 0) return;
+
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: Math.max(0, duration),
+        playbackRate: 1.0,
+        position: Math.max(0, Math.min(currentTime || 0, duration)),
+      });
+    } catch {}
+  }, [currentTime, duration]);
+
+  // Register OS Media Controls Action Handlers
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+
+    const actionHandlers = [
+      ["play", () => {
+        if (audioRef.current && !isPlaying) {
+          audioRef.current.play().catch(() => {});
+        }
+      }],
+      ["pause", () => {
+        if (audioRef.current && isPlaying) {
+          audioRef.current.pause();
+        }
+      }],
+      ["nexttrack", () => {
+        handleNextTrack();
+      }],
+      ["previoustrack", () => {
+        handlePrevTrack();
+      }],
+      ["seekbackward", (details) => {
+        const offset = details?.seekOffset || 10;
+        const cur = audioRef.current?.currentTime || currentTime;
+        seekTo(Math.max(0, cur - offset));
+      }],
+      ["seekforward", (details) => {
+        const offset = details?.seekOffset || 10;
+        const cur = audioRef.current?.currentTime || currentTime;
+        seekTo(Math.min(duration, cur + offset));
+      }],
+      ["seekto", (details) => {
+        if (details?.seekTime !== undefined) {
+          seekTo(details.seekTime);
+        }
+      }],
+      ["stop", () => {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+        setIsPlaying(false);
+      }],
+    ];
+
+    actionHandlers.forEach(([action, handler]) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {}
+    });
+
+    return () => {
+      actionHandlers.forEach(([action]) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch {}
+      });
+    };
+  }, [currentTime, duration, isPlaying]);
 
   // Seek bound to audio element's currentTime
   const seekTo = (seconds) => {
@@ -2003,7 +2764,14 @@ export const MusicProvider = ({ children }) => {
         settings,
         updateSetting,
         queue,
+        manualQueue,
+        autoQueue,
+        setManualQueue,
+        setAutoQueue,
         currentTracklist,
+        playbackHistory,
+        hasNextTrack,
+        hasPrevTrack,
         likedSongIds,
         likedTracks,
         likedSongsMap,
@@ -2048,7 +2816,9 @@ export const MusicProvider = ({ children }) => {
         addToQueue,
         playNext,
         playFromQueue,
+        removeFromQueue,
         clearQueue,
+        clearRecentlyPlayed,
         pinnedPlaylistIds,
         addedPlaylists,
         togglePinPlaylist,

@@ -598,11 +598,50 @@ export async function searchArtists(query) {
   return [];
 }
 
+// Client-side cache for artist full details
+const clientArtistDetailsCache = new Map();
+
+/**
+ * Fetches full artist profile and top songs by artist ID or name.
+ *
+ * @param {string} artistId
+ * @param {string} [artistName]
+ * @returns {Promise<{ artist: any, tracks: Array<any> } | null>}
+ */
+export async function fetchArtistDetails(artistId, artistName = "") {
+  if (!artistId && !artistName) return null;
+  const cacheKey = `${artistId}:::${artistName}`.toLowerCase();
+  if (clientArtistDetailsCache.has(cacheKey)) {
+    return clientArtistDetailsCache.get(cacheKey);
+  }
+
+  try {
+    const url = `/api/artist/${encodeURIComponent(artistId || "")}${artistName ? `?name=${encodeURIComponent(artistName)}` : ""}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Artist details fetch failed with status ${res.status}`);
+    }
+    const data = await res.json();
+    if (data && data.artist) {
+      clientArtistDetailsCache.set(cacheKey, data);
+      if (data.artist.id) {
+        clientArtistDetailsCache.set(String(data.artist.id).toLowerCase(), data);
+      }
+      return data;
+    }
+    return null;
+  } catch (err) {
+    console.warn("fetchArtistDetails error:", err);
+    return null;
+  }
+}
+
 export default {
   getDirectAudioStreamUrl,
   searchMusicCatalog,
   searchMusicTracks,
   fetchAlbumDetails,
+  fetchArtistDetails,
   fetchArtistImage,
   fetchItunesArtistImage,
   searchArtist,

@@ -113,10 +113,12 @@ export default function Header({ onToggleMobileMenu }) {
 
         {/* Mobile Brand Identity matching Image 1 & 2 */}
         <div className="flex md:hidden items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary via-cyan-500 to-secondary-container flex items-center justify-center shadow-[0_0_12px_rgba(6,182,212,0.4)]">
-            <span className="material-symbols-outlined text-surface-container-lowest text-[17px] font-bold">
-              graphic_eq
-            </span>
+          <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+            <img
+              src="/logo.png"
+              alt="Ceepeefy"
+              className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(0,229,255,0.4)]"
+            />
           </div>
           <span className="font-extrabold text-[17px] tracking-tight text-white flex items-center gap-1.5">
             Ceepeefy

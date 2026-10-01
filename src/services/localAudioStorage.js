@@ -141,6 +141,26 @@ export async function getLocalAudioUrl(trackId) {
 }
 
 /**
+ * Retrieves all stored audio records from IndexedDB.
+ * @returns {Promise<Array<{ trackId: string, blob: Blob, fileName: string, fileType: string, fileSize: number, updatedAt: number }>>}
+ */
+export async function getAllLocalAudioRecords() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  } catch (err) {
+    console.error("[LocalAudio] getAllLocalAudioRecords error:", err);
+    return [];
+  }
+}
+
+/**
  * Deletes a stored audio file and revokes its Object URL.
  * @param {string} trackId
  * @returns {Promise<boolean>}

@@ -159,7 +159,19 @@ export async function GET(request) {
   let mood = searchParams.get("mood") || "";
   let language = searchParams.get("language") || "";
   let year = searchParams.get("year") || "";
+  let movieName = searchParams.get("movieName") || searchParams.get("movie") || "";
   const excludeIdsParam = searchParams.get("excludeIds") || "";
+
+  // Extract movie name from title if present, e.g. "Song (From "Movie")"
+  if (!movieName && title) {
+    const m =
+      title.match(/\(\s*from\s+["']?([^"')\]]+)["']?\s*\)/i) ||
+      title.match(/\[\s*from\s+["']?([^"'\]]+)["']?\s*\]/i) ||
+      title.match(/-\s*from\s+["']?([^"'-]+)["']?/i);
+    if (m && m[1]) {
+      movieName = m[1].trim();
+    }
+  }
 
   const excludeIdSet = new Set(
     excludeIdsParam
@@ -201,7 +213,7 @@ export async function GET(request) {
     });
   }
 
-  const cacheKey = `reco_v2:::${songId}:::${album_id}:::${artist}:::${language}:::${excludeIdsParam}`;
+  const cacheKey = `reco_v3:::${songId}:::${album_id}:::${artist}:::${language}:::${movieName}:::${excludeIdsParam}`;
   if (recoCache.has(cacheKey)) {
     return NextResponse.json(recoCache.get(cacheKey));
   }
@@ -220,6 +232,7 @@ export async function GET(request) {
     primary_artist: artist || "",
     album: album || "",
     album_id: album_id || "",
+    movieName: movieName || "",
     genre: genre || "",
     mood: mood || "",
     language: language || "",
@@ -269,7 +282,7 @@ export async function GET(request) {
   const rawCandidateMap = new Map();
 
   // -------------------------------------------------------------
-  // 1. Movie Soundtrack Extraction (Exact Album Companion Tracks)
+  // 1. Movie Soundtrack & Album Extraction (Exact Movie / Album Companion Tracks)
   // -------------------------------------------------------------
   if (seedDetails.album_id) {
     try {
@@ -280,12 +293,17 @@ export async function GET(request) {
       if (albumRes.ok) {
         const albumData = await albumRes.json();
         const albumSongs = albumData.list || albumData.songs || [];
+        const isAlbumMovie = Boolean(albumData.is_movie === "1" || albumData.is_movie === true || albumData.album_type === "movie" || seedDetails.movieName);
         if (Array.isArray(albumSongs)) {
           for (const s of albumSongs) {
             if (s && s.id && String(s.id) !== String(songId) && !excludeIdSet.has(String(s.id))) {
               const formatted = formatSongItem(s);
               if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
                 formatted.isSameAlbum = true;
+                if (isAlbumMovie || seedDetails.movieName) {
+                  formatted.isMovieTrack = true;
+                  formatted.movieName = seedDetails.movieName || seedDetails.album;
+                }
                 rawCandidateMap.set(String(formatted.id), formatted);
               }
             }
@@ -294,6 +312,32 @@ export async function GET(request) {
       }
     } catch (err) {
       console.warn("[Recommendations] Album companion tracks fetch failed:", err);
+    }
+  }
+
+  // Explicit Movie search if seed has movieName (e.g. from title "Song (From "Movie")")
+  if (seedDetails.movieName) {
+    try {
+      const movieUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=20&q=${encodeURIComponent(
+        `${seedDetails.movieName} songs`
+      )}`;
+      const movRes = await fetch(movieUrl, { headers, next: { revalidate: 3600 } });
+      if (movRes.ok) {
+        const movData = await movRes.json();
+        const movList = movData.results || [];
+        for (const s of movList) {
+          if (s && s.id && String(s.id) !== String(songId) && !excludeIdSet.has(String(s.id))) {
+            const formatted = formatSongItem(s);
+            if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
+              formatted.isMovieTrack = true;
+              formatted.movieName = seedDetails.movieName;
+              rawCandidateMap.set(String(formatted.id), formatted);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[Recommendations] Movie tracks query failed:", err);
     }
   }
 

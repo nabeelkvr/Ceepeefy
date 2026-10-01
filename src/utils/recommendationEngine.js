@@ -145,9 +145,100 @@ const GENERIC_ALBUM_NAMES = new Set([
 ]);
 
 /**
- * Checks whether track A and track B originate from the same movie or album.
+ * Extracts normalized movie name if present in track metadata or song title.
  */
-export function isMovieAlbumMatch(trackA, trackB) {
+export function extractMovieName(track) {
+  if (!track) return "";
+  if (track.movieName && typeof track.movieName === "string") {
+    return cleanStr(track.movieName);
+  }
+  if (track.movie && typeof track.movie === "string") {
+    return cleanStr(track.movie);
+  }
+  if (track.more_info?.movie_name && typeof track.more_info.movie_name === "string") {
+    return cleanStr(track.more_info.movie_name);
+  }
+
+  // Extract from title with patterns like: (From "Movie"), [From "Movie"], - From Movie
+  const title = track.title || track.song || "";
+  const match =
+    title.match(/\(\s*from\s+["']?([^"')\]]+)["']?\s*\)/i) ||
+    title.match(/\[\s*from\s+["']?([^"'\]]+)["']?\s*\]/i) ||
+    title.match(/-\s*from\s+["']?([^"'-]+)["']?/i);
+  if (match && match[1]) {
+    const extracted = cleanStr(match[1]);
+    if (extracted && !GENERIC_ALBUM_NAMES.has(extracted)) {
+      return extracted;
+    }
+  }
+
+  // If explicitly flagged as a film/movie track
+  const isMovie = Boolean(
+    track.isMovie ||
+    track.isMovieTrack ||
+    track.more_info?.is_movie === "1" ||
+    track.more_info?.is_movie === true ||
+    track.more_info?.album_type === "movie" ||
+    track.album_type === "movie"
+  );
+  if (isMovie) {
+    const alb = normalizeMovieAlbum(track.album || track.albumName || track.more_info?.album || "");
+    if (alb && !GENERIC_ALBUM_NAMES.has(alb)) {
+      return alb;
+    }
+  }
+
+  return "";
+}
+
+/**
+ * Checks whether candidate originates from the EXACT SAME MOVIE as seedTrack.
+ * Priority 1: Same Movie
+ */
+export function isMovieMatch(trackA, trackB) {
+  if (!trackA || !trackB) return false;
+  const movieA = extractMovieName(trackA);
+  const movieB = extractMovieName(trackB);
+
+  if (movieA && movieB && !GENERIC_ALBUM_NAMES.has(movieA) && !GENERIC_ALBUM_NAMES.has(movieB)) {
+    if (movieA === movieB) return true;
+    if (movieA.length > 3 && movieB.length > 3 && (movieA.includes(movieB) || movieB.includes(movieA))) {
+      return true;
+    }
+  }
+
+  // If one or both are marked as movie tracks and their album/soundtrack is identical
+  const isMovieA = Boolean(
+    trackA.isMovie ||
+    trackA.isMovieTrack ||
+    trackA.more_info?.is_movie === "1" ||
+    trackA.more_info?.is_movie === true ||
+    trackA.more_info?.album_type === "movie" ||
+    trackA.album_type === "movie" ||
+    extractMovieName(trackA)
+  );
+  const isMovieB = Boolean(
+    trackB.isMovie ||
+    trackB.isMovieTrack ||
+    trackB.more_info?.is_movie === "1" ||
+    trackB.more_info?.is_movie === true ||
+    trackB.more_info?.album_type === "movie" ||
+    trackB.album_type === "movie" ||
+    extractMovieName(trackB)
+  );
+
+  if ((isMovieA || isMovieB) && isAlbumMatch(trackA, trackB)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Checks whether track A and track B originate from the same album.
+ * Priority 2: Same Album
+ */
+export function isAlbumMatch(trackA, trackB) {
   if (!trackA || !trackB) return false;
 
   // 1. Direct album_id check
@@ -155,7 +246,7 @@ export function isMovieAlbumMatch(trackA, trackB) {
   const idB = String(trackB.album_id || trackB.albumId || trackB.more_info?.album_id || "").trim();
   if (idA && idB && idA === idB) return true;
 
-  // 2. Normalized album or movie title check
+  // 2. Normalized album title check
   const albumA = normalizeMovieAlbum(trackA.movieName || trackA.album || trackA.albumName || trackA.more_info?.album || "");
   const albumB = normalizeMovieAlbum(trackB.movieName || trackB.album || trackB.albumName || trackB.more_info?.album || "");
 
@@ -170,6 +261,35 @@ export function isMovieAlbumMatch(trackA, trackB) {
   if (trackA.isSameAlbum || trackB.isSameAlbum) return true;
 
   return false;
+}
+
+/**
+ * Legacy alias for backwards compatibility
+ */
+export function isMovieAlbumMatch(trackA, trackB) {
+  return isMovieMatch(trackA, trackB) || isAlbumMatch(trackA, trackB);
+}
+
+/**
+ * Checks whether track A and track B share the same audio language.
+ * Priority 4: Same Language
+ */
+export function isLanguageMatch(trackA, trackB) {
+  if (!trackA || !trackB) return false;
+  const langA = cleanStr(trackA.language || trackA.more_info?.language || "");
+  const langB = cleanStr(trackB.language || trackB.more_info?.language || "");
+  if (langA && langB && langA === langB) return true;
+  return false;
+}
+
+/**
+ * Checks whether track candidate is related to seed track (genre, mood, or recommendation link).
+ * Priority 5: Related Songs
+ */
+export function isRelatedMatch(candidate, seedTrack) {
+  if (!candidate || !seedTrack) return false;
+  if (candidate.isRelated || candidate.fromRadio) return true;
+  return isSongTypeMatch(candidate, seedTrack);
 }
 
 /**
@@ -305,103 +425,107 @@ export function isSongTypeMatch(candidate, seedTrack) {
 
 /**
  * Determines which exact Priority Tier (1 through 6) a candidate belongs to
- * when compared against the seed track.
+ * when compared against the seed track according to the strict priority algorithm:
  *
- * Returns an object with:
- * - tier: 1 | 2 | 3 | 4 | 5 | 6 | null (null indicates candidate does not match any tier)
- * - tierReason: String explanation of the tier
- * - sameMovie: Boolean
- * - sameArtist: Boolean
- * - sameType: Boolean
+ * Tier 1: Same Movie (other available songs from the same movie)
+ * Tier 2: Same Album (songs from the same album if not already same movie)
+ * Tier 3: Same Artist (songs by the same artist)
+ * Tier 4: Same Language (songs in the same language)
+ * Tier 5: Related Songs (songs related based on genre/mood/webradio recommendations)
+ * Tier 6: Autoplay (general recommended/autoplay songs)
  */
 export function assignCandidateTier(candidate, seedTrack) {
   if (!candidate || !seedTrack) {
-    return { tier: null, tierReason: "Invalid candidate or seed", sameMovie: false, sameArtist: false, sameType: false };
-  }
-
-  const sameMovie = isMovieAlbumMatch(candidate, seedTrack);
-  const sameArtist = isArtistMatch(candidate, seedTrack);
-  const sameType = isSongTypeMatch(candidate, seedTrack);
-
-  // PRIORITY 1 — HIGHEST PRIORITY
-  // Same Movie/Album + Same Artist + Same Song Type (matches all three)
-  if (sameMovie && sameArtist && sameType) {
-    return {
-      tier: 1,
-      tierReason: "Priority 1: Same Movie/Album + Same Artist + Same Song Type",
-      sameMovie,
-      sameArtist,
-      sameType,
-    };
-  }
-
-  // PRIORITY 2
-  // Same Artist + Same Song Type (movie/album does not need to match)
-  if (sameArtist && sameType) {
-    return {
-      tier: 2,
-      tierReason: "Priority 2: Same Artist + Same Song Type",
-      sameMovie,
-      sameArtist,
-      sameType,
-    };
-  }
-
-  // PRIORITY 3
-  // Same Movie/Album + Same Song Type (artist does not need to match)
-  if (sameMovie && sameType) {
-    return {
-      tier: 3,
-      tierReason: "Priority 3: Same Movie/Album + Same Song Type",
-      sameMovie,
-      sameArtist,
-      sameType,
-    };
-  }
-
-  // PRIORITY 4
-  // Same Artist (movie/album and song type do not need to match)
-  if (sameArtist) {
-    return {
-      tier: 4,
-      tierReason: "Priority 4: Same Artist",
-      sameMovie,
-      sameArtist,
-      sameType,
-    };
-  }
-
-  // PRIORITY 5
-  // Same Song Type (artist and movie/album do not need to match)
-  if (sameType) {
-    return {
-      tier: 5,
-      tierReason: "Priority 5: Same Song Type",
-      sameMovie,
-      sameArtist,
-      sameType,
-    };
-  }
-
-  // PRIORITY 6 — LOWEST MATCHING PRIORITY
-  // Same Movie/Album (artist and song type do not need to match)
-  if (sameMovie) {
     return {
       tier: 6,
-      tierReason: "Priority 6: Same Movie/Album",
-      sameMovie,
-      sameArtist,
-      sameType,
+      tierReason: "Autoplay",
+      sameMovie: false,
+      sameAlbum: false,
+      sameArtist: false,
+      sameLanguage: false,
+      isRelated: false,
     };
   }
 
-  // Candidate does not match any tier -> Excluded from matching recommendation queue
+  // 1. Same Movie
+  const sameMovie = isMovieMatch(candidate, seedTrack);
+  if (sameMovie) {
+    return {
+      tier: 1,
+      tierReason: "Same Movie",
+      sameMovie: true,
+      sameAlbum: true,
+      sameArtist: isArtistMatch(candidate, seedTrack),
+      sameLanguage: isLanguageMatch(candidate, seedTrack),
+      isRelated: true,
+    };
+  }
+
+  // 2. Same Album
+  const sameAlbum = isAlbumMatch(candidate, seedTrack);
+  if (sameAlbum) {
+    return {
+      tier: 2,
+      tierReason: "Same Album",
+      sameMovie: false,
+      sameAlbum: true,
+      sameArtist: isArtistMatch(candidate, seedTrack),
+      sameLanguage: isLanguageMatch(candidate, seedTrack),
+      isRelated: true,
+    };
+  }
+
+  // 3. Same Artist
+  const sameArtist = isArtistMatch(candidate, seedTrack);
+  if (sameArtist) {
+    return {
+      tier: 3,
+      tierReason: "Same Artist",
+      sameMovie: false,
+      sameAlbum: false,
+      sameArtist: true,
+      sameLanguage: isLanguageMatch(candidate, seedTrack),
+      isRelated: true,
+    };
+  }
+
+  // 4. Same Language
+  const sameLanguage = isLanguageMatch(candidate, seedTrack);
+  if (sameLanguage) {
+    return {
+      tier: 4,
+      tierReason: "Same Language",
+      sameMovie: false,
+      sameAlbum: false,
+      sameArtist: false,
+      sameLanguage: true,
+      isRelated: isRelatedMatch(candidate, seedTrack),
+    };
+  }
+
+  // 5. Related Songs
+  const isRelated = isRelatedMatch(candidate, seedTrack);
+  if (isRelated) {
+    return {
+      tier: 5,
+      tierReason: "Related Songs",
+      sameMovie: false,
+      sameAlbum: false,
+      sameArtist: false,
+      sameLanguage: false,
+      isRelated: true,
+    };
+  }
+
+  // 6. Autoplay
   return {
-    tier: null,
-    tierReason: "Excluded: Does not match any of the six recommendation tiers",
-    sameMovie,
-    sameArtist,
-    sameType,
+    tier: 6,
+    tierReason: "Autoplay",
+    sameMovie: false,
+    sameAlbum: false,
+    sameArtist: false,
+    sameLanguage: false,
+    isRelated: false,
   };
 }
 
@@ -409,7 +533,7 @@ export function assignCandidateTier(candidate, seedTrack) {
  * Calculates secondary relevance score within the same priority tier.
  * Factors: Language match, play count / popularity, era proximity, and slight deterministic variance.
  */
-export function calculateSecondaryScore(candidate, seedTrack) {
+export function calculateSecondaryScore(candidate, seedTrack, tierInfo = {}) {
   let score = 0;
 
   // Language match (+300 pts)
@@ -419,10 +543,17 @@ export function calculateSecondaryScore(candidate, seedTrack) {
     score += 300;
   }
 
-  // Popularity / Play Count (+0 to 150 pts)
+  // Primary artist lead match (+200 pts)
+  const leadSeed = cleanStr(seedTrack?.primary_artist || seedTrack?.primaryArtist || "");
+  const leadCand = cleanStr(candidate?.primary_artist || candidate?.primaryArtist || "");
+  if (leadSeed && leadCand && leadSeed === leadCand) {
+    score += 200;
+  }
+
+  // Popularity / Play Count (+0 to 200 pts)
   const plays = Number(candidate?.play_count || candidate?.playCount || candidate?.plays || 0);
   if (!isNaN(plays) && plays > 0) {
-    score += Math.min(150, Math.floor(plays / 100000));
+    score += Math.min(200, Math.floor(plays / 50000));
   }
 
   // Era / Year proximity (+0 to 50 pts)
@@ -435,7 +566,7 @@ export function calculateSecondaryScore(candidate, seedTrack) {
     else if (diff <= 10) score += 10;
   }
 
-  // Deterministic variance hash based on ID to break ties dynamically without random chaos
+  // Deterministic variance hash based on ID to break ties dynamically
   const idStr = String(candidate?.id || candidate?.title || "");
   let hash = 0;
   for (let i = 0; i < idStr.length; i++) {
@@ -464,8 +595,11 @@ function normalizeOutputTrack(track, tierInfo, score) {
     tierReason: tierInfo.tierReason,
     score,
     sameMovie: tierInfo.sameMovie,
+    sameAlbum: tierInfo.sameAlbum,
     sameArtist: tierInfo.sameArtist,
-    sameType: tierInfo.sameType,
+    sameLanguage: tierInfo.sameLanguage,
+    isRelated: tierInfo.isRelated,
+    isManual: false,
     duration: durSec,
     durationFormatted,
   };

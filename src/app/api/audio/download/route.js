@@ -350,10 +350,10 @@ export async function GET(request) {
       });
     }
 
-    // 3. Format clean filename: "[Artist] - [Title] [Quality].m4a"
+    // 3. Format clean filename: "[Title] - [Artist] [Quality].m4a"
     const safeArtist = artist.replace(/[\/\\?%*:|"<>]/g, "").trim();
     const safeTitle = title.replace(/[\/\\?%*:|"<>]/g, "").trim();
-    const cleanFilename = safeArtist && safeTitle ? `${safeArtist} - ${safeTitle}` : safeTitle || "track";
+    const cleanFilename = safeTitle && safeArtist ? `${safeTitle} - ${safeArtist}` : safeTitle || safeArtist || "track";
     const extension = isM4a ? "m4a" : "mp3";
     const downloadFilename = `${cleanFilename} [${qualityLabel}].${extension}`;
 
