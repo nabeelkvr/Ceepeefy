@@ -38,6 +38,7 @@ export default function HomePage() {
     user,
     openAuthModal,
     clearRecentlyPlayed,
+    bumpPlaylistToTop,
   } = useMusic();
 
   const filterChips = [
@@ -99,6 +100,9 @@ export default function HomePage() {
   const handlePlaylistPlay = (playlist, e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (playlist?.id && bumpPlaylistToTop) {
+      bumpPlaylistToTop(playlist.id);
+    }
     const tracks = playlist.tracks && playlist.tracks.length > 0 ? playlist.tracks : [];
     if (tracks.length === 0) {
       router.push(`/playlist/${playlist.id}`);
@@ -444,7 +448,7 @@ export default function HomePage() {
           }
 
           return (
-            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 sm:gap-4 md:gap-5 pb-3 pt-1 -mx-2 px-2 sm:mx-0 sm:px-0 sm:overflow-visible">
+            <div className={`grid ${userPlaylists.length > 1 ? "grid-rows-2" : "grid-rows-1"} grid-flow-col auto-cols-[145px] sm:auto-cols-[180px] md:auto-cols-[200px] overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-5 pb-3 pt-1 -mx-2 px-2 sm:mx-0 sm:px-0`}>
               {userPlaylists.map((pl) => {
                 const tracks = pl.tracks || [];
                 const isPlaylistPlaying =
@@ -455,7 +459,7 @@ export default function HomePage() {
                   <div
                     key={pl.id}
                     onClick={() => router.push(targetUrl)}
-                    className="w-[145px] sm:w-auto flex-shrink-0 sm:flex-shrink group flex flex-col gap-2 md:gap-3 glass-card p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
+                    className="w-[145px] sm:w-[180px] md:w-[200px] flex-shrink-0 group flex flex-col gap-2 md:gap-3 glass-card p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
                   >
                     {/* Playlist Cover Image with Hover Play */}
                     <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
@@ -614,20 +618,24 @@ export default function HomePage() {
                       className="w-full h-full"
                     />
                   </div>
-                  {/* Persistent Mini Play Badge on bottom right of Avatar */}
+                  {/* Persistent Centered Mini Play Badge on bottom right of Avatar */}
                   <button
                     onClick={(e) => handleArtistPlay(artist, e)}
                     className="absolute bottom-0 right-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_10px_rgba(76,215,246,0.6)] hover:scale-110 active:scale-95 transition-all z-10"
                     title={isArtistPlaying ? "Pause audio" : `Play ${artist.name}`}
                   >
-                    <span
-                      className={`material-symbols-outlined text-[12px] sm:text-[15px] flex items-center justify-center leading-none ${
-                        !isArtistPlaying ? "translate-x-[0.5px] sm:translate-x-[1px]" : ""
-                      }`}
-                      style={{ fontVariationSettings: "'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20" }}
-                    >
-                      {isArtistPlaying ? "pause" : "play_arrow"}
-                    </span>
+                    {isArtistPlaying ? (
+                      <span className="material-symbols-outlined text-[12px] sm:text-[14px] leading-none flex items-center justify-center">
+                        pause
+                      </span>
+                    ) : (
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current translate-x-[0.5px]"
+                      >
+                        <polygon points="6 4 19 12 6 20" />
+                      </svg>
+                    )}
                   </button>
                 </div>
 

@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useMusic } from "../context/MusicContext";
 import DownloadButton from "./DownloadButton";
 import MiniLyricsView from "./MiniLyricsView";
+import SongOptionsMenu from "./SongOptionsMenu";
 import { Infinity as InfinityIcon } from "lucide-react";
 
 export default function Player() {
@@ -447,6 +448,11 @@ export default function Player() {
                 <span className="material-symbols-outlined text-[20px] md:text-[16px]">queue_music</span>
               </button>
               <DownloadButton track={currentTrack} buttonSize="p-1.5 md:p-0.5" iconSize="text-[18px] md:text-[14px]" />
+              <SongOptionsMenu
+                track={currentTrack}
+                buttonClassName="p-2 md:p-1 rounded-full hover:bg-surface-container text-outline hover:text-white"
+                iconClassName="text-[20px] md:text-[16px]"
+              />
             </div>
 
             {/* Volume Bar */}
@@ -891,17 +897,18 @@ export default function Player() {
               <span className="material-symbols-outlined text-[18px] md:text-[20px]">queue_music</span>
             </button>
 
-            {/* Floating Mini Player Button (replaces casting per user request) */}
-            <button
-              onClick={() => setPlayerMode("mini")}
-              className="hidden sm:flex text-outline hover:text-primary transition-colors p-1.5 md:p-2 rounded-full hover:bg-surface-container cursor-pointer"
-              title="open floating mini player"
-              aria-label="open floating mini player"
-            >
-              <span className="material-symbols-outlined text-[18px] md:text-[20px]">
-                picture_in_picture_alt
-              </span>
-            </button>
+            {/* Settings / Track Options Menu Button (replaces miniscreen per user request) */}
+            {currentTrack && (
+              <div className="hidden sm:flex items-center">
+                <SongOptionsMenu
+                  track={currentTrack}
+                  iconName="settings"
+                  title="Track options & settings"
+                  buttonClassName="p-1.5 md:p-2 rounded-full hover:bg-surface-container text-outline hover:text-white"
+                  iconClassName="text-[18px] md:text-[20px]"
+                />
+              </div>
+            )}
 
             {/* Volume Slider */}
             <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-white/10">

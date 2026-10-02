@@ -15,6 +15,12 @@ import {
   getAudioFileDuration,
   formatFileSize,
 } from "../../../services/localAudioStorage";
+import {
+  uploadAudioToCloud,
+  saveSelfMixToCloud,
+  isSupabaseConfigured,
+} from "../../../services/supabaseClient";
+import { getAccountUserId } from "../../../config/authConfig";
 
 export default function PlaylistPage() {
   const params = useParams();
@@ -49,9 +55,17 @@ export default function PlaylistPage() {
     offlineTrackIds,
     downloadPlaylist,
     removePlaylistOffline,
+    renamePlaylist,
+    bumpPlaylistToTop,
+    user,
   } = useMusic();
 
+  const currentUserId = getAccountUserId(user);
+
   const fileInputRef = useRef(null);
+  const titleInputRef = useRef(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [remotePlaylist, setRemotePlaylist] = useState(null);
@@ -114,15 +128,46 @@ export default function PlaylistPage() {
   useEffect(() => {
     if (shouldAutoPlay && !hasAutoPlayedRef.current && tracks && tracks.length > 0) {
       hasAutoPlayedRef.current = true;
+      if (playlist?.id && bumpPlaylistToTop) {
+        bumpPlaylistToTop(playlist.id);
+      }
       playTrack(tracks[0], tracks);
     }
-  }, [shouldAutoPlay, tracks, playTrack]);
+  }, [shouldAutoPlay, tracks, playTrack, playlist?.id, bumpPlaylistToTop]);
+
+  // Sync edited title when playlist changes
+  useEffect(() => {
+    if (playlist?.title) {
+      setEditedTitle(playlist.title);
+    }
+  }, [playlist?.title]);
+
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
+
+  const handleRenameSubmit = (e) => {
+    if (e) e.preventDefault();
+    const trimmed = editedTitle.trim();
+    if (trimmed && trimmed !== playlist.title && renamePlaylist) {
+      renamePlaylist(playlist.id, trimmed);
+    } else {
+      setEditedTitle(playlist.title || "");
+    }
+    setIsEditingTitle(false);
+  };
 
   const isCurrentPlaylistPlaying =
     isPlaying && tracks.some((t) => t.id === currentTrack?.id);
 
   const handleMasterPlay = () => {
     if (tracks.length === 0) return;
+    if (playlist?.id && bumpPlaylistToTop) {
+      bumpPlaylistToTop(playlist.id);
+    }
     if (isCurrentPlaylistPlaying) {
       togglePlay();
     } else {
@@ -130,7 +175,21 @@ export default function PlaylistPage() {
     }
   };
 
+  // Instant Shuffle Playback: Randomizes tracks and immediately starts playback
+  const handleShufflePlay = () => {
+    if (!tracks || tracks.length === 0) return;
+    if (playlist?.id && bumpPlaylistToTop) {
+      bumpPlaylistToTop(playlist.id);
+    }
+    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    setIsShuffle(true);
+    playTrack(shuffled[0], shuffled);
+  };
+
   const handleRowClick = (track) => {
+    if (playlist?.id && bumpPlaylistToTop) {
+      bumpPlaylistToTop(playlist.id);
+    }
     if (currentTrack?.id === track.id) {
       togglePlay();
     } else {
@@ -193,6 +252,8 @@ export default function PlaylistPage() {
 
     try {
       const newTracks = [];
+      const hasCloud = isSupabaseConfigured();
+
       for (let i = 0; i < filesList.length; i++) {
         const file = filesList[i];
         const isAudio =
@@ -206,9 +267,35 @@ export default function PlaylistPage() {
         const mins = Math.floor(durationSecs / 60);
         const secs = durationSecs % 60;
         const formattedDuration = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-        const trackId = `local-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 6)}`;
+        const trackId = `${hasCloud ? "cloud" : "local"}-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 6)}`;
 
-        // Save blob to IndexedDB
+        let audioUrl = "";
+        let isCloud = false;
+
+        // 1. Upload to Supabase Storage if configured for cross-device access
+        if (hasCloud) {
+          try {
+            const { publicUrl } = await uploadAudioToCloud(file, currentUserId);
+            audioUrl = publicUrl;
+            isCloud = true;
+
+            await saveSelfMixToCloud({
+              id: trackId,
+              title: cleanTitle,
+              audioUrl: publicUrl,
+              owner: currentUserId,
+              duration: durationSecs || 180,
+              durationFormatted: formattedDuration,
+              fileName: file.name,
+              fileSize: file.size,
+              coverUrl: playlist.coverUrl,
+            }).catch((e) => console.warn("Supabase record insert warning:", e));
+          } catch (cloudErr) {
+            console.warn("Cloud upload failed, falling back to local storage:", cloudErr);
+          }
+        }
+
+        // 2. Save blob to IndexedDB as local offline cache
         await saveLocalAudioFile(trackId, file, {
           fileName: file.name,
           fileType: file.type || "audio/mpeg",
@@ -225,8 +312,10 @@ export default function PlaylistPage() {
           coverUrl:
             playlist.coverUrl ||
             "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-          isLocal: true,
-          source: "local-upload",
+          audioUrl: audioUrl || null,
+          isLocal: !isCloud,
+          isCloud: isCloud,
+          source: isCloud ? "supabase-cloud" : "local-upload",
           fileName: file.name,
           fileSize: file.size,
           badge: "Self Mix",
@@ -381,9 +470,73 @@ export default function PlaylistPage() {
               </span>
             </div>
 
-            <h1 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight line-clamp-2">
-              {playlist.title}
-            </h1>
+            {isEditingTitle ? (
+              <form
+                onSubmit={handleRenameSubmit}
+                className="flex items-center justify-center md:justify-start gap-2 w-full max-w-xl my-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  ref={titleInputRef}
+                  type="text"
+                  value={editedTitle}
+                  onChange={(e) => setEditedTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setEditedTitle(playlist.title || "");
+                      setIsEditingTitle(false);
+                    }
+                  }}
+                  onBlur={handleRenameSubmit}
+                  className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white bg-surface-container-high/90 border border-primary/50 focus:border-primary rounded-xl px-3 py-1 outline-none w-full shadow-[0_0_15px_rgba(76,215,246,0.3)] transition-all"
+                  autoFocus
+                  placeholder="Playlist name"
+                />
+                <button
+                  type="submit"
+                  className="p-2 rounded-xl bg-primary text-surface-container-lowest hover:bg-primary/90 transition-all flex items-center justify-center flex-shrink-0 cursor-pointer shadow-md"
+                  title="Save title"
+                >
+                  <span className="material-symbols-outlined text-[20px]">check</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditedTitle(playlist.title || "");
+                    setIsEditingTitle(false);
+                  }}
+                  className="p-2 rounded-xl bg-surface-container text-outline hover:text-white hover:bg-white/10 transition-all flex items-center justify-center flex-shrink-0 cursor-pointer"
+                  title="Cancel"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center justify-center md:justify-start gap-2 group/title">
+                <h1
+                  onDoubleClick={() => {
+                    setIsEditingTitle(true);
+                    setEditedTitle(playlist.title || "");
+                  }}
+                  title="Double-click to rename"
+                  className="text-xl sm:text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight line-clamp-2 cursor-pointer hover:text-primary transition-colors select-none"
+                >
+                  {playlist.title}
+                </h1>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingTitle(true);
+                    setEditedTitle(playlist.title || "");
+                  }}
+                  className="opacity-0 group-hover/title:opacity-100 p-1.5 rounded-lg text-outline hover:text-white hover:bg-white/10 transition-all cursor-pointer flex-shrink-0"
+                  title="Rename playlist (or double-click title)"
+                  aria-label="Rename playlist"
+                >
+                  <span className="material-symbols-outlined text-[18px]">edit</span>
+                </button>
+              </div>
+            )}
 
             <p className="text-xs md:text-sm text-on-surface-variant line-clamp-2 max-w-2xl">
               {playlist.description}
@@ -410,97 +563,86 @@ export default function PlaylistPage() {
           </div>
         </div>
 
-        {/* Action Controls Bar - Balanced 2-tier mobile & unified desktop */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 mt-4 sm:mt-7 w-full">
-          {/* Primary Actions Row */}
-          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-            {/* Master Play Button */}
+        {/* Action Controls Bar - Premium Glassmorphic Studio Dock */}
+        <div className="flex flex-row items-center gap-2 sm:gap-3 mt-4 sm:mt-6 w-full max-w-full overflow-x-auto no-scrollbar py-2">
+          <div className="flex items-center gap-2 sm:gap-2.5 p-1.5 sm:p-2 rounded-2xl sm:rounded-full bg-surface-container-high/60 backdrop-blur-2xl border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.6)]">
+            {/* Master Play Button - Glowing Gradient Orb */}
             <button
               onClick={handleMasterPlay}
               disabled={tracks.length === 0}
-              className="w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.6)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
+              className="w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-gradient-to-tr from-cyan-500 via-primary to-blue-400 text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.65)] hover:shadow-[0_0_32px_rgba(76,215,246,0.9)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
               title={isCurrentPlaylistPlaying ? "Pause playlist" : "Play playlist"}
             >
-              <span className="material-symbols-outlined text-[24px] sm:text-[32px]">
+              <span className="material-symbols-outlined text-[24px] sm:text-[30px]">
                 {isCurrentPlaylistPlaying ? "pause" : "play_arrow"}
               </span>
             </button>
 
-            {/* Shuffle Button */}
+            {/* Shuffle Button - Click to Play in Random Order */}
             <button
               type="button"
-              onClick={() => toggleShuffle(tracks)}
-              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 sm:py-2.5 rounded-full border flex items-center justify-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${isShuffle
-                  ? "bg-primary/15 text-primary border-primary/40 shadow-[0_0_15px_rgba(76,215,246,0.3)]"
-                  : "bg-surface-container/60 text-outline hover:text-white border-white/10 hover:border-white/20"
-                }`}
-              title={isShuffle ? "Shuffle is ON" : "Shuffle is OFF"}
+              onClick={handleShufflePlay}
+              disabled={tracks.length === 0}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-40 ${
+                isShuffle
+                  ? "bg-primary/25 text-primary border-primary/50 shadow-[0_0_16px_rgba(76,215,246,0.4)]"
+                  : "bg-white/5 text-outline hover:text-primary hover:bg-primary/10 border-white/10 hover:border-primary/40 hover:shadow-[0_0_12px_rgba(76,215,246,0.2)]"
+              }`}
+              title="Shuffle and play random track"
             >
-              <span className="material-symbols-outlined text-[17px] sm:text-[19px]">shuffle</span>
-              <span>Shuffle</span>
+              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">shuffle</span>
             </button>
 
             {/* Add Songs Button */}
             <button
               type="button"
               onClick={handleOpenAddSongs}
-              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 sm:py-2.5 rounded-full border flex items-center justify-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 ${
                 isAddSongsOpen
-                  ? "bg-primary text-surface-container-lowest border-primary shadow-[0_0_15px_rgba(76,215,246,0.4)]"
-                  : "bg-primary/15 text-primary border-primary/40 hover:bg-primary/25 shadow-[0_0_12px_rgba(76,215,246,0.2)]"
+                  ? "bg-primary text-surface-container-lowest border-primary shadow-[0_0_18px_rgba(76,215,246,0.5)]"
+                  : "bg-white/5 text-outline hover:text-white hover:bg-white/10 border-white/10 hover:border-white/20"
               }`}
               title="Search and add songs to this playlist"
             >
-              <span className="material-symbols-outlined text-[17px] sm:text-[19px]">
+              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
                 {isAddSongsOpen ? "search" : "add"}
               </span>
-              <span>Add Songs</span>
             </button>
-          </div>
 
-          {/* Secondary Actions Row */}
-          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             {/* Pin to Library Button */}
             <button
               type="button"
               onClick={() => togglePinPlaylist(playlist.id, playlist)}
-              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 sm:py-2 rounded-full border flex items-center justify-center gap-1.5 sm:gap-2 text-xs md:text-sm font-semibold transition-all cursor-pointer ${isPlaylistPinned(playlist.id)
-                  ? "bg-primary/15 text-primary border-primary/40 shadow-[0_0_15px_rgba(76,215,246,0.3)]"
-                  : "bg-surface-container/60 text-outline hover:text-white border-white/10 hover:border-white/20"
-                }`}
-              title={isPlaylistPinned(playlist.id) ? "Unpin from library" : "Pin to library"}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 ${
+                isPlaylistPinned(playlist.id)
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_16px_rgba(245,158,11,0.35)]"
+                  : "bg-white/5 text-outline hover:text-amber-300 hover:bg-amber-500/10 border-white/10 hover:border-amber-500/30"
+              }`}
+              title={isPlaylistPinned(playlist.id) ? "Unpin from library" : "Pin to top of playlists"}
             >
-              <span className={`material-symbols-outlined text-[17px] sm:text-[19px] ${isPlaylistPinned(playlist.id) ? "rotate-45" : ""}`}>
+              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isPlaylistPinned(playlist.id) ? "rotate-45" : ""}`}>
                 push_pin
               </span>
-              <span>{isPlaylistPinned(playlist.id) ? "Pinned" : "Pin"}</span>
             </button>
 
             {/* Offline Download Control */}
-            <div className="relative flex-1 sm:flex-initial">
+            <div className="relative flex-shrink-0">
               {isDownloadingOffline ? (
-                <div className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-primary/15 text-primary border border-primary/40 text-xs font-bold shadow-[0_0_15px_rgba(76,215,246,0.3)] animate-pulse select-none">
-                  <span className="material-symbols-outlined text-[16px] animate-spin">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/20 text-primary border border-primary/40 flex items-center justify-center shadow-[0_0_15px_rgba(76,215,246,0.35)] animate-pulse select-none" title="Downloading songs offline...">
+                  <span className="material-symbols-outlined text-[17px] animate-spin">
                     progress_activity
-                  </span>
-                  <span className="truncate">
-                    {downloadProgress.current} / {downloadProgress.total}
                   </span>
                 </div>
               ) : isPlaylistFullyOffline ? (
-                <div className="relative w-full">
+                <div className="relative">
                   <button
                     type="button"
                     onClick={() => setIsOfflineMenuOpen((prev) => !prev)}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/25 text-xs font-bold shadow-[0_0_16px_rgba(16,185,129,0.25)] active:scale-95 transition-all cursor-pointer group"
-                    title="Available for offline playback on this device (click for options)"
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/30 shadow-[0_0_16px_rgba(16,185,129,0.3)] active:scale-90 transition-all flex items-center justify-center cursor-pointer"
+                    title="Downloaded for offline listening (click for options)"
                   >
-                    <span className="material-symbols-outlined text-emerald-400 text-[17px]">
+                    <span className="material-symbols-outlined text-emerald-400 text-[18px] sm:text-[20px]">
                       check_circle
-                    </span>
-                    <span className="truncate">Offline</span>
-                    <span className="material-symbols-outlined text-[14px] text-emerald-400/80">
-                      expand_more
                     </span>
                   </button>
 
@@ -532,42 +674,35 @@ export default function PlaylistPage() {
                     </div>
                   )}
                 </div>
-              ) : isPlaylistPartiallyOffline ? (
-                <button
-                  type="button"
-                  onClick={handleDownloadPlaylist}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/25 text-xs font-bold active:scale-95 transition-all cursor-pointer"
-                  title="Download missing tracks to make playlist fully offline"
-                >
-                  <span className="material-symbols-outlined text-[17px] text-cyan-400">
-                    downloading
-                  </span>
-                  <span className="truncate">
-                    {downloadedTrackCount}/{totalTrackCount} Offline
-                  </span>
-                </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleDownloadPlaylist}
                   disabled={totalTrackCount === 0}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-surface-container/80 text-white hover:text-primary hover:border-primary/40 border border-white/10 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
-                  title="Download all songs in playlist to this device for offline playback"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center bg-white/5 text-outline hover:text-emerald-300 hover:bg-emerald-500/10 border-white/10 hover:border-emerald-500/30 transition-all cursor-pointer active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                  title="Download all songs in playlist for offline playback"
                 >
-                  <span className="material-symbols-outlined text-[17px] text-outline group-hover:text-primary transition-colors">
+                  <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
                     download_for_offline
                   </span>
-                  <span className="truncate">Download</span>
                 </button>
               )}
             </div>
 
             {/* Like Playlist */}
             <button
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-outline hover:text-white bg-surface-container/60 hover:bg-surface-container border border-white/10 transition-all cursor-pointer flex-shrink-0"
-              title="Save to library"
+              type="button"
+              onClick={() => toggleLike(playlist)}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 ${
+                isLiked(playlist.id)
+                  ? "bg-rose-500/20 text-rose-400 border-rose-500/50 shadow-[0_0_16px_rgba(244,63,94,0.35)]"
+                  : "bg-white/5 text-outline hover:text-rose-400 hover:bg-rose-500/10 border-white/10 hover:border-rose-500/30"
+              }`}
+              title={isLiked(playlist.id) ? "Liked" : "Add to favorites"}
             >
-              <span className="material-symbols-outlined text-[20px] sm:text-[22px]">favorite_border</span>
+              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isLiked(playlist.id) ? "fill-current" : ""}`}>
+                {isLiked(playlist.id) ? "favorite" : "favorite_border"}
+              </span>
             </button>
 
             {/* Upload Tracks Button (Only for Self Mix) */}
@@ -588,13 +723,12 @@ export default function PlaylistPage() {
                 <button
                   disabled={isUploading}
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-primary/15 text-primary hover:bg-primary hover:text-surface-container-lowest border border-primary/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
-                  title="Upload audio mix files into this Self Mix"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-primary/15 text-primary hover:bg-primary hover:text-surface-container-lowest border border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.25)] hover:shadow-[0_0_18px_rgba(76,215,246,0.5)] transition-all active:scale-90 cursor-pointer disabled:opacity-50 flex-shrink-0"
+                  title="Upload audio tracks to cloud storage"
                 >
-                  <span className="material-symbols-outlined text-[17px]">
+                  <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
                     {isUploading ? "progress_activity" : "upload_file"}
                   </span>
-                  <span>{isUploading ? "..." : "Upload"}</span>
                 </button>
               </>
             )}
@@ -606,9 +740,9 @@ export default function PlaylistPage() {
                 onClick={() => setIsDeleteModalOpen(true)}
                 aria-label={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
                 title={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 transition-all shadow-sm active:scale-95 cursor-pointer flex-shrink-0"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 hover:border-red-500/50 shadow-sm hover:shadow-[0_0_15px_rgba(239,68,68,0.35)] transition-all active:scale-90 cursor-pointer flex-shrink-0"
               >
-                <span className="material-symbols-outlined text-[19px]">delete</span>
+                <span className="material-symbols-outlined text-[18px] sm:text-[20px]">delete</span>
               </button>
             )}
           </div>

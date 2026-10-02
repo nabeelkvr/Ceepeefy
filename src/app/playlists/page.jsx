@@ -21,30 +21,54 @@ export default function PlaylistsPage() {
     removeAddedPlaylist,
     isPlaylistPinned,
     togglePinPlaylist,
+    renamePlaylist,
+    bumpPlaylistToTop,
   } = useMusic();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [editingPlaylistId, setEditingPlaylistId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState("");
 
-  const createdList = (customPlaylists || []).filter((pl) => !pl.isSelfMix);
-  const addedList = (addedPlaylists || []).filter((pl) => !pl.isSelfMix);
+  // Unified playlist collection
+  const allPlaylists = React.useMemo(() => {
+    const map = new Map();
+    // 1. Add user custom playlists
+    (customPlaylists || []).filter((pl) => !pl.isSelfMix).forEach((pl) => {
+      map.set(String(pl.id), { ...pl, isCustom: true });
+    });
+    // 2. Add pinned / added playlists (e.g. from search / curated)
+    (addedPlaylists || []).filter((pl) => !pl.isSelfMix).forEach((pl) => {
+      if (!map.has(String(pl.id))) {
+        map.set(String(pl.id), pl);
+      }
+    });
+    const list = Array.from(map.values());
+    // Pinned playlists show FIRST
+    return list.sort((a, b) => {
+      const aPinned = isPlaylistPinned(a.id);
+      const bPinned = isPlaylistPinned(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0;
+    });
+  }, [customPlaylists, addedPlaylists, isPlaylistPinned]);
 
-  const totalCount = createdList.length + addedList.length;
+  const filteredPlaylists = React.useMemo(() => {
+    return allPlaylists.filter((pl) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        pl.title?.toLowerCase().includes(q) ||
+        pl.curator?.toLowerCase().includes(q) ||
+        pl.artist?.toLowerCase().includes(q) ||
+        pl.description?.toLowerCase().includes(q)
+      );
+    });
+  }, [allPlaylists, searchQuery]);
 
-  const filterFn = (pl) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      pl.title?.toLowerCase().includes(q) ||
-      pl.curator?.toLowerCase().includes(q) ||
-      pl.artist?.toLowerCase().includes(q) ||
-      pl.description?.toLowerCase().includes(q)
-    );
-  };
-
-  const filteredCreated = createdList.filter(filterFn);
-  const filteredAdded = addedList.filter(filterFn);
+  const totalCount = allPlaylists.length;
 
   const handleCreateSubmit = (e) => {
     e?.preventDefault();
@@ -59,6 +83,10 @@ export default function PlaylistsPage() {
   const handlePlaylistPlay = (playlist, e) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (playlist?.id && bumpPlaylistToTop) {
+      bumpPlaylistToTop(playlist.id);
+    }
 
     const tracks = playlist.tracks || [];
     if (tracks.length === 0) {
@@ -87,7 +115,7 @@ export default function PlaylistsPage() {
             Playlists Library
           </span>
           <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-          <span className="text-[10px] md:text-[11px] text-outline">
+          <span className="text-[10px] md:text-[11px] text-outline font-mono">
             {totalCount} {totalCount === 1 ? "Collection" : "Collections"}
           </span>
         </div>
@@ -98,7 +126,7 @@ export default function PlaylistsPage() {
               Playlists
             </h1>
             <p className="text-xs md:text-sm text-on-surface-variant max-w-2xl mt-0.5 md:mt-1">
-              Organize and stream your favorite tracks, custom collections, and pinned albums in studio master fidelity.
+              Organize and stream your favorite tracks, custom collections, and pinned playlists in studio master fidelity.
             </p>
           </div>
 
@@ -138,20 +166,20 @@ export default function PlaylistsPage() {
         </div>
       </div>
 
-      {/* SECTION 1: Created by you */}
+      {/* Unified Playlists Library Section */}
       <div className="flex flex-col gap-3.5 md:gap-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-[20px]">edit_note</span>
+            <span className="material-symbols-outlined text-primary text-[20px]">queue_music</span>
             <h2 className="text-lg md:text-xl font-black text-white tracking-tight">
-              Created by you
+              All Collections
             </h2>
             <span className="text-[10px] md:text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary font-mono font-bold">
-              {createdList.length}
+              {filteredPlaylists.length}
             </span>
           </div>
           <span className="text-[11px] text-on-surface-variant hidden sm:inline">
-            Custom playlists and sequences created by you
+            Pinned playlists appear first • Double-click playlist name to rename
           </span>
         </div>
 
@@ -195,17 +223,24 @@ export default function PlaylistsPage() {
             </div>
           </div>
 
-          {/* User Created Playlists */}
-          {filteredCreated.map((pl) => {
+          {/* Unified Playlists List with Pinned Playlists First */}
+          {filteredPlaylists.map((pl) => {
             const tracks = pl.tracks || [];
             const isPlaylistPlaying =
               isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+            const isPinned = isPlaylistPinned(pl.id);
+            const isAlbum = pl.type === "album" || pl.isAlbum;
+            const targetUrl = isAlbum ? `/album/${pl.id}` : `/playlist/${pl.id}`;
 
             return (
               <div
                 key={pl.id}
-                onClick={() => router.push(`/playlist/${pl.id}`)}
-                className="w-full md:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
+                onClick={() => router.push(targetUrl)}
+                className={`w-full md:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none ${
+                  isPinned
+                    ? "border-primary/40 bg-surface-container/95 shadow-[0_0_20px_rgba(76,215,246,0.15)]"
+                    : "border-white/5 hover:border-primary/30 hover:bg-surface-container/90"
+                }`}
               >
                 <div>
                   <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2 sm:mb-3">
@@ -216,27 +251,66 @@ export default function PlaylistsPage() {
                       className="group-hover:scale-105 transition-transform duration-500"
                     />
 
-                    {/* Badge top-left */}
+                    {/* Badges top-left */}
                     <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap z-10">
-                      <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-primary/20 text-primary border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.3)] flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[10px] sm:text-[11px]">person</span>
-                        YOU
-                      </span>
+                      {isPinned && (
+                        <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/90 text-primary border-primary/50 shadow-[0_0_12px_rgba(76,215,246,0.4)] flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[10px] sm:text-[11px] rotate-45">push_pin</span>
+                          PINNED
+                        </span>
+                      )}
+                      {pl.isCustom ? (
+                        <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-primary/20 text-primary border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.3)] flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[10px] sm:text-[11px]">person</span>
+                          YOU
+                        </span>
+                      ) : isAlbum ? (
+                        <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-amber-950/80 text-amber-300 border-amber-600/40">
+                          ALBUM
+                        </span>
+                      ) : null}
                     </div>
 
-                    {/* Delete button top-right */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        deleteCustomPlaylist(pl.id);
-                      }}
-                      className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center transition-all cursor-pointer z-10"
-                      title="Delete playlist"
-                    >
-                      <span className="material-symbols-outlined text-[14px]">delete</span>
-                    </button>
+                    {/* Action buttons top-right */}
+                    <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+                      {/* Pin/Unpin Toggle Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          togglePinPlaylist(pl.id, pl);
+                        }}
+                        className={`w-7 h-7 rounded-full backdrop-blur-md border flex items-center justify-center transition-all cursor-pointer ${
+                          isPinned
+                            ? "bg-primary/20 text-primary border-primary/50 shadow-[0_0_10px_rgba(76,215,246,0.4)]"
+                            : "bg-black/60 text-outline border-white/10 hover:text-white hover:bg-black/80"
+                        }`}
+                        title={isPinned ? "Unpin playlist" : "Pin playlist to top"}
+                      >
+                        <span className={`material-symbols-outlined text-[13px] ${isPinned ? "rotate-45" : ""}`}>
+                          push_pin
+                        </span>
+                      </button>
+
+                      {/* Delete / Remove button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (pl.isCustom) {
+                            deleteCustomPlaylist(pl.id);
+                          } else {
+                            removeAddedPlaylist(pl.id);
+                          }
+                        }}
+                        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center transition-all cursor-pointer"
+                        title={pl.isCustom ? "Delete playlist" : "Remove from library"}
+                      >
+                        <span className="material-symbols-outlined text-[14px]">delete</span>
+                      </button>
+                    </div>
 
                     {/* Play Button Overlay */}
                     <div
@@ -259,11 +333,59 @@ export default function PlaylistsPage() {
 
                   {/* Playlist Metadata */}
                   <div className="flex flex-col min-w-0">
-                    <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
-                      {pl.title}
-                    </h3>
+                    {editingPlaylistId === pl.id && pl.isCustom ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (editingTitle.trim()) {
+                            renamePlaylist(pl.id, editingTitle.trim());
+                          }
+                          setEditingPlaylistId(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 my-0.5"
+                      >
+                        <input
+                          type="text"
+                          value={editingTitle}
+                          onChange={(e) => setEditingTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") setEditingPlaylistId(null);
+                          }}
+                          onBlur={() => {
+                            if (editingTitle.trim()) {
+                              renamePlaylist(pl.id, editingTitle.trim());
+                            }
+                            setEditingPlaylistId(null);
+                          }}
+                          autoFocus
+                          className="text-xs sm:text-sm font-bold text-white bg-surface-container-highest px-2 py-0.5 rounded border border-primary/50 outline-none w-full"
+                        />
+                        <button
+                          type="submit"
+                          className="p-1 rounded bg-primary text-surface-container-lowest flex-shrink-0 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">check</span>
+                        </button>
+                      </form>
+                    ) : (
+                      <h3
+                        onDoubleClick={(e) => {
+                          if (!pl.isCustom) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setEditingPlaylistId(pl.id);
+                          setEditingTitle(pl.title || "");
+                        }}
+                        title={pl.isCustom ? "Double-click to rename" : pl.title}
+                        className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate cursor-pointer"
+                      >
+                        {pl.title}
+                      </h3>
+                    )}
                     <p className="text-[10px] sm:text-[11px] text-on-surface-variant line-clamp-1 mt-0.5">
-                      {pl.description || `Playlist by ${pl.curator || "You"}`}
+                      {pl.description || (pl.isCustom ? `Playlist by ${pl.curator || "You"}` : pl.curator || "Curated collection")}
                     </p>
                   </div>
                 </div>
@@ -273,7 +395,7 @@ export default function PlaylistsPage() {
                   <div className="flex items-center justify-between gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
                     <div className="flex items-center gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9px] sm:text-[10px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
                       <span className="tabular-nums whitespace-nowrap">
-                        {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+                        {pl.trackCount || tracks.length} {(pl.trackCount || tracks.length) === 1 ? "track" : "tracks"}
                       </span>
                     </div>
                     <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9px] sm:text-[10px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
@@ -286,147 +408,6 @@ export default function PlaylistsPage() {
             );
           })}
         </div>
-      </div>
-
-      {/* SECTION 2: Added by you */}
-      <div className="flex flex-col gap-3.5 md:gap-4 pt-4 border-t border-white/10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-[20px]">push_pin</span>
-            <h2 className="text-lg md:text-xl font-black text-white tracking-tight">
-              Added by you
-            </h2>
-            <span className="text-[10px] md:text-xs px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 font-mono font-bold">
-              {addedList.length}
-            </span>
-          </div>
-          <span className="text-[11px] text-on-surface-variant hidden sm:inline">
-            Public playlists and albums pinned from search & library
-          </span>
-        </div>
-
-        {filteredAdded.length === 0 ? (
-          <div className="w-full py-10 px-4 rounded-2xl glass-card border border-white/5 flex flex-col items-center justify-center text-center gap-2.5">
-            <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-outline">
-              <span className="material-symbols-outlined text-[24px]">push_pin</span>
-            </div>
-            <h3 className="text-sm font-bold text-white">No playlists or albums added yet</h3>
-            <p className="text-xs text-on-surface-variant max-w-sm">
-              Search for songs, albums, or curated playlists and click <span className="text-primary font-semibold">"Pin to Library"</span> to save them here.
-            </p>
-            <button
-              type="button"
-              onClick={() => router.push("/search")}
-              className="mt-1 px-4 py-2 rounded-full bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 text-xs font-bold transition-all cursor-pointer"
-            >
-              Explore in Search
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Added by you Card Grid (matching recent played songs card style on mobile & desktop) */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap items-start justify-start gap-3 sm:gap-4 md:gap-5">
-              {filteredAdded.map((pl) => {
-                const tracks = pl.tracks || [];
-                const isPlaylistPlaying =
-                  isPlaying && tracks.some((t) => t.id === currentTrack?.id);
-                const isAlbum = pl.type === "album" || pl.isAlbum;
-                const linkUrl = isAlbum ? `/album/${pl.id}` : `/playlist/${pl.id}`;
-
-                return (
-                  <div
-                    key={pl.id}
-                    onClick={() => router.push(linkUrl)}
-                    className="w-full md:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
-                  >
-                    <div>
-                      {/* Cover Image with Play Overlay */}
-                      <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2 sm:mb-3">
-                        <PlaylistCover
-                          tracks={tracks}
-                          fallbackUrl={pl.coverUrl}
-                          alt={pl.title}
-                          className="group-hover:scale-105 transition-transform duration-500"
-                        />
-
-                        {/* Badges top-left */}
-                        <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap z-10">
-                          <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/80 text-primary border-primary/50 shadow-[0_0_12px_rgba(76,215,246,0.3)] flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[10px] sm:text-[11px] rotate-45">push_pin</span>
-                            PINNED
-                          </span>
-                          {isAlbum && (
-                            <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-amber-950/80 text-amber-300 border-amber-600/40">
-                              ALBUM
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Unpin button top-right */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            removeAddedPlaylist(pl.id);
-                          }}
-                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center transition-all cursor-pointer z-10"
-                          title="Unpin from library"
-                        >
-                          <span className="material-symbols-outlined text-[14px]">close</span>
-                        </button>
-
-                        {/* Play Button Overlay */}
-                        <div
-                          className={`absolute inset-0 bg-black/40 flex items-end justify-end p-2.5 sm:p-3 transition-opacity duration-300 ${
-                            isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={(e) => handlePlaylistPlay(pl, e)}
-                            className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95 z-10"
-                            title={isPlaylistPlaying ? "Pause" : "Play"}
-                          >
-                            <span className="material-symbols-outlined text-[18px] sm:text-[24px]">
-                              {isPlaylistPlaying ? "pause" : "play_arrow"}
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Metadata */}
-                      <div className="flex flex-col min-w-0">
-                        <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
-                          {pl.title}
-                        </h3>
-                        <p className="text-[10px] sm:text-[11px] text-on-surface-variant line-clamp-1 mt-0.5">
-                          {pl.curator || pl.description || "Curated collection"}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Telemetry Capsule for Track Count & Duration */}
-                    <div className="pt-2 mt-auto">
-                      <div className="flex items-center justify-between gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
-                        <div className="flex items-center gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9px] sm:text-[10px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
-                          <span className="tabular-nums whitespace-nowrap">
-                            {pl.trackCount || tracks.length} {(pl.trackCount || tracks.length) === 1 ? "track" : "tracks"}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9px] sm:text-[10px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
-                          <span className="material-symbols-outlined text-[10px] sm:text-[12px] text-outline flex-shrink-0">schedule</span>
-                          <span className="truncate">{formatPlaylistDuration(tracks)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
       </div>
 
       {/* Creation Modal */}

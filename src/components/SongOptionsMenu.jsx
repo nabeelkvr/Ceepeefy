@@ -21,6 +21,8 @@ export default function SongOptionsMenu({
   playlistId = null,
   buttonClassName = "",
   iconClassName = "text-[20px]",
+  iconName = "more_vert",
+  title = "More options",
 }) {
   const {
     playNext,
@@ -38,7 +40,7 @@ export default function SongOptionsMenu({
   } = useMusic();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [showPlaylistSubmenu, setShowPlaylistSubmenu] = useState(false);
+  const [currentView, setCurrentView] = useState("main"); // "main" | "playlists"
   const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0, openUpwards: false });
   const [isMounted, setIsMounted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -63,7 +65,11 @@ export default function SongOptionsMenu({
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUpwards = spaceBelow < menuHeight && rect.top > menuHeight;
 
-    const top = openUpwards ? rect.top - menuHeight - 4 : rect.bottom + 6;
+    let top = openUpwards ? rect.top - menuHeight - 4 : rect.bottom + 6;
+    if (top < 10) top = 10;
+    if (top + menuHeight > window.innerHeight - 10) {
+      top = Math.max(10, window.innerHeight - menuHeight - 10);
+    }
     let left = rect.right - menuWidth;
     if (left < 10) left = 10;
     if (left + menuWidth > window.innerWidth - 10) {
@@ -78,11 +84,11 @@ export default function SongOptionsMenu({
     e.preventDefault();
     if (isOpen) {
       setIsOpen(false);
-      setShowPlaylistSubmenu(false);
+      setCurrentView("main");
     } else {
       calculatePosition();
       setIsOpen(true);
-      setShowPlaylistSubmenu(false);
+      setCurrentView("main");
     }
   };
 
@@ -97,14 +103,14 @@ export default function SongOptionsMenu({
         !buttonRef.current.contains(e.target)
       ) {
         setIsOpen(false);
-        setShowPlaylistSubmenu(false);
+        setCurrentView("main");
       }
     };
 
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
         setIsOpen(false);
-        setShowPlaylistSubmenu(false);
+        setCurrentView("main");
       }
     };
 
@@ -165,7 +171,7 @@ export default function SongOptionsMenu({
       }
     }
     setIsOpen(false);
-    setShowPlaylistSubmenu(false);
+    setCurrentView("main");
   };
 
   const handleCreateAndAddToPlaylist = (e) => {
@@ -181,7 +187,7 @@ export default function SongOptionsMenu({
       }
     }
     setIsOpen(false);
-    setShowPlaylistSubmenu(false);
+    setCurrentView("main");
   };
 
   const handleToggleDownload = async (e) => {
@@ -271,11 +277,11 @@ export default function SongOptionsMenu({
         type="button"
         onClick={handleToggleMenu}
         className={`p-1.5 rounded-lg text-outline hover:text-white hover:bg-white/10 active:scale-95 transition-all cursor-pointer flex items-center justify-center ${buttonClassName}`}
-        title="More options"
-        aria-label="More options"
+        title={title}
+        aria-label={title}
       >
         <span className={`material-symbols-outlined ${iconClassName}`}>
-          more_vert
+          {iconName}
         </span>
       </button>
 
@@ -291,159 +297,165 @@ export default function SongOptionsMenu({
           className="w-56 bg-[#16171d]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] py-1.5 px-1 animate-in fade-in zoom-in-95 duration-150 select-none text-sm text-neutral-200"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Play next */}
-          <button
-            type="button"
-            onClick={handlePlayNext}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-          >
-            <span className="material-symbols-outlined text-[20px] text-neutral-400 group-hover:text-primary transition-colors">
-              playlist_play
-            </span>
-            <span className="font-medium text-[13px]">Play next</span>
-          </button>
-
-          {/* Add to queue */}
-          <button
-            type="button"
-            onClick={handleAddToQueue}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-          >
-            <span className="material-symbols-outlined text-[20px] text-neutral-400 group-hover:text-primary transition-colors">
-              queue
-            </span>
-            <span className="font-medium text-[13px]">Add to queue</span>
-          </button>
-
-          {/* Divider */}
-          <div className="my-1 border-t border-white/10 mx-2" />
-
-          {/* Add to Favorites / Liked */}
-          <button
-            type="button"
-            onClick={handleToggleFavorite}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-          >
-            <span
-              className={`material-symbols-outlined text-[20px] transition-colors ${
-                liked ? "text-primary" : "text-neutral-400 group-hover:text-primary"
-              }`}
-              style={{ fontVariationSettings: liked ? "'FILL' 1" : "'FILL' 0" }}
-            >
-              {liked ? "favorite" : "favorite_border"}
-            </span>
-            <span className="font-medium text-[13px]">
-              {liked ? "Remove from Favorites" : "Add to Favorites"}
-            </span>
-          </button>
-
-          {/* Add to playlist with Flyout/Submenu */}
-          <div
-            className="relative"
-            onMouseEnter={() => setShowPlaylistSubmenu(true)}
-            onMouseLeave={() => setShowPlaylistSubmenu(false)}
-          >
-            <button
-              type="button"
-              onClick={() => setShowPlaylistSubmenu((prev) => !prev)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-neutral-400 group-hover:text-primary transition-colors">
-                  playlist_add
+          {currentView === "playlists" ? (
+            /* Drill-down: Select Playlist View (always fully visible on screen) */
+            <div className="flex flex-col py-0.5">
+              <div className="flex items-center gap-2 px-2 py-1.5 border-b border-white/10 mb-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentView("main")}
+                  className="p-1 rounded-lg text-outline hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center cursor-pointer"
+                  title="Back"
+                >
+                  <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                </button>
+                <span className="text-xs font-bold text-white tracking-wide">
+                  Add to Playlist
                 </span>
-                <span className="font-medium text-[13px]">Add to playlist</span>
               </div>
-              <span className="material-symbols-outlined text-[16px] text-neutral-400 group-hover:text-white transition-transform group-hover:translate-x-0.5">
-                chevron_right
-              </span>
-            </button>
 
-            {/* Playlist Flyout Submenu */}
-            {showPlaylistSubmenu && (
-              <div
-                className="absolute top-0 right-full mr-2 w-52 bg-[#1b1c24]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-1.5 max-h-60 overflow-y-auto no-scrollbar z-[10000] animate-in fade-in zoom-in-95 duration-100"
+              <button
+                type="button"
+                onClick={handleCreateAndAddToPlaylist}
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left text-xs text-primary hover:bg-primary/10 transition-colors font-semibold cursor-pointer mb-1"
               >
-                <div className="px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider text-outline border-b border-white/5 mb-1">
-                  Select Playlist
-                </div>
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                <span>New Playlist</span>
+              </button>
 
+              <div className="max-h-56 overflow-y-auto no-scrollbar flex flex-col gap-0.5">
                 {customPlaylists && customPlaylists.length > 0 ? (
                   customPlaylists.map((pl) => (
                     <button
                       key={pl.id}
                       type="button"
                       onClick={(e) => handleAddToSpecificPlaylist(e, pl)}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs hover:text-white hover:bg-white/10 transition-colors truncate"
+                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left text-xs text-neutral-200 hover:text-white hover:bg-white/10 transition-colors truncate cursor-pointer group"
                     >
-                      <span className="material-symbols-outlined text-[16px] text-primary flex-shrink-0">
+                      <span className="material-symbols-outlined text-[17px] text-primary flex-shrink-0">
                         queue_music
                       </span>
                       <span className="truncate">{pl.title || pl.name || "Untitled Playlist"}</span>
                     </button>
                   ))
                 ) : (
-                  <div className="px-3 py-2 text-xs text-outline italic text-center">
+                  <div className="px-3 py-3 text-xs text-outline italic text-center">
                     No custom playlists
                   </div>
                 )}
-
-                <div className="my-1 border-t border-white/10" />
-                <button
-                  type="button"
-                  onClick={handleCreateAndAddToPlaylist}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs text-primary hover:bg-primary/10 transition-colors font-medium"
-                >
-                  <span className="material-symbols-outlined text-[16px]">add</span>
-                  <span>New Playlist</span>
-                </button>
               </div>
-            )}
-          </div>
-
-          {/* Download to device */}
-          <button
-            type="button"
-            onClick={handleToggleDownload}
-            disabled={isDownloading}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-          >
-            {isDownloading ? (
-              <div className="w-5 h-5 flex items-center justify-center">
-                <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-              <span
-                className={`material-symbols-outlined text-[20px] transition-colors ${
-                  isDownloaded ? "text-cyan-400" : "text-neutral-400 group-hover:text-primary"
-                }`}
-              >
-                {isDownloaded ? "download_done" : "download"}
-              </span>
-            )}
-            <span className="font-medium text-[13px]">
-              {isDownloading
-                ? "Downloading..."
-                : isDownloaded
-                ? "Downloaded to device"
-                : "Download to device"}
-            </span>
-          </button>
-
-          {/* Optional: Remove from this playlist (if in custom playlist) */}
-          {playlistId && (
+            </div>
+          ) : (
+            /* Main Menu View */
             <>
-              <div className="my-1 border-t border-white/10 mx-2" />
+              {/* Play next */}
               <button
                 type="button"
-                onClick={handleRemoveFromThisPlaylist}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
+                onClick={handlePlayNext}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
               >
-                <span className="material-symbols-outlined text-[20px]">
-                  delete_outline
+                <span className="material-symbols-outlined text-[20px] text-neutral-400 group-hover:text-primary transition-colors">
+                  playlist_play
                 </span>
-                <span className="font-medium text-[13px]">Remove from playlist</span>
+                <span className="font-medium text-[13px]">Play next</span>
               </button>
+
+              {/* Add to queue */}
+              <button
+                type="button"
+                onClick={handleAddToQueue}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
+              >
+                <span className="material-symbols-outlined text-[20px] text-neutral-400 group-hover:text-primary transition-colors">
+                  queue
+                </span>
+                <span className="font-medium text-[13px]">Add to queue</span>
+              </button>
+
+              {/* Divider */}
+              <div className="my-1 border-t border-white/10 mx-2" />
+
+              {/* Add to Favorites / Liked */}
+              <button
+                type="button"
+                onClick={handleToggleFavorite}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
+              >
+                <span
+                  className={`material-symbols-outlined text-[20px] transition-colors ${
+                    liked ? "text-primary" : "text-neutral-400 group-hover:text-primary"
+                  }`}
+                  style={{ fontVariationSettings: liked ? "'FILL' 1" : "'FILL' 0" }}
+                >
+                  {liked ? "favorite" : "favorite_border"}
+                </span>
+                <span className="font-medium text-[13px]">
+                  {liked ? "Remove from Favorites" : "Add to Favorites"}
+                </span>
+              </button>
+
+              {/* Add to playlist button (transitions to playlist view) */}
+              <button
+                type="button"
+                onClick={() => setCurrentView("playlists")}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-[20px] text-neutral-400 group-hover:text-primary transition-colors">
+                    playlist_add
+                  </span>
+                  <span className="font-medium text-[13px]">Add to playlist</span>
+                </div>
+                <span className="material-symbols-outlined text-[16px] text-neutral-400 group-hover:text-white transition-transform group-hover:translate-x-0.5">
+                  chevron_right
+                </span>
+              </button>
+
+              {/* Download to device */}
+              <button
+                type="button"
+                onClick={handleToggleDownload}
+                disabled={isDownloading}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
+              >
+                {isDownloading ? (
+                  <div className="w-5 h-5 flex items-center justify-center">
+                    <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <span
+                    className={`material-symbols-outlined text-[20px] transition-colors ${
+                      isDownloaded ? "text-cyan-400" : "text-neutral-400 group-hover:text-primary"
+                    }`}
+                  >
+                    {isDownloaded ? "download_done" : "download"}
+                  </span>
+                )}
+                <span className="font-medium text-[13px]">
+                  {isDownloading
+                    ? "Downloading..."
+                    : isDownloaded
+                    ? "Downloaded to device"
+                    : "Download to device"}
+                </span>
+              </button>
+
+              {/* Optional: Remove from this playlist (if in custom playlist) */}
+              {playlistId && (
+                <>
+                  <div className="my-1 border-t border-white/10 mx-2" />
+                  <button
+                    type="button"
+                    onClick={handleRemoveFromThisPlaylist}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      delete_outline
+                    </span>
+                    <span className="font-medium text-[13px]">Remove from playlist</span>
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>,

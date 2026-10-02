@@ -931,6 +931,130 @@ export const MusicProvider = ({ children }) => {
     });
   };
 
+  const renamePlaylist = (id, newTitle) => {
+    if (!id || !newTitle?.trim()) return false;
+    const cleanTitle = newTitle.trim();
+    const currentUserId = getAccountUserId(user);
+    const idStr = String(id);
+
+    // 1. Check customPlaylists
+    let foundInCustom = false;
+    let updatedCustomPlaylist = null;
+    setCustomPlaylists((prev) => {
+      const idx = prev.findIndex((p) => String(p.id) === idStr);
+      if (idx !== -1) {
+        foundInCustom = true;
+        const current = prev[idx];
+        updatedCustomPlaylist = {
+          ...current,
+          title: cleanTitle,
+          description: current.description
+            ? current.description.replace(current.title, cleanTitle)
+            : `Personal playlist "${cleanTitle}" created in Ceepeefy Studio Mode. High-resolution lossless playback.`,
+        };
+        const next = [...prev];
+        next[idx] = updatedCustomPlaylist;
+        try {
+          persistAccountData({ customPlaylists: next });
+        } catch {}
+        return next;
+      }
+      return prev;
+    });
+
+    if (foundInCustom && updatedCustomPlaylist) {
+      savePlaylistToCloud(updatedCustomPlaylist, currentUserId).catch((err) => {
+        console.warn("[MusicContext] Failed to sync renamed playlist to Supabase:", err);
+      });
+      return true;
+    }
+
+    // 2. Check selfMixes
+    let foundInSelfMix = false;
+    let updatedSelfMix = null;
+    setSelfMixes((prev) => {
+      const idx = prev.findIndex((m) => String(m.id) === idStr);
+      if (idx !== -1) {
+        foundInSelfMix = true;
+        const current = prev[idx];
+        updatedSelfMix = {
+          ...current,
+          title: cleanTitle,
+        };
+        const next = [...prev];
+        next[idx] = updatedSelfMix;
+        try {
+          localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(next));
+          persistAccountData({ selfMixes: next });
+        } catch {}
+        return next;
+      }
+      return prev;
+    });
+
+    if (foundInSelfMix && updatedSelfMix) {
+      savePlaylistToCloud(updatedSelfMix, currentUserId).catch((err) => {
+        console.warn("[MusicContext] Failed to sync renamed self mix to Supabase:", err);
+      });
+      return true;
+    }
+
+    // 3. Check addedPlaylists
+    setAddedPlaylists((prev) =>
+      prev.map((p) => (String(p.id) === idStr ? { ...p, title: cleanTitle } : p))
+    );
+
+    // 4. Also store in custom playlist titles override (for built-in or cached playlists)
+    try {
+      const storedOverrides = JSON.parse(localStorage.getItem("ceepeefy_playlist_titles") || "{}");
+      storedOverrides[idStr] = cleanTitle;
+      localStorage.setItem("ceepeefy_playlist_titles", JSON.stringify(storedOverrides));
+    } catch {}
+
+    return true;
+  };
+
+  const bumpPlaylistToTop = (playlistId) => {
+    if (!playlistId) return;
+    const idStr = String(playlistId);
+
+    // 1. Move to top in customPlaylists
+    setCustomPlaylists((prev) => {
+      const idx = prev.findIndex((p) => String(p.id) === idStr);
+      if (idx <= 0) return prev; // already at top or not found
+      const target = prev[idx];
+      const updated = [target, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
+      try {
+        persistAccountData({ customPlaylists: updated });
+      } catch {}
+      return updated;
+    });
+
+    // 2. Move to top in selfMixes
+    setSelfMixes((prev) => {
+      const idx = prev.findIndex((m) => String(m.id) === idStr);
+      if (idx <= 0) return prev;
+      const target = prev[idx];
+      const updated = [target, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
+      try {
+        localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(updated));
+        persistAccountData({ selfMixes: updated });
+      } catch {}
+      return updated;
+    });
+
+    // 3. Move to top in addedPlaylists
+    setAddedPlaylists((prev) => {
+      const idx = prev.findIndex((p) => String(p.id) === idStr);
+      if (idx <= 0) return prev;
+      return [prev[idx], ...prev.slice(0, idx), ...prev.slice(idx + 1)];
+    });
+
+    try {
+      localStorage.setItem("ceepeefy_last_played_playlist_id", idStr);
+    } catch {}
+  };
+
   const createSelfMix = (title, initialTracks = [], customCover = null) => {
     const count = selfMixes.length + 1;
     const cleanTitle = title?.trim() || `Self Mix #${count}`;
@@ -2832,6 +2956,8 @@ export const MusicProvider = ({ children }) => {
         formatTime,
         createPlaylist,
         deleteCustomPlaylist,
+        renamePlaylist,
+        bumpPlaylistToTop,
         createSelfMix,
         deleteSelfMix,
         addLocalTracksToSelfMix,

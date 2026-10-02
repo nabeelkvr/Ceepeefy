@@ -651,17 +651,26 @@ function SelfMixContent() {
                     const { publicUrl } = await uploadAudioToCloud(file, currentUserId);
                     audioUrl = publicUrl;
                     isCloud = true;
+                    await saveSelfMixToCloud({
+                      id: trackId,
+                      title: cleanTitle,
+                      audioUrl: publicUrl,
+                      owner: currentUserId,
+                      duration: durationSecs || 180,
+                      durationFormatted: formatted,
+                      fileName: file.name,
+                      fileSize: file.size,
+                      coverUrl: activeMix.coverUrl,
+                    }).catch((e) => console.warn("Supabase record insert warning:", e));
                   } catch (err) {
-                    console.warn(err);
+                    console.warn("Cloud upload failed, falling back to local:", err);
                   }
                 }
-                if (!audioUrl) {
-                  await saveLocalAudioFile(trackId, file, {
-                    fileName: file.name,
-                    fileType: file.type,
-                    fileSize: file.size,
-                  });
-                }
+                await saveLocalAudioFile(trackId, file, {
+                  fileName: file.name,
+                  fileType: file.type || "audio/mpeg",
+                  fileSize: file.size,
+                });
                 newTracks.push({
                   id: trackId,
                   title: cleanTitle,
