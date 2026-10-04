@@ -8,9 +8,21 @@
     --sab: env(safe-area-inset-bottom, 0px);
     --sal: env(safe-area-inset-left, 0px);
     --sar: env(safe-area-inset-right, 0px);
+
+    /* Dynamic Theme & Primary Tokens */
+    --color-primary-rgb: 56 189 248;
+    --color-primary-container-rgb: 2 132 199;
+    --color-on-primary-rgb: 0 54 64;
+    --theme-bg-base: #050d18;
+    --theme-bg-opacity: 0.35;
+    --theme-overlay-opacity: 0.72;
+    --theme-bg-blur: 14px;
+    --theme-glow-opacity: 0.42;
+    --theme-primary-glow: rgba(56, 189, 248, 0.35);
   }
 
-  html, body {
+  html,
+  body {
     margin: 0;
     padding: 0;
     background-color: #0b1326;
@@ -21,7 +33,13 @@
   }
 
   /* Optimize touch responsiveness and eliminate 300ms tap delay on mobile */
-  button, a, input, select, textarea, [role="button"], [tabindex] {
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"],
+  [tabindex] {
     touch-action: manipulation;
   }
 }
@@ -39,15 +57,30 @@
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: rgba(134, 147, 151, 0.25);
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(134, 147, 151, 0.45);
+}
+
+/* Hide scrollbar for Chrome, Safari, Opera, Edge and Firefox */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 
 /* Glassmorphism Classes directly from Stitch */
@@ -84,6 +117,7 @@
   overflow: hidden;
   user-select: none;
 }
+
 .material-symbols-outlined.fill-current {
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
@@ -93,6 +127,7 @@
     transform: translateY(100%);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -104,38 +139,81 @@
 }
 
 @keyframes soundBar1 {
-  0%, 100% { height: 6px; }
-  50% { height: 20px; }
+
+  0%,
+  100% {
+    height: 6px;
+  }
+
+  50% {
+    height: 20px;
+  }
 }
+
 @keyframes soundBar2 {
-  0%, 100% { height: 16px; }
-  50% { height: 8px; }
+
+  0%,
+  100% {
+    height: 16px;
+  }
+
+  50% {
+    height: 8px;
+  }
 }
+
 @keyframes soundBar3 {
-  0%, 100% { height: 10px; }
-  50% { height: 24px; }
+
+  0%,
+  100% {
+    height: 10px;
+  }
+
+  50% {
+    height: 24px;
+  }
 }
+
 @keyframes soundBar4 {
-  0%, 100% { height: 22px; }
-  50% { height: 12px; }
+
+  0%,
+  100% {
+    height: 22px;
+  }
+
+  50% {
+    height: 12px;
+  }
 }
+
 @keyframes soundBar5 {
-  0%, 100% { height: 8px; }
-  50% { height: 18px; }
+
+  0%,
+  100% {
+    height: 8px;
+  }
+
+  50% {
+    height: 18px;
+  }
 }
 
 .animate-sound-bar-1 {
   animation: soundBar1 0.75s ease-in-out infinite;
 }
+
 .animate-sound-bar-2 {
   animation: soundBar2 0.55s ease-in-out infinite;
 }
+
 .animate-sound-bar-3 {
   animation: soundBar3 0.85s ease-in-out infinite;
 }
+
 .animate-sound-bar-4 {
   animation: soundBar4 0.65s ease-in-out infinite;
 }
+
 .animate-sound-bar-5 {
   animation: soundBar5 0.9s ease-in-out infinite;
 }
@@ -144,19 +222,17 @@
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
 }
 
 .skeleton-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.03) 0%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.03) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.03) 100%);
   background-size: 200% 100%;
   animation: skeletonShimmer 1.8s ease-in-out infinite;
 }
-

@@ -1929,32 +1929,16 @@ function SearchContent() {
                               <span className="text-xs font-mono text-outline">({allArtists.length})</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              {allArtists.length > 4 && (
+                              {allArtists.length > 5 && (
                                 <button
                                   type="button"
                                   onClick={() => setActiveFilter("Artists")}
-                                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer mr-2"
+                                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                                 >
                                   <span>See all</span>
                                   <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => scrollArtistsContainer("left")}
-                                className="w-7 h-7 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 flex items-center justify-center text-outline hover:text-white transition-all cursor-pointer"
-                                title="Previous"
-                              >
-                                <span className="material-symbols-outlined text-[16px]">chevron_left</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => scrollArtistsContainer("right")}
-                                className="w-7 h-7 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 flex items-center justify-center text-outline hover:text-white transition-all cursor-pointer"
-                                title="Next"
-                              >
-                                <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-                              </button>
                             </div>
                           </div>
                           <div
@@ -1982,28 +1966,12 @@ function SearchContent() {
                                 <button
                                   type="button"
                                   onClick={() => setActiveFilter("Albums")}
-                                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer mr-2"
+                                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                                 >
                                   <span>See all</span>
                                   <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => scrollAlbumsContainer("left")}
-                                className="w-7 h-7 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 flex items-center justify-center text-outline hover:text-white transition-all cursor-pointer"
-                                title="Previous"
-                              >
-                                <span className="material-symbols-outlined text-[16px]">chevron_left</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => scrollAlbumsContainer("right")}
-                                className="w-7 h-7 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 flex items-center justify-center text-outline hover:text-white transition-all cursor-pointer"
-                                title="Next"
-                              >
-                                <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-                              </button>
                             </div>
                           </div>
                           <div

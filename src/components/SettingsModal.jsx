@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useMusic } from "../context/MusicContext";
+import AmbientSettingsSection from "./AmbientSettingsSection";
 
 export default function SettingsModal() {
   const {
@@ -170,7 +171,7 @@ export default function SettingsModal() {
           {[
             { id: "audio", label: "Audio & Hi-Fi", icon: "graphic_eq" },
             { id: "playback", label: "Playback", icon: "tune" },
-            { id: "appearance", label: "Appearance", icon: "palette" },
+            { id: "appearance", label: "Ambient Studio", icon: "wallpaper" },
             { id: "storage", label: "Storage & System", icon: "database" },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
@@ -181,7 +182,7 @@ export default function SettingsModal() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   isActive
-                    ? "bg-primary text-surface-container-lowest font-bold shadow-[0_0_16px_rgba(76,215,246,0.35)]"
+                    ? "bg-primary text-surface-container-lowest font-bold shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.35)]"
                     : "text-outline hover:text-white hover:bg-white/5"
                 }`}
               >
@@ -411,7 +412,7 @@ export default function SettingsModal() {
                       onClick={() => updateSetting("crossfade", secs)}
                       className={`flex-1 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all cursor-pointer ${
                         settings.crossfade === secs
-                          ? "bg-primary text-surface-container-lowest font-bold shadow-[0_0_12px_rgba(76,215,246,0.3)]"
+                          ? "bg-primary text-surface-container-lowest font-bold shadow-[0_0_12px_rgba(var(--color-primary-rgb),0.3)]"
                           : "bg-surface-container hover:bg-white/10 text-outline hover:text-white border border-white/5"
                       }`}
                     >
@@ -455,108 +456,7 @@ export default function SettingsModal() {
 
           {/* TAB 3: APPEARANCE */}
           {activeTab === "appearance" && (
-            <div className="space-y-4 animate-fade-in">
-              {/* Neon Theme Selector */}
-              <div className="p-4 rounded-2xl bg-surface-container/50 border border-white/5 space-y-3">
-                <div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                    Studio Accent Illumination
-                  </h3>
-                  <p className="text-[11px] text-outline mt-0.5">
-                    Customize your studio visual neon glow color
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-                  {themeOptions.map((thm) => {
-                    const isSelected = settings.themeAccent === thm.id;
-                    return (
-                      <button
-                        key={thm.id}
-                        type="button"
-                        onClick={() => updateSetting("themeAccent", thm.id)}
-                        className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all cursor-pointer ${
-                          isSelected
-                            ? "bg-white/10 border-primary shadow-[0_0_16px_rgba(76,215,246,0.3)]"
-                            : "bg-surface-container/50 border-white/5 hover:border-white/20"
-                        }`}
-                      >
-                        <span
-                          className="w-5 h-5 rounded-full shadow-md"
-                          style={{
-                            backgroundColor: thm.color,
-                            boxShadow: `0 0 10px ${thm.glow}`,
-                          }}
-                        />
-                        <span className="text-xs font-semibold text-white truncate">
-                          {thm.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Dynamic Artwork Ambient Glow */}
-              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/50 border border-white/5">
-                <div className="flex items-center gap-3 max-w-[80%]">
-                  <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
-                    <span className="material-symbols-outlined text-[18px]">flare</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-white">
-                      Atmospheric Album Glow
-                    </span>
-                    <span className="text-[11px] text-outline">
-                      Projects dynamic ambient color lighting inspired by current track artwork
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => updateSetting("ambientGlow", !settings.ambientGlow)}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
-                    settings.ambientGlow ? "bg-primary" : "bg-surface-container-high"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                      settings.ambientGlow ? "left-6" : "left-1"
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Synchronized Live Lyrics */}
-              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/50 border border-white/5">
-                <div className="flex items-center gap-3 max-w-[80%]">
-                  <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0">
-                    <span className="material-symbols-outlined text-[18px]">lyrics</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-white">
-                      Synchronized Karaoke Lyrics
-                    </span>
-                    <span className="text-[11px] text-outline">
-                      Live line-by-line glowing lyric auto-scrolling during song playback
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => updateSetting("showLiveLyrics", !settings.showLiveLyrics)}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
-                    settings.showLiveLyrics ? "bg-primary" : "bg-surface-container-high"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                      settings.showLiveLyrics ? "left-6" : "left-1"
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
+            <AmbientSettingsSection />
           )}
 
           {/* TAB 4: STORAGE & SYSTEM */}
@@ -574,7 +474,7 @@ export default function SettingsModal() {
                 </div>
 
                 <div className="w-full bg-surface-container-highest rounded-full h-2 overflow-hidden">
-                  <div className="bg-primary h-full w-[28%] rounded-full shadow-[0_0_8px_rgba(76,215,246,0.6)]" />
+                  <div className="bg-primary h-full w-[28%] rounded-full shadow-[0_0_8px_rgba(var(--color-primary-rgb),0.6)]" />
                 </div>
 
                 <p className="text-[11px] text-outline leading-relaxed">

@@ -281,11 +281,10 @@ export default function Header({ onToggleMobileMenu }) {
               setIsNotificationsOpen(false);
               setIsProfileOpen((prev) => !prev);
             }}
-            className={`w-8 h-8 md:w-9 md:h-9 rounded-full p-0.5 cursor-pointer transition-all ${
-              user
+            className={`w-8 h-8 md:w-9 md:h-9 rounded-full p-0.5 cursor-pointer transition-all ${user
                 ? "bg-gradient-to-tr from-primary via-cyan-300 to-secondary shadow-[0_0_14px_rgba(76,215,246,0.45)] hover:scale-105"
                 : "bg-gradient-to-tr from-primary to-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.4)] hover:scale-105"
-            }`}
+              }`}
             title={user ? `Profile (${user.name})` : "Profile (New to Ceepeefy)"}
           >
             <div className="w-full h-full rounded-full bg-surface-container-lowest flex items-center justify-center text-primary font-bold text-xs">

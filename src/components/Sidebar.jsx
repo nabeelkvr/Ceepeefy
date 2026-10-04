@@ -443,7 +443,7 @@ export default function Sidebar({ className = "", onClose }) {
                 onClick={() => {
                   try {
                     localStorage.setItem("ceepeefy_pwa_dismissed", "true");
-                  } catch (e) {}
+                  } catch (e) { }
                   setIsDismissed(true);
                 }}
                 className="p-1 text-outline hover:text-white rounded-full transition-colors cursor-pointer"

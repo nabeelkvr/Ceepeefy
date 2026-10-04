@@ -238,7 +238,7 @@ export default function PlaylistsPage() {
                 onClick={() => router.push(targetUrl)}
                 className={`w-full md:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none ${
                   isPinned
-                    ? "border-primary/40 bg-surface-container/95 shadow-[0_0_20px_rgba(76,215,246,0.15)]"
+                    ? "border-primary/40 bg-surface-container/95 shadow-[0_0_20px_rgba(var(--color-primary-rgb),0.15)]"
                     : "border-white/5 hover:border-primary/30 hover:bg-surface-container/90"
                 }`}
               >
@@ -254,13 +254,13 @@ export default function PlaylistsPage() {
                     {/* Badges top-left */}
                     <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap z-10">
                       {isPinned && (
-                        <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/90 text-primary border-primary/50 shadow-[0_0_12px_rgba(76,215,246,0.4)] flex items-center gap-1">
+                        <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/90 text-primary border-primary/50 shadow-[0_0_12px_rgba(var(--color-primary-rgb),0.4)] flex items-center gap-1">
                           <span className="material-symbols-outlined text-[10px] sm:text-[11px] rotate-45">push_pin</span>
                           PINNED
                         </span>
                       )}
                       {pl.isCustom ? (
-                        <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-primary/20 text-primary border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.3)] flex items-center gap-1">
+                        <span className="text-[8.5px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md backdrop-blur-md border bg-primary/20 text-primary border-primary/40 shadow-[0_0_12px_rgba(var(--color-primary-rgb),0.3)] flex items-center gap-1">
                           <span className="material-symbols-outlined text-[10px] sm:text-[11px]">person</span>
                           YOU
                         </span>
@@ -321,7 +321,7 @@ export default function PlaylistsPage() {
                       <button
                         type="button"
                         onClick={(e) => handlePlaylistPlay(pl, e)}
-                        className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95 z-10"
+                        className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95 z-10"
                         title={isPlaylistPlaying ? "Pause Playlist" : "Play Playlist"}
                       >
                         <span className="material-symbols-outlined text-[18px] sm:text-[24px]">

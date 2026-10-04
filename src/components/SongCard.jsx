@@ -1,82 +1,166 @@
+"use client";
+
 import React from "react";
-import { Play, Pause } from "lucide-react";
 import { useMusic } from "../context/MusicContext";
+import SongOptionsMenu from "./SongOptionsMenu";
 
-export default function SongCard({ item, type = "song", onClick }) {
-  const { currentSong, isPlaying, playSong, togglePlay, navigateToPlaylist } = useMusic();
+/**
+ * Modern Ceepeefy SongCard (Matching Image 1)
+ * 
+ * Features:
+ * - Rectangular portrait artwork (more height than square, aspect-[4/5] like Image 1)
+ * - 100% sharp full edges (rounded-none, crisp 90-degree corners)
+ * - No outer card box / blending frame (frameless sitting directly on the canvas)
+ * - Directly below picture:
+ *     Row 1: ARTIST NAME (uppercase / muted) + 3-dot menu button on right
+ *     Row 2: Song Title (bold white)
+ * - Hover circular play button over artwork
+ */
+export default function SongCard({
+  track,
+  trackList = [],
+  isCurrent: customIsCurrent,
+  isPlaying: customIsPlaying,
+  onPlay,
+  className = "",
+  playlistId = null,
+}) {
+  const { currentTrack, isPlaying, playTrack, togglePlay } = useMusic();
 
-  const isCurrentSong = type === "song" && currentSong?.id === item.id;
-  const isCurrentlyPlaying = isCurrentSong && isPlaying;
+  if (!track) return null;
 
-  const handleClick = () => {
-    if (onClick) {
-      onClick();
+  const trackId = String(track.id || track.trackId || "");
+  const isCurrent = customIsCurrent !== undefined 
+    ? customIsCurrent 
+    : String(currentTrack?.id || "") === trackId;
+  const isCurrentPlaying = customIsPlaying !== undefined 
+    ? customIsPlaying 
+    : isCurrent && isPlaying;
+
+  const handleCardClick = () => {
+    if (onPlay) {
+      onPlay(track);
       return;
     }
-
-    if (type === "playlist") {
-      navigateToPlaylist(item.id);
+    if (isCurrent) {
+      togglePlay();
     } else {
-      if (isCurrentSong) {
-        togglePlay();
-      } else {
-        playSong(item);
-      }
+      playTrack(track, trackList.length > 0 ? trackList : [track]);
     }
   };
 
   const handlePlayButtonClick = (e) => {
     e.stopPropagation();
-    if (type === "playlist") {
-      navigateToPlaylist(item.id);
+    if (onPlay) {
+      onPlay(track);
+      return;
+    }
+    if (isCurrent) {
+      togglePlay();
     } else {
-      if (isCurrentSong) {
-        togglePlay();
-      } else {
-        playSong(item);
-      }
+      playTrack(track, trackList.length > 0 ? trackList : [track]);
     }
   };
 
+  const coverUrl =
+    track.coverUrl ||
+    track.thumbnail ||
+    track.image ||
+    (Array.isArray(track.image) && track.image[track.image.length - 1]?.url) ||
+    "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
+
   return (
     <div
-      onClick={handleClick}
-      className="bg-[#181818] hover:bg-[#282828] p-3.5 rounded-lg cursor-pointer transition-all duration-300 group flex flex-col relative select-none hover:shadow-xl hover:shadow-black/50"
+      onClick={handleCardClick}
+      className={`w-[140px] sm:w-[155px] md:w-[170px] lg:w-[180px] flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1 ${className}`}
     >
-      {/* Artwork container */}
-      <div className="relative aspect-square w-full rounded-md overflow-hidden mb-3 bg-[#242424] shadow-md">
+      {/* Rectangular Portrait Artwork (Aspect 4/5, Subtle 8px edge blend) */}
+      <div
+        className={`relative aspect-[4/5] w-full rounded-[8px] overflow-hidden bg-[#161922] shadow-lg transition-all duration-200 ${
+          isCurrent
+            ? "ring-2 ring-primary shadow-[0_0_18px_rgba(var(--color-primary-rgb),0.4)]"
+            : "ring-1 ring-white/10 group-hover:ring-white/30"
+        }`}
+      >
         <img
-          src={item.coverUrl}
-          alt={item.title || item.name}
-          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          src={coverUrl}
+          alt={track.title}
           loading="lazy"
+          decoding="async"
+          onError={(e) => {
+            e.currentTarget.src =
+              "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
+          }}
+          className="w-full h-full object-cover rounded-[8px] group-hover:scale-105 transition-transform duration-500"
         />
 
-        {/* Floating green play button on hover */}
-        <button
-          onClick={handlePlayButtonClick}
-          className={`absolute bottom-2 right-2 w-11 h-11 rounded-full bg-spotify-green hover:bg-spotify-green-hover text-black flex items-center justify-center shadow-xl shadow-black/60 transition-all duration-300 transform ${
-            isCurrentlyPlaying
-              ? "opacity-100 translate-y-0 scale-100"
-              : "opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-105"
+        {/* Hover Circular Play Button Overlay */}
+        <div
+          className={`absolute inset-0 bg-black/35 flex items-end justify-end p-2 sm:p-2.5 transition-all duration-200 ${
+            isCurrentPlaying
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-100"
           }`}
-          aria-label={isCurrentlyPlaying ? "Pause" : "Play"}
         >
-          {isCurrentlyPlaying ? (
-            <Pause className="w-5 h-5 fill-black" />
-          ) : (
-            <Play className="w-5 h-5 fill-black translate-x-0.5" />
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={handlePlayButtonClick}
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_16px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-110 active:scale-95 ${
+              isCurrentPlaying
+                ? "translate-y-0 scale-100 shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.6)]"
+                : "translate-y-2 group-hover:translate-y-0 scale-95 group-hover:scale-100"
+            }`}
+            title={isCurrentPlaying ? "Pause" : "Play"}
+            aria-label={isCurrentPlaying ? "Pause" : "Play"}
+          >
+            <span className="material-symbols-outlined text-[20px] sm:text-[22px]">
+              {isCurrentPlaying ? "pause" : "play_arrow"}
+            </span>
+          </button>
+        </div>
+
+        {/* Playing Animated Equalizer Bar in top-left */}
+        {isCurrentPlaying && (
+          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-sm bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-0.5">
+            <span className="w-0.5 h-2.5 bg-primary rounded-full animate-pulse" />
+            <span className="w-0.5 h-3.5 bg-primary rounded-full animate-pulse delay-75" />
+            <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse delay-150" />
+          </div>
+        )}
       </div>
 
-      {/* Details */}
-      <h3 className={`font-bold text-sm truncate mb-1 ${isCurrentSong ? "text-spotify-green" : "text-white"}`}>
-        {item.title || item.name}
-      </h3>
-      <p className="text-xs text-neutral-400 line-clamp-2 leading-relaxed">
-        {item.artist || item.description || (type === "playlist" ? "Playlist" : "Single")}
-      </p>
+      {/* Structure matching Image 1:
+          Row 1: ARTIST NAME (uppercase / muted) + 3 dots menu on the right
+          Row 2: Song Title (bold white) */}
+      <div className="flex flex-col mt-2 min-w-0">
+        {/* Row 1: Artist + 3 dots */}
+        <div className="flex items-center justify-between gap-1 min-w-0">
+          <p
+            className="text-[10px] sm:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate flex-1"
+            title={track.artist}
+          >
+            {track.artist}
+          </p>
+          <div className="flex-shrink-0 -mr-1">
+            <SongOptionsMenu
+              track={track}
+              playlistId={playlistId}
+              iconClassName="text-[17px]"
+              buttonClassName="p-0.5 text-neutral-400 hover:text-white opacity-80 group-hover:opacity-100 transition-opacity"
+            />
+          </div>
+        </div>
+
+        {/* Row 2: Song Title */}
+        <h3
+          className={`text-xs sm:text-sm font-bold truncate transition-colors leading-tight -mt-0.5 ${
+            isCurrent ? "text-primary font-extrabold" : "text-white group-hover:text-primary"
+          }`}
+          title={track.title}
+        >
+          {track.title}
+        </h3>
+      </div>
     </div>
   );
 }

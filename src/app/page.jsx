@@ -18,7 +18,82 @@ import ArtistAvatar from "../components/ArtistAvatar";
 import DownloadButton from "../components/DownloadButton";
 import SongOptionsMenu from "../components/SongOptionsMenu";
 import PlaylistCover from "../components/PlaylistCover";
+import SongCard from "../components/SongCard";
+import PlaylistCard from "../components/PlaylistCard";
 import { formatPlaylistDuration } from "../utils/playlistUtils";
+import {
+  SPOTIFY_STYLE_PLAYLISTS,
+  MALAYALAM_HITS,
+  MADE_FOR_YOU_TRACKS,
+  CHILL_RELAX_TRACKS,
+} from "../data/curatedDiscovery";
+
+const FEATURED_PLAYLIST_COLLECTION = [
+  {
+    id: "hindi-hits",
+    playlistId: "midnight-reverie",
+    title: "Hindi",
+    subtitle: "हिट्स",
+    gradient: "from-[#6f0f1b] via-[#480a11] to-[#1c0307]",
+    image: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80",
+  },
+  {
+    id: "english-top-hits",
+    playlistId: "midnight-club",
+    title: "English",
+    subtitle: "Top Hits",
+    gradient: "from-[#0c4a6e] via-[#082f49] to-[#02131e]",
+    image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&auto=format&fit=crop&q=80",
+  },
+  {
+    id: "chill-vibes",
+    playlistId: "late-night-lofi",
+    title: "Chill",
+    subtitle: "Vibes",
+    gradient: "from-[#4a123f] via-[#2f0c29] to-[#120410]",
+    image: "https://images.unsplash.com/photo-1509233725247-49e657c54213?w=600&auto=format&fit=crop&q=80",
+  },
+  {
+    id: "workout-beats",
+    playlistId: "deep-state",
+    title: "Workout",
+    subtitle: "Beats",
+    gradient: "from-[#1e293b] via-[#0f172a] to-[#020617]",
+    image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600&auto=format&fit=crop&q=80",
+  },
+  {
+    id: "punjabi-hits",
+    playlistId: "cyberpunk-atmosphere",
+    title: "Punjabi",
+    subtitle: "ਪੰਜਾਬੀ Pop",
+    gradient: "from-[#78350f] via-[#451a03] to-[#1c0802]",
+    image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80",
+  },
+  {
+    id: "malayalam-chill",
+    playlistId: "acoustic-focus",
+    title: "Malayalam",
+    subtitle: "മലയാളം Hits",
+    gradient: "from-[#064e3b] via-[#022c22] to-[#01140f]",
+    image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&auto=format&fit=crop&q=80",
+  },
+  {
+    id: "bollywood-romance",
+    playlistId: "coffee-chill",
+    title: "Bollywood",
+    subtitle: "Romance",
+    gradient: "from-[#831843] via-[#500724] to-[#1f020d]",
+    image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=600&auto=format&fit=crop&q=80",
+  },
+  {
+    id: "lofi-midnight",
+    playlistId: "study-lofi",
+    title: "Lo-Fi",
+    subtitle: "Midnight",
+    gradient: "from-[#312e81] via-[#1e1b4b] to-[#090820]",
+    image: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
+  },
+];
 
 export default function HomePage() {
   const router = useRouter();
@@ -53,6 +128,15 @@ export default function HomePage() {
   const recentsContainerRef = useRef(null);
   const selfMixesSectionRef = useRef(null);
   const playlistsSectionRef = useRef(null);
+
+  // 4 big cards in 2 rows, randomly chosen from curated featured collection
+  const [featuredCards, setFeaturedCards] = useState(() => FEATURED_PLAYLIST_COLLECTION.slice(0, 4));
+
+  useEffect(() => {
+    // Randomize 4 cards on client mount to display in 2 rows randomly
+    const shuffled = [...FEATURED_PLAYLIST_COLLECTION].sort(() => 0.5 - Math.random());
+    setFeaturedCards(shuffled.slice(0, 4));
+  }, []);
 
   const scrollRecents = (direction) => {
     if (recentsContainerRef.current) {
@@ -246,18 +330,12 @@ export default function HomePage() {
       <div className="absolute top-96 -left-20 w-[500px] h-[500px] bg-secondary-container/15 rounded-full blur-[160px] pointer-events-none -z-10" />
       <div className="absolute bottom-40 right-1/4 w-[450px] h-[450px] bg-tertiary/5 rounded-full blur-[140px] pointer-events-none -z-10" />
 
-      {/* Section 1: Recently played songs (Master Tier Selection) - Single Horizontal Row */}
-      <section className="flex flex-col gap-3.5 md:gap-5">
-        <div className="flex items-end justify-between">
-          <div>
-            <span className="font-label-sm text-[10px] md:text-[11px] uppercase tracking-widest text-primary font-bold flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[13px] md:text-[14px]">graphic_eq</span>
-              Master Tier Selection
-            </span>
-            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
-              Recently played songs
-            </h2>
-          </div>
+      {/* Section 1: Recently played songs - Single-row header */}
+      <section className="flex flex-col gap-3.5 md:gap-4.5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+            Recently played songs
+          </h2>
           <div className="flex items-center gap-2 sm:gap-3">
             {displayRecentlyPlayed.length > 0 && (
               <button
@@ -269,26 +347,6 @@ export default function HomePage() {
                 <span className="material-symbols-outlined text-[15px]">delete_sweep</span>
                 <span>Clear</span>
               </button>
-            )}
-            {displayRecentlyPlayed.length > 3 && (
-              <div className="hidden sm:flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => scrollRecents("left")}
-                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 text-outline hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                  title="Scroll left"
-                >
-                  <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => scrollRecents("right")}
-                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 text-outline hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                  title="Scroll right"
-                >
-                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-                </button>
-              </div>
             )}
             {displayRecentlyPlayed.length > 0 && (
               <Link
@@ -307,75 +365,16 @@ export default function HomePage() {
         {displayRecentlyPlayed.length > 0 ? (
           <div
             ref={recentsContainerRef}
-            className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-5 pb-3 pt-1 -mx-2 px-2"
+            className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2"
           >
-            {displayRecentlyPlayed.map((track) => {
-              const isCurrent = currentTrack?.id === track.id;
-              const isCurrentPlaying = isCurrent && isPlaying;
-
-              return (
-                <div
-                  key={track.id}
-                  onClick={() => handleTrackClick(track)}
-                  className={`w-[145px] sm:w-[180px] md:w-[200px] flex-shrink-0 group flex flex-col gap-2 md:gap-3 glass-card p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none ${
-                    isCurrent
-                      ? "border-primary/60 bg-surface-container/95 shadow-[0_0_20px_rgba(76,215,246,0.25)]"
-                      : "border-white/5 hover:border-primary/40 hover:bg-surface-container/90"
-                  }`}
-                >
-                  <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
-                    <img
-                      alt={track.title}
-                      src={track.coverUrl}
-                      loading="lazy"
-                      decoding="async"
-                      onError={(e) => {
-                        e.currentTarget.src =
-                          "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
-                      }}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div
-                      className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 sm:p-3 transition-opacity ${
-                        isCurrentPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                      }`}
-                    >
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-transform">
-                        <span className="material-symbols-outlined text-[20px] sm:text-[24px]">
-                          {isCurrentPlaying ? "pause" : "play_arrow"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col min-w-0">
-                    <h3
-                      className={`text-xs sm:text-sm font-semibold truncate transition-colors ${
-                        isCurrent ? "text-primary" : "text-white group-hover:text-primary"
-                      }`}
-                    >
-                      {track.title}
-                    </h3>
-                    <p className="text-xs text-on-surface-variant truncate mt-0.5">
-                      {track.artist}
-                    </p>
-                    <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/5">
-                      <span className="text-[11px] text-outline font-mono">
-                        {track.durationFormatted || "3:30"}
-                      </span>
-                      <div className="flex items-center gap-0.5">
-                        <DownloadButton track={track} buttonSize="p-0.5" iconSize="text-[15px]" />
-                        <SongOptionsMenu
-                          track={track}
-                          iconClassName="text-[16px]"
-                          buttonClassName="p-0.5 text-outline hover:text-white"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {displayRecentlyPlayed.map((track) => (
+              <SongCard
+                key={track.id}
+                track={track}
+                trackList={displayRecentlyPlayed}
+                onPlay={() => handleTrackClick(track)}
+              />
+            ))}
           </div>
         ) : (
           <div className="p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl glass-card border border-white/5 flex items-center sm:flex-col sm:justify-center sm:text-center gap-3.5 py-4 sm:py-8 md:py-12">
@@ -392,18 +391,12 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Section 2: Featured Playlists */}
-      <section ref={playlistsSectionRef} id="featured-playlists" className="flex flex-col gap-4 sm:gap-5 scroll-mt-6">
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-widest text-primary font-bold">
-              <span className="material-symbols-outlined text-[15px]">queue_music</span>
-              <span>Curated Selections</span>
-            </div>
-            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight mt-1">
-              Featured Playlists
-            </h2>
-          </div>
+      {/* Section 2: Featured Playlists (Image 1: 4 big cards in 2 rows randomly) */}
+      <section ref={playlistsSectionRef} id="featured-playlists" className="flex flex-col gap-3.5 sm:gap-4.5 scroll-mt-6">
+        <div className="flex items-center justify-between">
+          <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+            Featured Playlists
+          </h2>
 
           <Link
             href="/playlists"
@@ -416,167 +409,132 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Playlists Grid - Only user created playlists (self mixes only appear in /self-mix) */}
-        {(() => {
-          const userPlaylists = [
-            ...(user ? (customPlaylists || []).filter((pl) => !pl.isSelfMix) : []),
-          ];
+        {/* 4 Big Cards in 2 Rows */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-5">
+          {featuredCards.map((card) => {
+            const nocturnePl = NOCTURNE_PLAYLISTS.find((p) => p.id === card.playlistId);
+            const playlistTracks = nocturnePl?.tracks?.length ? nocturnePl.tracks : NOCTURNE_TRACKS;
+            const isCardPlaying = isPlaying && playlistTracks.some((t) => t.id === currentTrack?.id);
 
-          if (userPlaylists.length === 0) {
+            const handleCardClick = () => {
+              router.push(`/playlist/${card.playlistId}`);
+            };
+
+            const handlePlayClick = (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (isCardPlaying) {
+                togglePlay();
+              } else if (playlistTracks.length > 0) {
+                playTrack(playlistTracks[0], playlistTracks);
+              }
+            };
+
             return (
-              <div className="p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl glass-card border border-white/5 flex items-center justify-between sm:flex-col sm:justify-center sm:text-center gap-3 py-4 sm:py-8 md:py-12">
-                <div className="flex items-center gap-3 sm:flex-col">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-surface-container-high border border-white/10 flex items-center justify-center text-outline flex-shrink-0">
-                    <span className="material-symbols-outlined text-[20px] sm:text-[24px]">queue_music</span>
-                  </div>
-                  <div>
-                    <p className="text-xs sm:text-sm font-semibold text-white">No playlists yet</p>
-                    <p className="text-[11px] sm:text-xs text-on-surface-variant max-w-sm mt-0.5">
-                      Create a custom playlist to see it here.
-                    </p>
-                  </div>
+              <div
+                key={card.id}
+                onClick={handleCardClick}
+                className={`relative h-24 sm:h-28 md:h-32 rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-r ${card.gradient} border border-white/10 hover:border-primary/50 transition-all duration-300 hover:scale-[1.02] shadow-xl group cursor-pointer flex items-center justify-between p-3.5 sm:p-5 md:p-6 select-none`}
+              >
+                {/* Left: Big Bold Title & Subtitle */}
+                <div className="flex flex-col justify-center min-w-0 z-10 max-w-[55%]">
+                  <h3 className="text-base sm:text-lg md:text-2xl font-black text-white tracking-tight leading-none drop-shadow-md">
+                    {card.title}
+                  </h3>
+                  <p className="text-xs sm:text-sm font-semibold text-white/75 mt-1 sm:mt-1.5 drop-shadow-sm truncate">
+                    {card.subtitle}
+                  </p>
                 </div>
-                <Link
-                  href="/playlists"
-                  className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-bold transition-all flex items-center gap-1.5 flex-shrink-0"
+
+                {/* Right: Cover Photo with Smooth Mask Gradient */}
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-1/2 sm:w-5/12 h-full overflow-hidden select-none pointer-events-none"
+                  style={{
+                    maskImage: "linear-gradient(to left, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)",
+                    WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)",
+                  }}
                 >
-                  <span className="material-symbols-outlined text-[15px] sm:text-[16px]">add</span>
-                  <span>Create Playlist</span>
-                </Link>
+                  <img
+                    src={card.image}
+                    alt={card.title}
+                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
+                  />
+                </div>
+
+                {/* Hover / Active Play Button */}
+                <div className="absolute right-3 sm:right-5 bottom-2.5 sm:bottom-3.5 z-20">
+                  <button
+                    type="button"
+                    onClick={handlePlayClick}
+                    className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_0_20px_rgba(var(--color-primary-rgb),0.6)] transition-all duration-300 hover:scale-110 active:scale-95 ${
+                      isCardPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100 transform translate-y-1 group-hover:translate-y-0"
+                    }`}
+                    title={isCardPlaying ? "Pause" : "Play"}
+                  >
+                    <span className="material-symbols-outlined text-[20px] sm:text-[24px]">
+                      {isCardPlaying ? "pause" : "play_arrow"}
+                    </span>
+                  </button>
+                </div>
               </div>
             );
-          }
+          })}
+        </div>
 
-          return (
-            <div className={`grid ${userPlaylists.length > 1 ? "grid-rows-2" : "grid-rows-1"} grid-flow-col auto-cols-[145px] sm:auto-cols-[180px] md:auto-cols-[200px] overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-5 pb-3 pt-1 -mx-2 px-2 sm:mx-0 sm:px-0`}>
-              {userPlaylists.map((pl) => {
-                const tracks = pl.tracks || [];
-                const isPlaylistPlaying =
-                  isPlaying && tracks.some((t) => t.id === currentTrack?.id);
-                const targetUrl = pl.isSelfMix ? `/self-mix?id=${pl.id}` : `/playlist/${pl.id}`;
+        {/* Under the 4 Big Cards: Spotify-Style Curated Playlist Row (Image 1) */}
+        <div className="flex flex-col gap-2 pt-1 sm:pt-2">
+          <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+            Trending Playlists
+          </h3>
 
-                return (
-                  <div
-                    key={pl.id}
-                    onClick={() => router.push(targetUrl)}
-                    className="w-[145px] sm:w-[180px] md:w-[200px] flex-shrink-0 group flex flex-col gap-2 md:gap-3 glass-card p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-lg select-none cursor-pointer"
-                  >
-                    {/* Playlist Cover Image with Hover Play */}
-                    <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
-                      <PlaylistCover
-                        tracks={tracks}
-                        fallbackUrl={pl.coverUrl}
-                        alt={pl.title}
-                        className="group-hover:scale-105 transition-transform duration-500"
-                      />
-                      {pl.isSelfMix ? (
-                        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 px-1.5 sm:px-2 py-0.5 rounded-md bg-cyan-950/80 backdrop-blur-md text-[8.5px] sm:text-[9px] font-bold text-cyan-300 border border-cyan-700/60 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[10px] sm:text-[12px]">equalizer</span>
-                          <span>SELF MIX</span>
-                        </div>
-                      ) : pl.isCustom ? (
-                        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 px-1.5 sm:px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[8.5px] sm:text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[10px] sm:text-[12px]">person</span>
-                          <span>BY YOU</span>
-                        </div>
-                      ) : null}
-                      <div
-                        className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 sm:p-3 transition-opacity duration-300 ${
-                          isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => handlePlaylistPlay(pl, e)}
-                          className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_16px_rgba(76,215,246,0.6)] transform translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-110 active:scale-95"
-                          title={isPlaylistPlaying ? "Pause" : "Play"}
-                        >
-                          <span className="material-symbols-outlined text-[18px] sm:text-[24px]">
-                            {isPlaylistPlaying ? "pause" : "play_arrow"}
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Playlist Title & Curator */}
-                    <div className="flex flex-col min-w-0">
-                      <h3 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
-                        {pl.title}
-                      </h3>
-                      <p className="text-[11px] sm:text-xs text-on-surface-variant truncate mt-0.5">
-                        {pl.subtitle || pl.description}
-                      </p>
-                    </div>
-
-                    {/* Modern Audio Telemetry Capsule for Track Count & Duration */}
-                    <div className="mt-auto pt-1 sm:pt-2">
-                      <div className="flex items-center justify-between gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
-                        {/* Track Count Badge with Animated Soundwave Equalizer */}
-                        <div className="flex items-center gap-1 sm:gap-1.5 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9px] sm:text-[10.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
-                          <div className="flex items-end gap-[1.5px] h-2 sm:h-2.5 flex-shrink-0">
-                            <span className="w-[1.5px] sm:w-[2px] h-full bg-primary rounded-full animate-pulse" />
-                            <span className="w-[1.5px] sm:w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
-                            <span className="w-[1.5px] sm:w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
-                          </div>
-                          <span className="tabular-nums whitespace-nowrap">
-                            {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
-                          </span>
-                        </div>
-
-                        {/* Duration Pill */}
-                        <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 rounded-md sm:rounded-lg bg-white/5 border border-white/5 text-white/80 text-[9px] sm:text-[10.5px] font-mono font-medium min-w-0 flex-shrink overflow-hidden">
-                          <span className="material-symbols-outlined text-[10px] sm:text-[12px] text-outline flex-shrink-0">schedule</span>
-                          <span className="truncate">{formatPlaylistDuration(tracks)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
+          <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4 pb-2 pt-1 -mx-2 px-2">
+            {SPOTIFY_STYLE_PLAYLISTS.map((pl) => (
+              <PlaylistCard key={pl.id} playlist={pl} />
+            ))}
+          </div>
+        </div>
       </section>
 
-      {/* Section 3: Dynamic & Categorized Popular Artists */}
-      <section className="flex flex-col gap-5">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-label-sm text-[11px] uppercase tracking-widest text-primary font-bold flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[14px]">
-                  {artistCategory === "Trending Now" ? "trending_up"
-                    : artistCategory === "Malayalam" ? "language"
-                      : artistCategory === "Rap" ? "mic"
-                        : artistCategory === "Hindi" ? "music_note"
-                          : "queue_music"}
-                </span>
-                {artistCategory === "Trending Now" ? "Trending Now Spotlight"
-                  : artistCategory === "Malayalam" ? "Malayalam Spotlight"
-                    : artistCategory === "Rap" ? "Rap Spotlight"
-                      : artistCategory === "Hindi" ? "Hindi Spotlight"
-                        : "Tamil Spotlight"}
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono font-medium flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Updated Daily
-              </span>
-            </div>
-            <h2 className="font-headline-lg text-xl md:text-2xl font-bold text-white tracking-tight mt-0.5">
-              Popular artists
-            </h2>
-          </div>
-          <div className="flex items-center gap-3 self-start sm:self-auto">
-            <Link
-              href="/artists"
-              className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold group"
-            >
-              <span className="uppercase tracking-wider">Show All ({NOCTURNE_ARTISTS.length})</span>
-              <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
-                arrow_forward
-              </span>
-            </Link>
-          </div>
+      {/* Section 3: Made for You - Single-row header */}
+      <section className="flex flex-col gap-3.5 md:gap-4.5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+            Recommended for You
+          </h2>
+          <Link
+            href="/search"
+            className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
+          >
+            <span>Explore More</span>
+            <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+              arrow_forward
+            </span>
+          </Link>
+        </div>
+
+        <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
+          {MADE_FOR_YOU_TRACKS.map((track) => (
+            <SongCard key={track.id} track={track} trackList={MADE_FOR_YOU_TRACKS} />
+          ))}
+        </div>
+      </section>
+
+      {/* Section 4: Dynamic & Categorized Popular Artists */}
+      <section className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+            Popular artists
+          </h2>
+          <Link
+            href="/artists"
+            className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
+          >
+            <span>Show All ({NOCTURNE_ARTISTS.length})</span>
+            <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+              arrow_forward
+            </span>
+          </Link>
         </div>
 
         {/* Category Pill Filters */}
@@ -586,8 +544,8 @@ export default function HomePage() {
               key={cat}
               onClick={() => setArtistCategory(cat)}
               className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all select-none whitespace-nowrap ${artistCategory === cat
-                  ? "bg-primary text-surface-container-lowest shadow-[0_0_14px_rgba(76,215,246,0.35)] scale-105"
-                  : "bg-surface-container/70 text-on-surface-variant hover:text-white hover:bg-surface-container-high border border-white/5"
+                ? "bg-primary text-surface-container-lowest shadow-[0_0_14px_rgba(76,215,246,0.35)] scale-105"
+                : "bg-surface-container/70 text-on-surface-variant hover:text-white hover:bg-surface-container-high border border-white/5"
                 }`}
             >
               {cat}
@@ -606,9 +564,8 @@ export default function HomePage() {
               <Link
                 key={artist.id}
                 href={`/artist/${artist.id}`}
-                className={`w-full group flex flex-col items-center text-center gap-1.5 sm:gap-2 p-2 sm:p-4 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/80 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none relative ${
-                  index >= 6 ? "hidden sm:flex" : "flex"
-                }`}
+                className={`w-full group flex flex-col items-center text-center gap-1.5 sm:gap-2 p-2 sm:p-4 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/80 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none relative ${index >= 6 ? "hidden sm:flex" : "flex"
+                  }`}
               >
                 <div className="relative w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full bg-surface-container-highest shadow-md p-0.5 sm:p-1 ring-2 ring-primary/20 group-hover:ring-primary group-hover:shadow-[0_0_20px_rgba(76,215,246,0.3)] transition-all">
                   <div className="w-full h-full rounded-full overflow-hidden">
@@ -651,50 +608,73 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Section 4: My self mixes */}
-      <section ref={selfMixesSectionRef} id="self-mixes" className="flex flex-col gap-5 pb-10 scroll-mt-6">
-        <div className="flex items-center sm:items-end justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <div className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] font-mono uppercase tracking-wider sm:tracking-widest text-primary font-bold">
-                <span className="material-symbols-outlined text-[13px] sm:text-[15px]">cloud_download</span>
-                <span className="sm:hidden">Archive &amp; Rips</span>
-                <span className="hidden sm:inline">Personal Archive &amp; Offline Rips</span>
-              </div>
-              <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.5 rounded-full bg-secondary-container/70 text-secondary border border-secondary/30 font-semibold flex-shrink-0">
-                {selfMixes?.length || 0} {selfMixes?.length === 1 ? "Mix" : "Mixes"}
-              </span>
-            </div>
-            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight mt-0.5 sm:mt-1 truncate">
+      {/* Section 5: Malayalam Hits */}
+      <section className="flex flex-col gap-3.5 md:gap-4.5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+            Malayalam Hits
+          </h2>
+          <Link
+            href="/artists"
+            className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
+          >
+            <span>Show All</span>
+            <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+              arrow_forward
+            </span>
+          </Link>
+        </div>
+
+        <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
+          {MALAYALAM_HITS.map((track) => (
+            <SongCard key={track.id} track={track} trackList={MALAYALAM_HITS} />
+          ))}
+        </div>
+      </section>
+
+      {/* Section 6: Chill & Relax */}
+      <section className="flex flex-col gap-3.5 md:gap-4.5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+            Chill &amp; Relax
+          </h2>
+          <Link
+            href="/playlist/late-night-lofi"
+            className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
+          >
+            <span>Chill Stream</span>
+            <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+              arrow_forward
+            </span>
+          </Link>
+        </div>
+
+        <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
+          {CHILL_RELAX_TRACKS.map((track) => (
+            <SongCard key={track.id} track={track} trackList={CHILL_RELAX_TRACKS} />
+          ))}
+        </div>
+      </section>
+
+      {/* Section 7: My self mixes */}
+      <section ref={selfMixesSectionRef} id="self-mixes" className="flex flex-col gap-4 pb-10 scroll-mt-6">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight truncate">
               My self mixes
             </h2>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-secondary-container/70 text-secondary border border-secondary/30 font-semibold flex-shrink-0">
+              {selfMixes?.length || 0} {selfMixes?.length === 1 ? "Mix" : "Mixes"}
+            </span>
           </div>
 
-          {/* Carousel Controls */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-            <Link
-              href="/self-mix"
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 text-[11px] sm:text-xs font-semibold text-outline hover:text-white transition-all"
-            >
-              <span className="material-symbols-outlined text-[15px] sm:text-[16px] text-primary">add</span>
-              <span className="sm:hidden">Mix</span>
-              <span className="hidden sm:inline">New Mix</span>
-            </Link>
-            <button
-              onClick={() => scrollMixes("left")}
-              className="hidden sm:flex w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md cursor-pointer"
-              title="Scroll left"
-            >
-              <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-            </button>
-            <button
-              onClick={() => scrollMixes("right")}
-              className="hidden sm:flex w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 items-center justify-center text-outline hover:text-white transition-all active:scale-90 shadow-md cursor-pointer"
-              title="Scroll right"
-            >
-              <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-            </button>
-          </div>
+          <Link
+            href="/self-mix"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 text-xs font-semibold text-outline hover:text-white transition-all"
+          >
+            <span className="material-symbols-outlined text-[16px] text-primary">add</span>
+            <span>New Mix</span>
+          </Link>
         </div>
 
         {/* Mixes Section: Mobile Sleek Horizontal List + Desktop Responsive Grid */}

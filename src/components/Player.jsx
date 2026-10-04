@@ -193,9 +193,8 @@ export default function Player() {
         <aside
           ref={cardRef}
           onTouchMove={(e) => e.stopPropagation()}
-          className={`fixed inset-0 z-50 w-full h-full rounded-none bg-[#070e1e]/98 backdrop-blur-3xl border-none p-5 sm:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex flex-col justify-between overflow-y-auto overscroll-contain touch-pan-y select-none animate-slide-up md:fixed md:bottom-5 ${
-            isQueueOpen ? "md:right-[400px] lg:right-[420px]" : "md:right-5"
-          } md:top-auto md:left-auto md:w-80 md:h-auto md:max-h-[calc(100vh-6rem)] md:rounded-2xl md:border md:border-white/20 md:p-3.5 md:gap-2.5 md:shadow-[0_16px_50px_rgba(0,0,0,0.85)] md:overflow-hidden transition-all duration-300`}
+          className={`fixed inset-0 z-50 w-full h-full rounded-none bg-[#070e1e]/98 backdrop-blur-3xl border-none p-5 sm:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex flex-col justify-between overflow-y-auto overscroll-contain touch-pan-y select-none animate-slide-up md:fixed md:bottom-5 ${isQueueOpen ? "md:right-[400px] lg:right-[420px]" : "md:right-5"
+            } md:top-auto md:left-auto md:w-80 md:h-auto md:max-h-[calc(100vh-6rem)] md:rounded-2xl md:border md:border-white/20 md:p-3.5 md:gap-2.5 md:shadow-[0_16px_50px_rgba(0,0,0,0.85)] md:overflow-hidden transition-all duration-300`}
           style={{ overscrollBehavior: "contain", overscrollBehaviorY: "contain", WebkitOverflowScrolling: "touch" }}
           aria-label="Now Playing Card"
         >
@@ -297,9 +296,8 @@ export default function Player() {
 
             <button
               onClick={() => toggleLike(currentTrack)}
-              className={`p-2 md:p-1.5 rounded-full hover:bg-surface-container transition-colors flex-shrink-0 ${
-                isLiked(currentTrack.id) ? "text-primary" : "text-outline hover:text-white"
-              }`}
+              className={`p-2 md:p-1.5 rounded-full hover:bg-surface-container transition-colors flex-shrink-0 ${isLiked(currentTrack.id) ? "text-primary" : "text-outline hover:text-white"
+                }`}
               title={isLiked(currentTrack.id) ? "Remove from favorites" : "Add to favorites"}
             >
               <span
@@ -341,9 +339,8 @@ export default function Player() {
           <div className="flex items-center justify-between px-2 md:px-1 py-1 flex-shrink-0">
             <button
               onClick={() => setIsShuffle(!isShuffle)}
-              className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${
-                isShuffle ? "text-primary" : "text-outline hover:text-white"
-              }`}
+              className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${isShuffle ? "text-primary" : "text-outline hover:text-white"
+                }`}
               title={`Shuffle: ${isShuffle ? "On" : "Off"}`}
             >
               <span className="material-symbols-outlined text-[22px] md:text-[18px]">shuffle</span>
@@ -353,11 +350,10 @@ export default function Player() {
               type="button"
               onClick={handlePrevTrack}
               disabled={!hasPrevTrack}
-              className={`p-2 md:p-1 rounded-full transition-all active:scale-90 ${
-                hasPrevTrack
+              className={`p-2 md:p-1 rounded-full transition-all active:scale-90 ${hasPrevTrack
                   ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
                   : "opacity-30 text-white/40 cursor-not-allowed"
-              }`}
+                }`}
               title={hasPrevTrack ? "Previous track" : "No previous track"}
             >
               <span className="material-symbols-outlined text-[28px] md:text-[22px]">skip_previous</span>
@@ -365,15 +361,13 @@ export default function Player() {
 
             <button
               onClick={togglePlay}
-              className={`w-14 h-14 md:w-10 md:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_24px_rgba(76,215,246,0.6)] ${
-                isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
-              }`}
+              className={`w-14 h-14 md:w-10 md:h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_24px_rgba(76,215,246,0.6)] ${isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
+                }`}
               title={isBuffering ? "Buffering..." : isPlaying ? "Pause" : "Play"}
             >
               <span
-                className={`material-symbols-outlined text-[32px] md:text-[24px] ${
-                  isBuffering ? "animate-spin text-[24px]" : ""
-                }`}
+                className={`material-symbols-outlined text-[32px] md:text-[24px] ${isBuffering ? "animate-spin text-[24px]" : ""
+                  }`}
               >
                 {isBuffering ? "progress_activity" : isPlaying ? "pause" : "play_arrow"}
               </span>
@@ -383,11 +377,10 @@ export default function Player() {
               type="button"
               onClick={handleNextTrack}
               disabled={!hasNextTrack}
-              className={`p-2 md:p-1 rounded-full transition-all active:scale-90 ${
-                hasNextTrack
+              className={`p-2 md:p-1 rounded-full transition-all active:scale-90 ${hasNextTrack
                   ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
                   : "opacity-30 text-white/40 cursor-not-allowed"
-              }`}
+                }`}
               title={hasNextTrack ? "Next track" : "No next track in queue"}
             >
               <span className="material-symbols-outlined text-[28px] md:text-[22px]">skip_next</span>
@@ -395,9 +388,8 @@ export default function Player() {
 
             <button
               onClick={cycleRepeat}
-              className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${
-                repeatMode !== "off" ? "text-primary" : "text-outline hover:text-white"
-              }`}
+              className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${repeatMode !== "off" ? "text-primary" : "text-outline hover:text-white"
+                }`}
               title={`Repeat: ${repeatMode}`}
             >
               <span className="material-symbols-outlined text-[22px] md:text-[18px]">
@@ -408,17 +400,15 @@ export default function Player() {
             {/* Autoplay / Infinite Smart Queue Toggle */}
             <button
               onClick={toggleAutoplay}
-              className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors relative group ${
-                isAutoplayEnabled ? "text-primary" : "text-outline hover:text-white"
-              }`}
+              className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors relative group ${isAutoplayEnabled ? "text-primary" : "text-outline hover:text-white"
+                }`}
               title={`Autoplay: ${isAutoplayEnabled ? "On (Infinite Smart Queue)" : "Off"}`}
               aria-label="Toggle Autoplay"
             >
               <InfinityIcon
                 size={22}
-                className={`transition-transform duration-200 group-hover:scale-110 ${
-                  isAutoplayLoading ? "animate-pulse" : ""
-                }`}
+                className={`transition-transform duration-200 group-hover:scale-110 ${isAutoplayLoading ? "animate-pulse" : ""
+                  }`}
               />
               {isAutoplayEnabled && (
                 <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_6px_rgba(76,215,246,0.9)]" />
@@ -431,18 +421,16 @@ export default function Player() {
             <div className="flex items-center gap-2 md:gap-1">
               <button
                 onClick={() => setLyricsMode(lyricsMode === "mini" ? "hidden" : "mini")}
-                className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${
-                  lyricsMode === "mini" ? "text-primary bg-surface-container" : "text-outline hover:text-white"
-                }`}
+                className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${lyricsMode === "mini" ? "text-primary bg-surface-container" : "text-outline hover:text-white"
+                  }`}
                 title={lyricsMode === "mini" ? "Show Album Artwork" : "Show Synchronized Lyrics"}
               >
                 <span className="material-symbols-outlined text-[20px] md:text-[16px]">lyrics</span>
               </button>
               <button
                 onClick={() => setIsQueueOpen(!isQueueOpen)}
-                className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${
-                  isQueueOpen ? "text-primary bg-surface-container" : "text-outline hover:text-white"
-                }`}
+                className={`p-2 md:p-1 rounded-full hover:bg-surface-container transition-colors ${isQueueOpen ? "text-primary bg-surface-container" : "text-outline hover:text-white"
+                  }`}
                 title="Queue"
               >
                 <span className="material-symbols-outlined text-[20px] md:text-[16px]">queue_music</span>
@@ -509,29 +497,24 @@ export default function Player() {
               title={isPlaying ? "Playing audio" : "Paused"}
             >
               <span
-                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-1" : "h-1 opacity-40"
-                }`}
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-1" : "h-1 opacity-40"
+                  }`}
               />
               <span
-                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-2" : "h-2.5 opacity-40"
-                }`}
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-2" : "h-2.5 opacity-40"
+                  }`}
               />
               <span
-                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-3" : "h-4 opacity-40"
-                }`}
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-3" : "h-4 opacity-40"
+                  }`}
               />
               <span
-                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-4" : "h-2.5 opacity-40"
-                }`}
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-4" : "h-2.5 opacity-40"
+                  }`}
               />
               <span
-                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-5" : "h-1 opacity-40"
-                }`}
+                className={`w-[2.5px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-5" : "h-1 opacity-40"
+                  }`}
               />
             </div>
 
@@ -566,9 +549,8 @@ export default function Player() {
             <button
               type="button"
               onClick={togglePlay}
-              className={`w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-90 transition-all shadow-[0_0_14px_rgba(76,215,246,0.55)] ${
-                isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
-              }`}
+              className={`w-10 h-10 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-90 transition-all shadow-[0_0_14px_rgba(76,215,246,0.55)] ${isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
+                }`}
               title={isBuffering ? "Buffering..." : isPlaying ? "Pause" : "Play"}
               aria-label={isPlaying ? "Pause" : "Play"}
             >
@@ -585,11 +567,10 @@ export default function Player() {
                 e.stopPropagation();
                 handleNextTrack();
               }}
-              className={`p-2 transition-all active:scale-90 rounded-full cursor-pointer ${
-                hasNextTrack
+              className={`p-2 transition-all active:scale-90 rounded-full cursor-pointer ${hasNextTrack
                   ? "text-white hover:text-primary"
                   : "opacity-30 text-white/40 cursor-not-allowed"
-              }`}
+                }`}
               title={hasNextTrack ? "Next track" : "No next track"}
               aria-label="Next track"
             >
@@ -617,29 +598,24 @@ export default function Player() {
               title={isPlaying ? "Playing audio" : "Paused"}
             >
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-1" : "h-1.5 opacity-40"
-                }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-1" : "h-1.5 opacity-40"
+                  }`}
               />
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-2" : "h-3.5 opacity-40"
-                }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-2" : "h-3.5 opacity-40"
+                  }`}
               />
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-3" : "h-5 opacity-40"
-                }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-3" : "h-5 opacity-40"
+                  }`}
               />
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-4" : "h-3 opacity-40"
-                }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-4" : "h-3 opacity-40"
+                  }`}
               />
               <span
-                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${
-                  isPlaying ? "animate-sound-bar-5" : "h-1.5 opacity-40"
-                }`}
+                className={`w-[3px] rounded-full bg-primary transition-all duration-300 ${isPlaying ? "animate-sound-bar-5" : "h-1.5 opacity-40"
+                  }`}
               />
             </div>
 
@@ -670,9 +646,8 @@ export default function Player() {
                 e.stopPropagation();
                 togglePlay();
               }}
-              className={`w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-[0_0_12px_rgba(76,215,246,0.4)] ${
-                isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
-              }`}
+              className={`w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-[0_0_12px_rgba(76,215,246,0.4)] ${isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
+                }`}
               title={isPlaying ? "Pause" : "Play"}
               aria-label={isPlaying ? "Pause" : "Play"}
             >
@@ -743,8 +718,8 @@ export default function Player() {
             <button
               onClick={() => toggleLike(currentTrack)}
               className={`flex-shrink-0 p-1.5 md:p-2 rounded-full hover:bg-surface-container ml-1 transition-colors ${isLiked(currentTrack.id)
-                  ? "text-primary hover:text-cyan-300"
-                  : "text-outline hover:text-primary"
+                ? "text-primary hover:text-cyan-300"
+                : "text-outline hover:text-primary"
                 }`}
               title={isLiked(currentTrack.id) ? "Remove from favorites" : "Add to favorites"}
             >
@@ -775,11 +750,10 @@ export default function Player() {
                 type="button"
                 onClick={handlePrevTrack}
                 disabled={!hasPrevTrack}
-                className={`p-1.5 rounded-full transition-all active:scale-95 ${
-                  hasPrevTrack
+                className={`p-1.5 rounded-full transition-all active:scale-95 ${hasPrevTrack
                     ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
                     : "opacity-30 text-white/40 cursor-not-allowed"
-                }`}
+                  }`}
                 title={hasPrevTrack ? "Previous track" : "No previous track"}
               >
                 <span className="material-symbols-outlined text-[20px] md:text-[24px]">skip_previous</span>
@@ -803,11 +777,10 @@ export default function Player() {
                 type="button"
                 onClick={handleNextTrack}
                 disabled={!hasNextTrack}
-                className={`p-1.5 rounded-full transition-all active:scale-95 ${
-                  hasNextTrack
+                className={`p-1.5 rounded-full transition-all active:scale-95 ${hasNextTrack
                     ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
                     : "opacity-30 text-white/40 cursor-not-allowed"
-                }`}
+                  }`}
                 title={hasNextTrack ? "Next track" : "No next track in queue"}
               >
                 <span className="material-symbols-outlined text-[20px] md:text-[24px]">skip_next</span>

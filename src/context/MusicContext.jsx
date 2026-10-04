@@ -331,7 +331,7 @@ export const MusicProvider = ({ children }) => {
             if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
               mixesToRestore = standaloneMixes;
             }
-          } catch {}
+          } catch { }
         }
         setSelfMixes(mixesToRestore);
 
@@ -354,7 +354,7 @@ export const MusicProvider = ({ children }) => {
           if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
             fallbackMixes = standaloneMixes;
           }
-        } catch {}
+        } catch { }
 
         const initialAccountData = {
           likedSongIds: Array.isArray(legacyLiked) && legacyLiked.length > 0
@@ -410,10 +410,23 @@ export const MusicProvider = ({ children }) => {
       localStorage.removeItem("isLoggedIn");
       localStorage.removeItem("activeUser");
       localStorage.removeItem("ceepeefy_user");
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // Audiophile App & Playback Settings
+  const DEFAULT_APPEARANCE_SETTINGS = {
+    backgroundId: "sunset-mountains",
+    customBackgroundUrl: null,
+    customPalette: null,
+    intensityPreset: "cinematic", // "chill" | "cinematic" | "immersive" | "custom"
+    bgOpacity: 55,
+    overlayOpacity: 48,
+    ambientGlowIntensity: 45,
+    bgBlur: 5,
+    accentMode: "auto", // "auto" | "manual"
+    manualAccentColor: "#a78bfa",
+  };
+
   const [settings, setSettings] = useState({
     audioQuality: "lossless", // "lossless" | "high" | "normal" | "saver"
     normalizeVolume: true,
@@ -425,6 +438,7 @@ export const MusicProvider = ({ children }) => {
     themeAccent: "cyan",
     showLiveLyrics: true,
     ambientGlow: true,
+    ...DEFAULT_APPEARANCE_SETTINGS,
   });
 
   useEffect(() => {
@@ -445,6 +459,23 @@ export const MusicProvider = ({ children }) => {
         localStorage.setItem("ceepeefy_settings", JSON.stringify(updated));
       } catch (e) { }
       return updated;
+    });
+  };
+
+  const updateSettings = (partial) => {
+    setSettings((prev) => {
+      const updated = { ...prev, ...partial };
+      try {
+        localStorage.setItem("ceepeefy_settings", JSON.stringify(updated));
+      } catch (e) { }
+      return updated;
+    });
+  };
+
+  const resetAppearance = () => {
+    updateSettings({
+      ...DEFAULT_APPEARANCE_SETTINGS,
+      themeAccent: "cyan",
     });
   };
 
@@ -489,20 +520,20 @@ export const MusicProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem("ceepeefy_manual_queue", JSON.stringify(manualQueue));
-    } catch (e) {}
+    } catch (e) { }
   }, [manualQueue]);
 
   useEffect(() => {
     try {
       localStorage.setItem("ceepeefy_auto_queue", JSON.stringify(autoQueue));
-    } catch (e) {}
+    } catch (e) { }
   }, [autoQueue]);
 
   useEffect(() => {
     if (currentTrack) {
       try {
         localStorage.setItem("ceepeefy_current_track", JSON.stringify(currentTrack));
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [currentTrack]);
 
@@ -683,7 +714,7 @@ export const MusicProvider = ({ children }) => {
           } else if (Array.isArray(currentStored.selfMixes) && currentStored.selfMixes.length > 0) {
             nextMixes = currentStored.selfMixes;
           }
-        } catch {}
+        } catch { }
       }
 
       const accountData = {
@@ -757,7 +788,7 @@ export const MusicProvider = ({ children }) => {
               if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
                 mixesToHydrate = standaloneMixes;
               }
-            } catch {}
+            } catch { }
           }
           setSelfMixes(mixesToHydrate);
 
@@ -780,7 +811,7 @@ export const MusicProvider = ({ children }) => {
             if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
               fallbackMixes = standaloneMixes;
             }
-          } catch {}
+          } catch { }
 
           const initialAccountData = {
             likedSongIds: Array.isArray(legacyLiked) && legacyLiked.length > 0
@@ -956,7 +987,7 @@ export const MusicProvider = ({ children }) => {
         next[idx] = updatedCustomPlaylist;
         try {
           persistAccountData({ customPlaylists: next });
-        } catch {}
+        } catch { }
         return next;
       }
       return prev;
@@ -986,7 +1017,7 @@ export const MusicProvider = ({ children }) => {
         try {
           localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(next));
           persistAccountData({ selfMixes: next });
-        } catch {}
+        } catch { }
         return next;
       }
       return prev;
@@ -1009,7 +1040,7 @@ export const MusicProvider = ({ children }) => {
       const storedOverrides = JSON.parse(localStorage.getItem("ceepeefy_playlist_titles") || "{}");
       storedOverrides[idStr] = cleanTitle;
       localStorage.setItem("ceepeefy_playlist_titles", JSON.stringify(storedOverrides));
-    } catch {}
+    } catch { }
 
     return true;
   };
@@ -1026,7 +1057,7 @@ export const MusicProvider = ({ children }) => {
       const updated = [target, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
       try {
         persistAccountData({ customPlaylists: updated });
-      } catch {}
+      } catch { }
       return updated;
     });
 
@@ -1039,7 +1070,7 @@ export const MusicProvider = ({ children }) => {
       try {
         localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(updated));
         persistAccountData({ selfMixes: updated });
-      } catch {}
+      } catch { }
       return updated;
     });
 
@@ -1052,7 +1083,7 @@ export const MusicProvider = ({ children }) => {
 
     try {
       localStorage.setItem("ceepeefy_last_played_playlist_id", idStr);
-    } catch {}
+    } catch { }
   };
 
   const createSelfMix = (title, initialTracks = [], customCover = null) => {
@@ -1099,7 +1130,7 @@ export const MusicProvider = ({ children }) => {
       const updated = [newMix, ...prev];
       try {
         localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(updated));
-      } catch {}
+      } catch { }
       persistAccountData({ selfMixes: updated });
       return updated;
     });
@@ -1141,7 +1172,7 @@ export const MusicProvider = ({ children }) => {
       const updated = prev.filter((m) => String(m.id) !== String(id));
       try {
         localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(updated));
-      } catch {}
+      } catch { }
       persistAccountData({ selfMixes: updated });
       return updated;
     });
@@ -1177,7 +1208,7 @@ export const MusicProvider = ({ children }) => {
       });
       try {
         localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(updated));
-      } catch {}
+      } catch { }
       persistAccountData({ selfMixes: updated });
       return updated;
     });
@@ -1389,7 +1420,7 @@ export const MusicProvider = ({ children }) => {
     if (currentPrefetchAbortRef.current && currentPrefetchTrackIdRef.current !== nextTrackId) {
       try {
         currentPrefetchAbortRef.current.abort();
-      } catch {}
+      } catch { }
       currentPrefetchAbortRef.current = null;
     }
 
@@ -1418,7 +1449,7 @@ export const MusicProvider = ({ children }) => {
           try {
             const localUrl = await getLocalAudioUrl(nextTrack.id);
             if (localUrl) resolvedAudioUrl = localUrl;
-          } catch {}
+          } catch { }
         }
 
         // 2. Resolve remote streaming URL via audio search service
@@ -1452,10 +1483,10 @@ export const MusicProvider = ({ children }) => {
           const oldestKey = prefetchCacheRef.current.keys().next().value;
           const oldEntry = prefetchCacheRef.current.get(oldestKey);
           if (oldEntry?.blobUrl) {
-            try { URL.revokeObjectURL(oldEntry.blobUrl); } catch {}
+            try { URL.revokeObjectURL(oldEntry.blobUrl); } catch { }
           }
           if (oldEntry?.preloader) {
-            try { oldEntry.preloader.src = ""; } catch {}
+            try { oldEntry.preloader.src = ""; } catch { }
           }
           prefetchCacheRef.current.delete(oldestKey);
         }
@@ -1481,7 +1512,7 @@ export const MusicProvider = ({ children }) => {
               bgAudio.src = resolvedAudioUrl;
               bgAudio.load();
               cacheEntry.preloader = bgAudio;
-            } catch {}
+            } catch { }
           }
         }
 
@@ -1500,7 +1531,7 @@ export const MusicProvider = ({ children }) => {
       if (abortController) {
         try {
           abortController.abort();
-        } catch {}
+        } catch { }
       }
     };
   }, [currentTrack?.id, manualQueue, autoQueue, currentTracklist, repeatMode, offlineTrackIds, resolveNextTrackInQueue]);
@@ -2415,7 +2446,7 @@ export const MusicProvider = ({ children }) => {
     try {
       localStorage.removeItem("ceepeefy_recently_played_tracks");
       localStorage.removeItem("ceepeefy_recently_played");
-    } catch {}
+    } catch { }
     if (user?.id) {
       clearRecentlyPlayedInCloud(user.id).catch((err) => {
         console.warn("[MusicContext] Failed to clear cloud recents:", err);
@@ -2518,30 +2549,30 @@ export const MusicProvider = ({ children }) => {
       } else {
         const itemToSave = playlistData
           ? {
-              id: pid,
-              title: playlistData.title || "Playlist",
-              description: playlistData.description || playlistData.subtitle || "Added to library",
-              curator: playlistData.curator || playlistData.artist || "Curated",
-              coverUrl:
-                playlistData.coverUrl ||
-                playlistData.image ||
-                playlistData.thumbnail ||
-                "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
-              tracks: playlistData.tracks || [],
-              trackCount: playlistData.tracks?.length || playlistData.trackCount || playlistData.songCount || 0,
-              type: playlistData.type || (playlistData.isMovie || playlistData.isAlbum ? "album" : "playlist"),
-              addedAt: Date.now(),
-            }
+            id: pid,
+            title: playlistData.title || "Playlist",
+            description: playlistData.description || playlistData.subtitle || "Added to library",
+            curator: playlistData.curator || playlistData.artist || "Curated",
+            coverUrl:
+              playlistData.coverUrl ||
+              playlistData.image ||
+              playlistData.thumbnail ||
+              "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
+            tracks: playlistData.tracks || [],
+            trackCount: playlistData.tracks?.length || playlistData.trackCount || playlistData.songCount || 0,
+            type: playlistData.type || (playlistData.isMovie || playlistData.isAlbum ? "album" : "playlist"),
+            addedAt: Date.now(),
+          }
           : {
-              id: pid,
-              title: "Added Playlist",
-              curator: "Curated",
-              coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
-              tracks: [],
-              trackCount: 0,
-              type: "playlist",
-              addedAt: Date.now(),
-            };
+            id: pid,
+            title: "Added Playlist",
+            curator: "Curated",
+            coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
+            tracks: [],
+            trackCount: 0,
+            type: "playlist",
+            addedAt: Date.now(),
+          };
         next = [itemToSave, ...prev];
       }
       try {
@@ -2560,14 +2591,14 @@ export const MusicProvider = ({ children }) => {
       const next = prev.filter((id) => id !== pid);
       try {
         localStorage.setItem("ceepeefy_pinned_playlists", JSON.stringify(next));
-      } catch (e) {}
+      } catch (e) { }
       return next;
     });
     setAddedPlaylists((prev) => {
       const next = prev.filter((p) => String(p.id) !== pid);
       try {
         localStorage.setItem("ceepeefy_added_playlists", JSON.stringify(next));
-      } catch (e) {}
+      } catch (e) { }
       return next;
     });
   };
@@ -2623,7 +2654,7 @@ export const MusicProvider = ({ children }) => {
       try {
         navigator.mediaSession.metadata = null;
         navigator.mediaSession.playbackState = "none";
-      } catch {}
+      } catch { }
       return;
     }
 
@@ -2653,7 +2684,7 @@ export const MusicProvider = ({ children }) => {
     // Keep document title strictly "Ceepeefy" as required
     try {
       document.title = "Ceepeefy";
-    } catch {}
+    } catch { }
   }, [currentTrack]);
 
   // Sync Media Session Playback State
@@ -2661,7 +2692,7 @@ export const MusicProvider = ({ children }) => {
     if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
     try {
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    } catch {}
+    } catch { }
   }, [isPlaying]);
 
   // Sync Media Session Playback Position
@@ -2676,7 +2707,7 @@ export const MusicProvider = ({ children }) => {
         playbackRate: 1.0,
         position: Math.max(0, Math.min(currentTime || 0, duration)),
       });
-    } catch {}
+    } catch { }
   }, [currentTime, duration]);
 
   // Register OS Media Controls Action Handlers
@@ -2686,7 +2717,7 @@ export const MusicProvider = ({ children }) => {
     const actionHandlers = [
       ["play", () => {
         if (audioRef.current && !isPlaying) {
-          audioRef.current.play().catch(() => {});
+          audioRef.current.play().catch(() => { });
         }
       }],
       ["pause", () => {
@@ -2727,14 +2758,14 @@ export const MusicProvider = ({ children }) => {
     actionHandlers.forEach(([action, handler]) => {
       try {
         navigator.mediaSession.setActionHandler(action, handler);
-      } catch {}
+      } catch { }
     });
 
     return () => {
       actionHandlers.forEach(([action]) => {
         try {
           navigator.mediaSession.setActionHandler(action, null);
-        } catch {}
+        } catch { }
       });
     };
   }, [currentTime, duration, isPlaying]);
@@ -2887,6 +2918,8 @@ export const MusicProvider = ({ children }) => {
         logout,
         settings,
         updateSetting,
+        updateSettings,
+        resetAppearance,
         queue,
         manualQueue,
         autoQueue,
