@@ -7,6 +7,17 @@ import { getGenreByName } from "../../../../data/genreData";
 const audioCache = new Map();
 const searchCache = new Map();
 
+const JIOSAAVN_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "application/json, text/plain, */*",
+  "X-Forwarded-For": "103.211.54.1",
+  "CF-Connecting-IP": "103.211.54.1",
+  "X-Real-IP": "103.211.54.1",
+  Cookie:
+    "geo=103.211.54.1%2CIN%2CKerala%2CKochi%2C682507; CH=G03%2CA07%2CO00%2CL03; L=english%2Chindi; _pl=website-;",
+};
+
 // Known curated high-fidelity streams for Nocturne ambient tracks
 const FALLBACK_TRACK_STREAMS = {
   "track-midnight-pulse": "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3",
@@ -261,10 +272,7 @@ export async function GET(request) {
       const albumResultsUrl = `https://www.jiosaavn.com/api.php?__call=search.getAlbumResults&_format=json&q=${encodeURIComponent(query)}&p=1&n=30`;
       const artistResultsUrl = `https://www.jiosaavn.com/api.php?__call=search.getArtistResults&_format=json&q=${encodeURIComponent(query)}&p=1&n=30`;
 
-      const headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "application/json, text/plain, */*",
-      };
+      const headers = JIOSAAVN_HEADERS;
 
       const [resAutocomplete, resResults, resPlaylists, resAlbums, resArtists] = await Promise.all([
         page === 1 ? fetch(autocompleteUrl, { headers, next: { revalidate: 300 } }).catch(() => null) : Promise.resolve(null),
@@ -775,10 +783,7 @@ export async function GET(request) {
     try {
       const detailsUrl = `https://www.jiosaavn.com/api.php?__call=song.getDetails&pids=${encodeURIComponent(trackId)}&_format=json`;
       const res = await fetch(detailsUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Accept: "application/json, text/plain, */*",
-        },
+        headers: JIOSAAVN_HEADERS,
         next: { revalidate: 3600 },
       });
 
@@ -826,10 +831,7 @@ export async function GET(request) {
 
   try {
     const apiRes = await fetch(searchUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "application/json, text/plain, */*",
-      },
+      headers: JIOSAAVN_HEADERS,
       next: { revalidate: 3600 },
     });
 
