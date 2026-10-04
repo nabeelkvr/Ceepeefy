@@ -41,8 +41,9 @@ export default function Header({ onToggleMobileMenu }) {
     setLocalQuery(searchQuery || "");
   }, [searchQuery]);
 
-  // Debounce syncing localQuery to MusicContext searchQuery
+  // Debounce syncing localQuery to MusicContext searchQuery (only when NOT on /search)
   useEffect(() => {
+    if (pathname?.startsWith("/search")) return;
     const timer = setTimeout(() => {
       if (localQuery !== searchQuery) {
         setSearchQuery(localQuery);
@@ -50,7 +51,7 @@ export default function Header({ onToggleMobileMenu }) {
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [localQuery, searchQuery, setSearchQuery]);
+  }, [localQuery, searchQuery, setSearchQuery, pathname]);
 
   // Global ⌘K hotkey focus
   useEffect(() => {

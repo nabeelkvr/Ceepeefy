@@ -15,18 +15,19 @@ const clientAutocompleteCache = new Map();
  * @param {string} query
  * @returns {Promise<{ topMatch: any, songs: Array<any>, artists: Array<any>, albums: Array<any>, playlists: Array<any> }>}
  */
-export async function searchMusicAutocomplete(query) {
+export async function searchMusicAutocomplete(query, page = 1) {
   const cleanQ = (query || "").trim().toLowerCase();
   if (!cleanQ) {
     return { topMatch: null, songs: [], artists: [], albums: [], playlists: [] };
   }
 
-  if (clientAutocompleteCache.has(cleanQ)) {
-    return clientAutocompleteCache.get(cleanQ);
+  const cacheKey = `${cleanQ}:::p${page}`;
+  if (clientAutocompleteCache.has(cacheKey)) {
+    return clientAutocompleteCache.get(cacheKey);
   }
 
   try {
-    const res = await fetch(`/api/audio/search?q=${encodeURIComponent(cleanQ)}`);
+    const res = await fetch(`/api/audio/search?q=${encodeURIComponent(cleanQ)}&page=${page}`);
     if (!res.ok) {
       throw new Error(`Autocomplete search failed with status ${res.status}`);
     }
@@ -40,7 +41,7 @@ export async function searchMusicAutocomplete(query) {
       playlists: Array.isArray(data.playlists) ? data.playlists : [],
     };
 
-    clientAutocompleteCache.set(cleanQ, result);
+    clientAutocompleteCache.set(cacheKey, result);
     return result;
   } catch (err) {
     console.error("searchMusicAutocomplete client error:", err);
@@ -235,7 +236,9 @@ export function deduplicateTracks(songs) {
       .sort()
       .join("_");
 
-    const key = `${cleanTitle}:::${sortedArtistTokens || clean(rawArtist)}`;
+    const isSpecialVariant = /\b(remix|mix|acoustic|unplugged|live|cover|karaoke|instrumental|version|edit)\b/i.test(track.title);
+    const variantTag = isSpecialVariant ? `:::${clean(track.title)}` : "";
+    const key = `${cleanTitle}:::${sortedArtistTokens || clean(rawArtist)}${variantTag}`;
 
     const trackPlays = parsePlayCount(track.playCount ?? track.play_count ?? track.plays ?? 0);
     const trackBitrate = getTrackBitrate(track);
@@ -257,6 +260,7 @@ export function deduplicateTracks(songs) {
 
       dedupMap.set(key, {
         ...winner,
+        audioUrl: winner.audioUrl || existing.audioUrl || track.audioUrl,
         playCount: higherPlays,
         playCountFormatted: formatPlayCount(higherPlays),
         bitrate: higherBitrate,
@@ -342,9 +346,17 @@ export function assignTrackTier(track, cleanQuery, activeEntity, specificMovieTi
  */
 export function rankSearchResults(songs, rawQuery, activeEntity) {
   if (!Array.isArray(songs) || songs.length === 0) return [];
-  const cleanQ = cleanStr(rawQuery);
+  const q = (rawQuery || "").toLowerCase().trim();
+  const cleanQ = cleanStr(q);
+  const normQ = normalizeSongTitle(q);
 
-  // 1. Clean-up: immediately filter out spam uploads, karaoke tracks, instrumental covers, low-bitrate rips
+  const isExplicitRemix = /\b(remix|mix|mashup)\b/i.test(q);
+  const isExplicitAcoustic = /\b(acoustic|unplugged)\b/i.test(q);
+  const isExplicitCover = /\b(cover|tribute|piano|karaoke|instrumental)\b/i.test(q);
+  const isExplicitLive = /\b(live|concert|tour)\b/i.test(q);
+
+  // 1. Clean-up: filter out spam uploads, karaoke tracks, instrumental covers, low-bitrate rips
+  // (isSpamOrRip preserves them if user explicitly queried for them)
   const cleaned = songs.filter((track) => !isSpamOrRip(track, rawQuery));
 
   // Build lookup of specific movie tracks from active highlight entity
@@ -360,49 +372,121 @@ export function rankSearchResults(songs, rawQuery, activeEntity) {
   }
 
   // 2. Deduplication: Remove duplicate track entries with identical titles and artists,
-  // retaining only the version with the highest play count
+  // retaining only the version with the highest play count / audioUrl
   const deduped = deduplicateTracks(cleaned);
 
-  // 3. Assign Tier and parse raw integer play counts for mathematical sorting
+  // Extract artist hint from active entity if available
+  const artistHint = cleanStr(
+    activeEntity?.artist ||
+    activeEntity?.name ||
+    activeEntity?.more_info?.primary_artists ||
+    activeEntity?.music ||
+    ""
+  );
+
+  // 3. Multi-factor intelligent relevance scoring & tier assignment
   const scored = deduped.map((track) => {
-    const tier = assignTrackTier(track, cleanQ, activeEntity, specificMovieTitles);
-    const rawPlays = track.playCount ?? track.play_count ?? track.plays ?? 0;
+    const rawTitle = track.title || "";
+    const titleClean = cleanStr(rawTitle);
+    const titleNorm = normalizeSongTitle(rawTitle);
+    const rawArtist = track.artist || track.singers || track.primary_artists || "";
+    const artistClean = cleanStr(rawArtist);
+
+    let score = 0;
+
+    // Exact song title match
+    if (titleClean === cleanQ || titleNorm === normQ) {
+      score += 1200;
+    } else if (cleanQ && (titleClean.startsWith(cleanQ) || titleNorm.startsWith(normQ))) {
+      score += 650;
+    } else if (cleanQ && (titleClean.includes(cleanQ) || titleNorm.includes(normQ))) {
+      score += 350;
+    }
+
+    // Artist spam penalty: fake artist naming themselves after song title
+    if (artistClean && (artistClean === titleClean || artistClean === cleanQ)) {
+      score -= 800;
+    }
+
+    // Official artist boost from active entity or top query
+    if (artistHint && (artistClean.includes(artistHint) || artistHint.includes(artistClean))) {
+      score += 450;
+    }
+
+    // Query artist token match (e.g. user typed "Shape of You Ed Sheeran")
+    const queryTokens = q.split(/\s+/).filter((t) => t.length > 2 && !titleClean.includes(cleanStr(t)));
+    let artistMatchTokens = 0;
+    for (const token of queryTokens) {
+      if (artistClean.includes(cleanStr(token))) artistMatchTokens++;
+    }
+    if (artistMatchTokens > 0) {
+      score += artistMatchTokens * 350;
+    }
+
+    // Query relevance: token overlap in title
+    const allQueryTokens = q.split(/\s+/).filter((t) => t.length > 2);
+    for (const token of allQueryTokens) {
+      if (titleClean.includes(cleanStr(token))) score += 60;
+    }
+
+    // Version preference penalties (unless explicitly searched)
+    const isKaraoke = /\b(karaoke|backing track|minus one)\b/i.test(rawTitle);
+    const isCover = /\b(cover|tribute to|originally performed|tribute)\b/i.test(rawTitle) || /\b(tribute|karaoke|cover)\b/i.test(rawArtist);
+    const isPiano = /\b(piano version|piano cover|guitar cover|instrumental)\b/i.test(rawTitle);
+    const isWorkout = /\b(workout|fitness|cardio)\b/i.test(rawTitle) || /\b(workout|fitness)\b/i.test(rawArtist);
+    const isRemix = /\b(remix|dj|mix|mashup|slowed|reverb)\b/i.test(rawTitle);
+    const isAcoustic = /\b(acoustic)\b/i.test(rawTitle);
+    const isLive = /\b(live|tour collection)\b/i.test(rawTitle) || /\b(live)\b/i.test(track.album || "");
+
+    if (isKaraoke && !isExplicitCover) score -= 850;
+    if (isCover && !isExplicitCover) score -= 650;
+    if (isPiano && !isExplicitCover) score -= 550;
+    if (isWorkout && !isExplicitCover) score -= 650;
+    if (isRemix && !isExplicitRemix) score -= 250;
+    if (isAcoustic && !isExplicitAcoustic) score -= 200;
+    if (isLive && !isExplicitLive) score -= 150;
+
+    // Prefer original non-remix track when user searches just song title
+    if (!isRemix && !isAcoustic && !isLive && !isCover && !isKaraoke && !isPiano && !isWorkout) {
+      score += 300;
+    }
+
+    // Audio URL available bonus
+    if (track.audioUrl) score += 60;
+
+    const rawPlays = track.playCount ?? track.play_count ?? track.plays ?? track.ctr ?? 0;
     const plays = parsePlayCount(rawPlays);
+    if (plays > 0) score += Math.min(Math.log10(plays) * 25, 200);
+
     const rawYear = track.year || (track.releaseDate ? track.releaseDate.slice(0, 4) : 0);
     const year = parseInt(rawYear, 10) || 0;
+
+    const tier = assignTrackTier(track, cleanQ, activeEntity, specificMovieTitles);
 
     return {
       ...track,
       tier,
+      relevanceScore: score,
       playCount: plays,
       playCountFormatted: formatPlayCount(plays),
       year: year > 0 ? year : track.year || null,
     };
   });
 
-  // 4. Secondary Sorting:
-  // Sort tracks primarily by their Tier (Tier 1 at the top).
-  // Within each identical Tier, sort tracks mathematically by Play Count (highest first),
-  // using Recency (newest year first) as a tie-breaker.
+  // 4. Sort primarily by relevanceScore (highest first)
   scored.sort((a, b) => {
-    // Primary: Tier (ascending: Tier 1 at the top)
+    if (b.relevanceScore !== a.relevanceScore) {
+      return b.relevanceScore - a.relevanceScore;
+    }
     if (a.tier !== b.tier) {
       return a.tier - b.tier;
     }
-
-    // Secondary: Mathematical Play Count (highest first)
     if (b.playCount !== a.playCount) {
       return b.playCount - a.playCount;
     }
-
-    // Tie-breaker: Recency (newest year first)
     const yearA = typeof a.year === "number" ? a.year : 0;
     const yearB = typeof b.year === "number" ? b.year : 0;
-    if (yearB !== yearA) {
-      return yearB - yearA;
-    }
-
-    return 0;
+    return yearB - yearA;
   });
 
   return scored;
@@ -485,6 +569,7 @@ const clientArtistImageCache = new Map();
  * @returns {Promise<string | null>}
  */
 export async function fetchItunesArtistImage(artistName) {
+  if (typeof window !== "undefined") return null;
   if (!artistName || !artistName.trim()) return null;
   const cleanName = artistName.trim();
   try {
@@ -498,7 +583,7 @@ export async function fetchItunesArtistImage(artistName) {
       return rawArtwork.replace("100x100bb", "600x600bb");
     }
   } catch (err) {
-    console.warn("iTunes artist fallback error:", err.message);
+    // suppress log in browser
   }
   return null;
 }

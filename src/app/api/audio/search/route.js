@@ -54,6 +54,176 @@ function cleanStr(str) {
   return str.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function normalizeSongTitle(t) {
+  if (!t) return "";
+  return t
+    .replace(/&quot;/g, "")
+    .replace(/&#039;/g, "")
+    .replace(/&#39;/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/\s*[\(\[](?:from|feat\.?|with|soundtrack|version|remix|acoustic|karaoke|live)[^\)\]]*[\)\]]/gi, "")
+    .replace(/[^a-z0-9]/gi, " ")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function parsePlayCount(raw) {
+  if (raw === null || raw === undefined) return 0;
+  if (typeof raw === "number") return isNaN(raw) ? 0 : Math.round(raw);
+  const str = String(raw).trim().toUpperCase();
+  if (!str) return 0;
+  const match = str.match(/^([\d,.]+)\s*([BKM])?$/);
+  if (match) {
+    const numPart = parseFloat(match[1].replace(/,/g, ""));
+    if (isNaN(numPart)) return 0;
+    const suffix = match[2];
+    if (suffix === "B") return Math.round(numPart * 1000000000);
+    if (suffix === "M") return Math.round(numPart * 1000000);
+    if (suffix === "K") return Math.round(numPart * 1000);
+    return Math.round(numPart);
+  }
+  const num = parseFloat(str.replace(/[^0-9.]/g, ""));
+  return isNaN(num) ? 0 : Math.round(num);
+}
+
+function rankAndDeduplicateSongs(songs, rawQuery, topArtistHint = "") {
+  if (!Array.isArray(songs) || songs.length === 0) return [];
+  const q = (rawQuery || "").toLowerCase().trim();
+  const qNorm = normalizeSongTitle(q);
+  const qClean = cleanStr(q);
+  const hintClean = cleanStr(topArtistHint);
+
+  const isExplicitRemix = /\b(remix|mix|mashup)\b/i.test(q);
+  const isExplicitAcoustic = /\b(acoustic|unplugged)\b/i.test(q);
+  const isExplicitCover = /\b(cover|tribute|piano|karaoke|instrumental)\b/i.test(q);
+  const isExplicitLive = /\b(live|concert|tour)\b/i.test(q);
+
+  // 1. Deduplicate identical tracks (retaining the version with audioUrl and highest play count)
+  // Note: Legitimate remixes and alternate versions are preserved as distinct entries
+  const dedupMap = new Map();
+  for (const s of songs) {
+    if (!s || !s.title) continue;
+    const titleKey = cleanStr(normalizeSongTitle(s.title) || s.title);
+    const artistKey = cleanStr(s.artist);
+    const isSpecialVariant = /\b(remix|mix|acoustic|unplugged|live|cover|karaoke|instrumental|version|edit)\b/i.test(s.title);
+    const variantTag = isSpecialVariant ? `:::${cleanStr(s.title)}` : "";
+    const key = `${titleKey}:::${artistKey}${variantTag}`;
+
+    const trackPlays = parsePlayCount(s.playCount ?? s.play_count ?? s.plays ?? s.ctr ?? 0);
+    const existing = dedupMap.get(key);
+
+    if (!existing) {
+      dedupMap.set(key, { ...s, playCount: trackPlays });
+    } else {
+      const existingPlays = existing.playCount || 0;
+      const higherPlays = Math.max(trackPlays, existingPlays);
+      const winner = (trackPlays >= existingPlays) ? s : existing;
+      dedupMap.set(key, {
+        ...winner,
+        audioUrl: winner.audioUrl || existing.audioUrl || s.audioUrl,
+        playCount: higherPlays,
+        ctr: higherPlays,
+        ctrFormatted: formatPlayCount(higherPlays),
+      });
+    }
+  }
+
+  const deduped = Array.from(dedupMap.values());
+
+  // 2. Multi-factor intelligent relevance scoring
+  const scored = deduped.map((s) => {
+    let score = 0;
+    const title = (s.title || "").toLowerCase();
+    const titleNorm = normalizeSongTitle(title);
+    const titleClean = cleanStr(title);
+    const artist = (s.artist || "").toLowerCase();
+    const artistClean = cleanStr(artist);
+
+    // Exact title match: highest priority
+    if (titleClean === qClean || titleNorm === qNorm) {
+      score += 1200;
+    } else if (titleClean.startsWith(qClean) || titleNorm.startsWith(qNorm)) {
+      score += 650;
+    } else if (titleClean.includes(qClean) || titleNorm.includes(qNorm)) {
+      score += 350;
+    }
+
+    // Artist spam penalty: if artist name is identical to the song title or search query
+    if (artistClean && (artistClean === titleClean || artistClean === qClean)) {
+      score -= 800;
+    }
+
+    // Official artist boost from topquery hint or prominent artist match
+    if (hintClean && (artistClean.includes(hintClean) || hintClean.includes(artistClean))) {
+      score += 450;
+    }
+
+    // Query contains artist name (e.g. "Shape of You Ed Sheeran")
+    const queryTokens = q.split(/\s+/).filter((t) => t.length > 2 && !titleClean.includes(cleanStr(t)));
+    let artistMatchTokens = 0;
+    for (const token of queryTokens) {
+      if (artistClean.includes(cleanStr(token))) artistMatchTokens++;
+    }
+    if (artistMatchTokens > 0) {
+      score += artistMatchTokens * 350;
+    }
+
+    // Token overlap in title for query relevance
+    const allQueryTokens = q.split(/\s+/).filter((t) => t.length > 2);
+    for (const token of allQueryTokens) {
+      if (title.includes(token)) score += 60;
+    }
+
+    // Penalize non-official, karaoke, covers, tributes, workout, unless user explicitly searched for them
+    const isKaraoke = /\b(karaoke|backing track|minus one)\b/i.test(title);
+    const isCover = /\b(cover|tribute to|originally performed|tribute)\b/i.test(title) || /\b(tribute|karaoke|cover)\b/i.test(artist);
+    const isPiano = /\b(piano version|piano cover|guitar cover|instrumental)\b/i.test(title);
+    const isWorkout = /\b(workout|fitness|cardio)\b/i.test(title) || /\b(workout|fitness)\b/i.test(artist);
+    const isRemix = /\b(remix|dj|mix|mashup|slowed|reverb)\b/i.test(title);
+    const isAcoustic = /\b(acoustic)\b/i.test(title);
+    const isLive = /\b(live|tour collection)\b/i.test(title) || /\b(live)\b/i.test(s.album || "");
+
+    if (isKaraoke && !isExplicitCover) score -= 850;
+    if (isCover && !isExplicitCover) score -= 650;
+    if (isPiano && !isExplicitCover) score -= 550;
+    if (isWorkout && !isExplicitCover) score -= 650;
+    if (isRemix && !isExplicitRemix) score -= 250;
+    if (isAcoustic && !isExplicitAcoustic) score -= 200;
+    if (isLive && !isExplicitLive) score -= 150;
+
+    // Prefer original non-remix track when user searches standard song title
+    if (!isRemix && !isAcoustic && !isLive && !isCover && !isKaraoke && !isPiano && !isWorkout) {
+      score += 300;
+    }
+
+    // Audio URL available bonus
+    if (s.audioUrl) {
+      score += 60;
+    }
+
+    // Natural popularity boost from real API play counts
+    const plays = parsePlayCount(s.playCount ?? s.play_count ?? s.plays ?? s.ctr ?? 0);
+    if (plays > 0) {
+      score += Math.min(Math.log10(plays) * 25, 200);
+    }
+
+    return { ...s, relevanceScore: score, playCount: plays };
+  });
+
+  return scored.sort((a, b) => {
+    if (b.relevanceScore !== a.relevanceScore) {
+      return b.relevanceScore - a.relevanceScore;
+    }
+    if ((b.playCount || 0) !== (a.playCount || 0)) {
+      return (b.playCount || 0) - (a.playCount || 0);
+    }
+    const yearA = parseInt(a.year || "0", 10) || 0;
+    const yearB = parseInt(b.year || "0", 10) || 0;
+    return yearB - yearA;
+  });
+}
+
 function formatDuration(secs) {
   if (isNaN(secs) || secs <= 0) return "3:30";
   const m = Math.floor(secs / 60);
@@ -72,20 +242,21 @@ function formatPlayCount(count) {
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query")?.trim() || searchParams.get("q")?.trim() || "";
+  const page = parseInt(searchParams.get("page") || searchParams.get("p") || "1", 10) || 1;
 
   // -------------------------------------------------------------
-  // Mode 1: Federated Predictive Autocomplete Search
+  // Mode 1: Federated Predictive Autocomplete Search & Catalog Search
   // -------------------------------------------------------------
   if (query) {
     const normalizedQuery = query.toLowerCase();
-    const cacheKey = `ac:::${normalizedQuery}`;
+    const cacheKey = `ac:::${normalizedQuery}:::p${page}`;
     if (searchCache.has(cacheKey)) {
       return NextResponse.json(searchCache.get(cacheKey));
     }
 
     try {
       const autocompleteUrl = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&query=${encodeURIComponent(query)}`;
-      const searchResultsUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&q=${encodeURIComponent(query)}&p=1&n=25`;
+      const searchResultsUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&q=${encodeURIComponent(query)}&p=${page}&n=40`;
       const playlistResultsUrl = `https://www.jiosaavn.com/api.php?__call=search.getPlaylistResults&_format=json&q=${encodeURIComponent(query)}&p=1&n=30`;
       const albumResultsUrl = `https://www.jiosaavn.com/api.php?__call=search.getAlbumResults&_format=json&q=${encodeURIComponent(query)}&p=1&n=30`;
       const artistResultsUrl = `https://www.jiosaavn.com/api.php?__call=search.getArtistResults&_format=json&q=${encodeURIComponent(query)}&p=1&n=30`;
@@ -96,18 +267,20 @@ export async function GET(request) {
       };
 
       const [resAutocomplete, resResults, resPlaylists, resAlbums, resArtists] = await Promise.all([
-        fetch(autocompleteUrl, { headers, next: { revalidate: 300 } }),
+        page === 1 ? fetch(autocompleteUrl, { headers, next: { revalidate: 300 } }).catch(() => null) : Promise.resolve(null),
         fetch(searchResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null),
-        fetch(playlistResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null),
-        fetch(albumResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null),
-        fetch(artistResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null),
+        page === 1 ? fetch(playlistResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null) : Promise.resolve(null),
+        page === 1 ? fetch(albumResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null) : Promise.resolve(null),
+        page === 1 ? fetch(artistResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null) : Promise.resolve(null),
       ]);
 
-      if (!resAutocomplete.ok) {
-        throw new Error(`JioSaavn autocomplete API responded with status ${resAutocomplete.status}`);
+      let data = {};
+      if (resAutocomplete && resAutocomplete.ok) {
+        try {
+          data = await resAutocomplete.json();
+        } catch (_) {}
       }
 
-      const data = await resAutocomplete.json();
       let searchDataResults = [];
       if (resResults && resResults.ok) {
         try {
@@ -116,19 +289,37 @@ export async function GET(request) {
         } catch (_) {}
       }
 
+      // If external calls produced nothing, trigger graceful fallback
+      if (!data.songs?.data?.length && !searchDataResults.length && !data.artists?.data?.length && !data.albums?.data?.length) {
+        throw new Error("JioSaavn external search endpoints returned no results");
+      }
+
       const formatImage = (img) => (img || "").replace(/50x50|150x150/, "500x500");
 
-      // 1. Process Songs: Start with high-priority predictive autocomplete songs
-      const seenSongIds = new Set();
-      const songs = [];
+      // Build media map from searchDataResults so autocomplete songs immediately get directAudioUrl
+      const searchMediaMap = new Map();
+      for (const s of searchDataResults) {
+        if (!s.id) continue;
+        const encUrl = s.more_info?.encrypted_media_url || s.encrypted_media_url;
+        if (encUrl) {
+          const rawDecrypted = decryptMediaUrl(encUrl);
+          if (rawDecrypted && rawDecrypted.startsWith("http")) {
+            searchMediaMap.set(String(s.id), rawDecrypted.replace(/_96\.mp4/, "_320.mp4"));
+          }
+        }
+      }
 
-      // Prioritize curated perfect songs if query matches a known genre (e.g. Pop, Hip-Hop, Chill, Classical, etc.)
+      // 1. Process Raw Songs from genre, autocomplete, and search results
+      const rawCandidateSongs = [];
+      const seenRawIds = new Set();
+
+      // Prioritize curated perfect songs if query matches a known genre
       const matchedGenre = getGenreByName(query);
       if (matchedGenre && Array.isArray(matchedGenre.tracks)) {
         for (const gt of matchedGenre.tracks) {
-          if (!seenSongIds.has(gt.id)) {
-            seenSongIds.add(gt.id);
-            songs.push({
+          if (!seenRawIds.has(gt.id)) {
+            seenRawIds.add(gt.id);
+            rawCandidateSongs.push({
               id: gt.id,
               title: gt.title,
               artist: gt.artist,
@@ -140,6 +331,8 @@ export async function GET(request) {
               durationFormatted: gt.durationFormatted,
               ctr: gt.plays ? 1000000 : 0,
               ctrFormatted: gt.plays || null,
+              playCount: gt.plays ? 1000000 : 0,
+              playCountFormatted: gt.plays || null,
               bitrate: "320kbps",
               type: "song",
               audioUrl: gt.audioUrl,
@@ -151,18 +344,18 @@ export async function GET(request) {
       }
 
       for (const s of (data.songs?.data || [])) {
-        if (!s.id || seenSongIds.has(s.id)) continue;
-        seenSongIds.add(s.id);
+        if (!s.id || seenRawIds.has(s.id)) continue;
+        seenRawIds.add(s.id);
         const cleanTitle = cleanHtmlText(s.title || s.song);
         const primaryArtists = cleanHtmlText(s.more_info?.primary_artists || s.singers || "");
         const albumTitle = cleanHtmlText(s.album || s.more_info?.album || "");
         const artist = primaryArtists || cleanHtmlText(s.description?.split("·")[1]?.trim() || "Various Artists");
         const rawYear = s.more_info?.year || s.year || (s.description?.match(/\b(19\d\d|20\d\d)\b/)?.[1]) || null;
         const year = rawYear ? String(rawYear) : null;
-        const ctr = parseInt(s.ctr || "0", 10) || 0;
+        const rawPlays = s.more_info?.play_count || s.ctr || 0;
+        const playCount = parsePlayCount(rawPlays);
         const durationSec = parseInt(s.more_info?.duration || "210", 10);
 
-        // Direct CDN Linking: decrypt media URL if available so client streams directly from CDN
         let directAudioUrl = null;
         const encUrl = s.more_info?.encrypted_media_url || s.encrypted_media_url;
         if (encUrl) {
@@ -171,8 +364,11 @@ export async function GET(request) {
             directAudioUrl = rawDecrypted.replace(/_96\.mp4/, "_320.mp4");
           }
         }
+        if (!directAudioUrl && searchMediaMap.has(String(s.id))) {
+          directAudioUrl = searchMediaMap.get(String(s.id));
+        }
 
-        songs.push({
+        rawCandidateSongs.push({
           id: s.id,
           title: cleanTitle,
           artist: artist,
@@ -183,35 +379,45 @@ export async function GET(request) {
           year: year,
           duration: durationSec,
           durationFormatted: formatDuration(durationSec),
-          ctr: ctr,
-          ctrFormatted: formatPlayCount(ctr) || (ctr > 0 ? `${ctr}` : null),
+          ctr: playCount,
+          ctrFormatted: formatPlayCount(playCount) || (playCount > 0 ? `${playCount}` : null),
+          playCount: playCount,
+          playCountFormatted: formatPlayCount(playCount),
           bitrate: "320kbps",
           type: "song",
-          audioUrl: directAudioUrl, // direct JioSaavn CDN string URL
+          audioUrl: directAudioUrl,
         });
       }
 
-      // Ensure minimum 15-20 songs by enriching from results without altering the predictive algorithm
       for (const s of searchDataResults) {
-        if (!s.id || seenSongIds.has(s.id)) continue;
-        seenSongIds.add(s.id);
         const cleanTitle = cleanHtmlText(s.song || s.title);
         const artist = cleanHtmlText(s.primary_artists || s.singers || s.music || "Various Artists");
         const albumTitle = cleanHtmlText(s.album || "");
         const rawYear = s.year || s.more_info?.year || (s.release_date ? s.release_date.split("-")[0] : null);
         const durationSec = parseInt(s.duration || s.more_info?.duration || "210", 10);
+        const directAudioUrl = searchMediaMap.get(String(s.id)) || null;
+        const rawPlays = s.play_count || s.more_info?.play_count || 0;
+        const playCount = parsePlayCount(rawPlays);
 
-        // Direct CDN Linking: decrypt media URL into direct string URL
-        let directAudioUrl = null;
-        const encUrl = s.more_info?.encrypted_media_url || s.encrypted_media_url;
-        if (encUrl) {
-          const rawDecrypted = decryptMediaUrl(encUrl);
-          if (rawDecrypted && rawDecrypted.startsWith("http")) {
-            directAudioUrl = rawDecrypted.replace(/_96\.mp4/, "_320.mp4");
+        if (seenRawIds.has(s.id)) {
+          // If song was added from autocomplete with null audioUrl, enrich it now!
+          const existing = rawCandidateSongs.find((item) => item.id === s.id);
+          if (existing) {
+            if (!existing.audioUrl && directAudioUrl) {
+              existing.audioUrl = directAudioUrl;
+            }
+            if (playCount > (existing.playCount || 0)) {
+              existing.playCount = playCount;
+              existing.playCountFormatted = formatPlayCount(playCount);
+              existing.ctr = playCount;
+              existing.ctrFormatted = formatPlayCount(playCount);
+            }
           }
+          continue;
         }
 
-        songs.push({
+        seenRawIds.add(s.id);
+        rawCandidateSongs.push({
           id: s.id,
           title: cleanTitle,
           artist: artist,
@@ -222,15 +428,27 @@ export async function GET(request) {
           year: rawYear ? String(rawYear) : null,
           duration: durationSec,
           durationFormatted: formatDuration(durationSec),
-          ctr: 0,
-          ctrFormatted: null,
+          ctr: playCount,
+          ctrFormatted: formatPlayCount(playCount),
+          playCount: playCount,
+          playCountFormatted: formatPlayCount(playCount),
           bitrate: "320kbps",
           type: "song",
-          audioUrl: directAudioUrl, // direct JioSaavn CDN string URL
+          audioUrl: directAudioUrl,
         });
-
-        if (songs.length >= 25) break;
       }
+
+      // Extract top artist hint from predictive metadata for relevance boost
+      const rawTopArtist =
+        data.topquery?.data?.[0]?.more_info?.primary_artists ||
+        data.topquery?.data?.[0]?.music ||
+        (data.topquery?.data?.[0]?.description || "").replace(/^Song by\s*/i, "").split("·")[0].trim() ||
+        data.songs?.data?.[0]?.more_info?.primary_artists ||
+        data.artists?.data?.[0]?.title ||
+        "";
+
+      // Apply intelligent multi-factor ranking & deduplication
+      const songs = rankAndDeduplicateSongs(rawCandidateSongs, query, rawTopArtist);
 
       // 2. Process Artists
       const seenArtistKeys = new Set();
@@ -387,10 +605,60 @@ export async function GET(request) {
         } catch (_) {}
       }
 
-      // 5. Process Top Match
+      // 5. Intelligent Top Match Resolution
       let topMatch = null;
       const rawTop = data.topquery?.data?.[0];
-      if (rawTop) {
+      const topSong = songs[0] || null;
+
+      const cleanQ = cleanStr(query);
+      const normQ = normalizeSongTitle(query);
+
+      // Check if topSong is an exact or strong title match
+      const topSongClean = topSong ? cleanStr(topSong.title) : "";
+      const topSongNorm = topSong ? normalizeSongTitle(topSong.title) : "";
+      const isTopSongExactMatch = topSong && (topSongClean === cleanQ || topSongNorm === normQ);
+      const isTopSongStrongMatch = topSong && (isTopSongExactMatch || topSongClean.startsWith(cleanQ) || topSong.relevanceScore >= 900);
+
+      // Check if query is an artist search (e.g. user typed "Ed Sheeran", "Alan Walker", "Arijit Singh")
+      // Crucial: Only consider artist if the query EXACTLY matches artist name AND it is not just a spam artist named after the song
+      const matchedArtist = artists.find((a) => {
+        const aClean = cleanStr(a.name);
+        return aClean === cleanQ;
+      });
+
+      const isArtistSearch = Boolean(
+        matchedArtist &&
+        (!isTopSongExactMatch || (rawTop?.type === "artist" && rawTop?.id === matchedArtist.id))
+      );
+
+      // Check whether rawTop is an acoustic / remix / cover while the user searched standard query
+      const isExplicitRemixOrCover = /\b(remix|mix|acoustic|cover|instrumental|karaoke|slowed|live)\b/i.test(query);
+      const isRawTopDegraded = rawTop && !isExplicitRemixOrCover && (
+        /\b(remix|acoustic|cover|instrumental|karaoke|slowed|rendition)\b/i.test(rawTop.title || "") ||
+        rawTop.type === "album"
+      );
+
+      if (isArtistSearch && matchedArtist) {
+        topMatch = {
+          id: matchedArtist.id,
+          name: cleanHtmlText(matchedArtist.name || matchedArtist.title),
+          title: cleanHtmlText(matchedArtist.name || matchedArtist.title),
+          type: "artist",
+          image: formatImage(matchedArtist.image || matchedArtist.avatar),
+          thumbnail: formatImage(matchedArtist.image || matchedArtist.avatar),
+          coverUrl: formatImage(matchedArtist.image || matchedArtist.avatar),
+          avatar: formatImage(matchedArtist.image || matchedArtist.avatar),
+          subtitle: "Artist",
+          role: "Artist",
+        };
+      } else if (topSong && (isTopSongStrongMatch || !rawTop || isRawTopDegraded)) {
+        // High confidence song match takes priority
+        topMatch = {
+          ...topSong,
+          subtitle: `${topSong.artist} • ${topSong.album || "Single"}`,
+          type: "song",
+        };
+      } else if (rawTop && !isRawTopDegraded) {
         const topType = (rawTop.type || "song").toLowerCase();
         let subtitle = "";
         if (topType === "artist") {
@@ -400,7 +668,6 @@ export async function GET(request) {
           const albYear = rawTop.more_info?.year || "";
           subtitle = albArtist ? (albYear ? `${albArtist} • ${albYear}` : albArtist) : "Album";
         } else {
-          // song
           const songArtist = cleanHtmlText(rawTop.more_info?.primary_artists || rawTop.description || "");
           const songAlbum = cleanHtmlText(rawTop.album || "");
           subtitle = songArtist ? (songAlbum ? `${songArtist} • ${songAlbum}` : songArtist) : "Song";
@@ -419,30 +686,22 @@ export async function GET(request) {
           year: rawTop.more_info?.year || null,
           ctr: parseInt(rawTop.ctr || "0", 10) || 0,
           ctrFormatted: formatPlayCount(parseInt(rawTop.ctr || "0", 10)),
+          playCount: parseInt(rawTop.ctr || "0", 10) || 0,
+          playCountFormatted: formatPlayCount(parseInt(rawTop.ctr || "0", 10)),
+          audioUrl: topSong && topSong.id === rawTop.id ? topSong.audioUrl : null,
         };
-      } else if (songs.length > 0) {
+      } else if (topSong) {
         topMatch = {
-          ...songs[0],
-          subtitle: `${songs[0].artist} • ${songs[0].album}`,
+          ...topSong,
+          subtitle: `${topSong.artist} • ${topSong.album || "Single"}`,
           type: "song",
-        };
-      } else if (artists.length > 0) {
-        topMatch = {
-          ...artists[0],
-          subtitle: "Artist",
-          type: "artist",
-        };
-      } else if (albums.length > 0) {
-        topMatch = {
-          ...albums[0],
-          subtitle: `${albums[0].artist}${albums[0].year ? ` • ${albums[0].year}` : ""}`,
-          type: "album",
         };
       }
 
       const responsePayload = {
         success: true,
         query,
+        page,
         topMatch,
         songs,
         artists,
@@ -470,6 +729,7 @@ export async function GET(request) {
       return NextResponse.json({
         success: true,
         query,
+        page,
         topMatch: localFallback[0] || null,
         songs: localFallback,
         artists: [],
@@ -524,7 +784,7 @@ export async function GET(request) {
 
       if (res.ok) {
         const detailsData = await res.json();
-        const song = detailsData[trackId] || Object.values(detailsData)[0];
+        const song = detailsData[trackId] || Object.values(detailsData).find((v) => v && typeof v === "object" && (v.id || v.song || v.more_info || v.encrypted_media_url));
         const encryptedMediaUrl = song?.more_info?.encrypted_media_url || song?.encrypted_media_url;
 
         if (encryptedMediaUrl) {

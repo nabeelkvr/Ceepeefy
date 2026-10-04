@@ -11,6 +11,7 @@ import {
   fetchAlbumDetails,
   fetchArtistDetails,
   parsePlayCount,
+  rankSearchResults,
 } from "../../services/audioService";
 import { NOCTURNE_GENRES, NOCTURNE_PLAYLISTS } from "../../data/nocturneData";
 import { CURATED_GENRES, getGenreById, getGenreByName } from "../../data/genreData";
@@ -295,7 +296,7 @@ function SearchContent() {
 
   // Sync initial query and genre from URL param
   useEffect(() => {
-    const q = searchParams.get("q");
+    const q = searchParams.get("q") || searchParams.get("query") || searchParams.get("search");
     if (q && q !== searchQuery) {
       setSearchQuery(q);
     }
@@ -338,10 +339,13 @@ function SearchContent() {
         const data = await searchMusicAutocomplete(trimmed);
         if (isCancelled) return;
 
-        const candidateSongs = Array.isArray(data.songs) ? data.songs : [];
+        const rawCandidateSongs = Array.isArray(data.songs) ? data.songs : [];
         const candidateArtists = Array.isArray(data.artists) ? data.artists : [];
         const candidateAlbums = Array.isArray(data.albums) ? data.albums : [];
         const candidatePlaylists = Array.isArray(data.playlists) ? data.playlists : [];
+
+        // Ensure songs are intelligently ranked and deduplicated
+        const candidateSongs = rankSearchResults(rawCandidateSongs, trimmed, data.topMatch);
 
         setLiveTracks(candidateSongs);
         setTopMatch(data.topMatch || null);
@@ -1299,220 +1303,214 @@ function SearchContent() {
     );
   };
 
-  // Highlight Card for 'All' federated search layout (Artist Spotlight or Album Spotlight or Top Song)
-  const renderHighlightCard = () => {
-    const isArtistPreferred = topMatch?.type === "artist" && matchedArtist;
-
-    if (isArtistPreferred || (!matchedAlbum && !matchedMovie && matchedArtist)) {
+  // Top Result Card for Spotify-style search layout (Top Song, Artist Spotlight, or Album Spotlight)
+  const renderTopResultCard = () => {
+    // 1. If topMatch is an artist (or query was an artist)
+    if (topMatch?.type === "artist" && (matchedArtist || topMatch)) {
+      const art = matchedArtist || topMatch;
       return (
-        <div
-          onClick={(e) => handleArtistCardClick(matchedArtist, e)}
-          className="group relative p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/40 bg-surface-container/80 hover:bg-surface-container transition-all cursor-pointer shadow-lg flex flex-col justify-between select-none w-full"
-        >
-          <div>
-            <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2.5">
-              <ArtistAvatar
-                name={matchedArtist.name}
-                avatar={matchedArtist.avatar || matchedArtist.image}
-                className="w-full h-full"
-                imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-              <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-primary flex items-center gap-1 shadow-md">
-                <span className="material-symbols-outlined text-[12px] text-primary">mic</span>
-                <span className="uppercase tracking-wider font-bold">Artist</span>
-              </div>
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div
-                  onClick={(e) => handlePlayArtistQuick(matchedArtist, e)}
-                  className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[24px]">
-                    {isArtistPlaying ? "pause" : "play_arrow"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col min-w-0">
-              <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-primary transition-colors truncate">
-                {matchedArtist.name}
-              </h3>
-              <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                {matchedArtist.role || "Artist"} • {matchedArtist.genre || "Popular Artist"}
-              </p>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+              TOP RESULT
+            </span>
+            <div className="flex items-center gap-1 text-primary">
+              <span className="material-symbols-outlined text-[15px]">mic</span>
+              <span className="text-[11px] font-bold">Artist</span>
             </div>
           </div>
-
-          <div>
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10 text-xs">
-              <div className="flex items-center gap-1.5 text-outline text-[11px]">
-                <span className="material-symbols-outlined text-[14px] text-primary">verified</span>
-                <span>{artistTracks.length > 0 ? `${artistTracks.length} Songs` : "Verified Artist"}</span>
+          <div
+            onClick={(e) => handleArtistCardClick(art, e)}
+            className="group relative p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/40 bg-surface-container/80 hover:bg-surface-container transition-all cursor-pointer shadow-lg flex flex-col justify-between select-none w-full"
+          >
+            <div>
+              <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2.5">
+                <ArtistAvatar
+                  name={art.name}
+                  avatar={art.avatar || art.image}
+                  className="w-full h-full"
+                  imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-primary flex items-center gap-1 shadow-md">
+                  <span className="material-symbols-outlined text-[12px] text-primary">mic</span>
+                  <span className="uppercase tracking-wider font-bold">Artist</span>
+                </div>
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div
+                    onClick={(e) => handlePlayArtistQuick(art, e)}
+                    className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[24px]">
+                      {isArtistPlaying ? "pause" : "play_arrow"}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <span className="text-[11px] text-primary font-semibold flex items-center gap-0.5 hover:underline flex-shrink-0">
-                <span>Open Artist</span>
-                <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
-              </span>
+
+              <div className="flex flex-col min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-primary transition-colors truncate">
+                  {art.name}
+                </h3>
+                <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                  {art.role || "Artist"} • {art.genre || "Popular Artist"}
+                </p>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={(e) => handleArtistCardClick(matchedArtist, e)}
-              className="w-full mt-2.5 py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
-            >
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="material-symbols-outlined text-[15px] flex-shrink-0">queue_music</span>
-                <span className="truncate">Artist Playlist ({artistTracks.length > 0 ? `${artistTracks.length} Songs` : "All"})</span>
+            <div>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10 text-xs">
+                <div className="flex items-center gap-1.5 text-outline text-[11px]">
+                  <span className="material-symbols-outlined text-[14px] text-primary">verified</span>
+                  <span>{artistTracks.length > 0 ? `${artistTracks.length} Songs` : "Verified Artist"}</span>
+                </div>
+                <span className="text-[11px] text-primary font-semibold flex items-center gap-0.5 hover:underline flex-shrink-0">
+                  <span>Open Artist</span>
+                  <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
+                </span>
               </div>
-              <span className="material-symbols-outlined text-[14px] flex-shrink-0 group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-            </button>
+
+              <button
+                type="button"
+                onClick={(e) => handleArtistCardClick(art, e)}
+                className="w-full mt-2.5 py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="material-symbols-outlined text-[15px] flex-shrink-0">queue_music</span>
+                  <span className="truncate">Artist Playlist ({artistTracks.length > 0 ? `${artistTracks.length} Songs` : "All"})</span>
+                </div>
+                <span className="material-symbols-outlined text-[14px] flex-shrink-0 group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
+              </button>
+            </div>
           </div>
         </div>
       );
     }
 
-    if (matchedAlbum || matchedMovie) {
-      const alb = matchedAlbum || matchedMovie;
-      const songCount = alb.tracks?.length || alb.trackCount || 1;
-      return (
-        <div
-          onClick={(e) => handleMovieCardClick(alb, e)}
-          className="group relative p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/40 bg-surface-container/80 hover:bg-surface-container transition-all cursor-pointer shadow-lg flex flex-col justify-between select-none w-full"
-        >
-          <div>
-            <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2.5">
-              <img
-                src={alb.image || alb.thumbnail || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80"}
-                alt={alb.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-              <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-emerald-400 flex items-center gap-1 shadow-md">
-                <span className="material-symbols-outlined text-[12px] text-emerald-400">
-                  {alb.isMovie ? "movie" : "album"}
-                </span>
-                <span className="uppercase tracking-wider">
-                  {alb.isMovie ? "Film" : "Album"}
-                </span>
-              </div>
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div
-                  onClick={(e) => handlePlayAlbumQuick(alb, e)}
-                  className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[24px]">
-                    {isAlbumPlaying || isMoviePlaying ? "pause" : "play_arrow"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col min-w-0">
-              <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-primary transition-colors truncate">
-                {alb.title}
-              </h3>
-              <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                {alb.isMovie ? "Film Soundtrack" : "Album"} • {alb.artist || "Soundtrack"}
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10 text-xs">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="font-mono text-outline text-[11px]">
-                  {songCount} Songs
-                </span>
-                {alb.year && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-white/5 text-outline border border-white/10">
-                    {alb.year}
-                  </span>
-                )}
-              </div>
-              <span className="text-[11px] text-primary font-semibold flex items-center gap-0.5 hover:underline flex-shrink-0">
-                <span>Open Album</span>
-                <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={(e) => handleMovieCardClick(alb, e)}
-              className="w-full mt-2.5 py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
-            >
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="material-symbols-outlined text-[15px] flex-shrink-0">queue_music</span>
-                <span className="truncate">
-                  {alb.isMovie ? "Movie Playlist" : "Album Playlist"} ({songCount} Songs)
-                </span>
-              </div>
-              <span className="material-symbols-outlined text-[14px] flex-shrink-0 group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    if (liveTracks[0]) {
-      const topSong = liveTracks[0];
+    // 2. If topMatch is a song OR liveTracks has songs:
+    const topSong = (topMatch?.type === "song" && topMatch) || liveTracks[0] || null;
+    if (topSong) {
       const isTopPlaying = currentTrack?.id === topSong.id && isPlaying;
       return (
-        <div
-          onClick={() => handleTrackClick(topSong, liveTracks)}
-          className="group relative p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/40 bg-surface-container/80 hover:bg-surface-container transition-all cursor-pointer shadow-lg flex flex-col justify-between select-none w-full"
-        >
-          <div>
-            <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2.5">
-              <img
-                src={topSong.thumbnail || topSong.image || topSong.coverUrl}
-                alt={topSong.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-              <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-primary flex items-center gap-1 shadow-md">
-                <span className="material-symbols-outlined text-[12px] text-primary">music_note</span>
-                <span className="uppercase tracking-wider font-bold">Top Song</span>
-              </div>
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300">
-                  <span className="material-symbols-outlined text-[24px]">
-                    {isTopPlaying ? "pause" : "play_arrow"}
-                  </span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+              TOP RESULT
+            </span>
+            <div className="flex items-center gap-1 text-primary">
+              <span className="material-symbols-outlined text-[15px]">music_note</span>
+              <span className="text-[11px] font-bold">Song</span>
+            </div>
+          </div>
+          <div
+            onClick={() => handleTrackClick(topSong, liveTracks)}
+            className="group relative p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/40 bg-surface-container/80 hover:bg-surface-container transition-all cursor-pointer shadow-lg flex flex-col justify-between select-none w-full"
+          >
+            <div>
+              <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2.5">
+                <img
+                  src={topSong.thumbnail || topSong.image || topSong.coverUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80"}
+                  alt={topSong.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-primary flex items-center gap-1 shadow-md">
+                  <span className="material-symbols-outlined text-[12px] text-primary">music_note</span>
+                  <span className="uppercase tracking-wider font-bold">Top Song</span>
+                </div>
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrackClick(topSong, liveTracks);
+                    }}
+                    className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[24px]">
+                      {isTopPlaying ? "pause" : "play_arrow"}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex flex-col min-w-0">
-              <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-primary transition-colors truncate">
-                {topSong.title}
-              </h3>
-              <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                {topSong.artist} • {topSong.album || "Single"}
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10 text-xs">
-              <span className="text-[11px] font-mono text-outline">
-                {topSong.durationFormatted || formatTime(topSong.duration || 210)}
-              </span>
-              <span className="text-[11px] text-primary font-semibold flex items-center gap-0.5 hover:underline flex-shrink-0">
-                <span>Play Song</span>
-                <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleTrackClick(topSong, liveTracks)}
-              className="w-full mt-2.5 py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
-            >
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="material-symbols-outlined text-[15px] flex-shrink-0">play_arrow</span>
-                <span className="truncate">Play Track</span>
+              <div className="flex flex-col min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-primary transition-colors truncate">
+                  {topSong.title}
+                </h3>
+                <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                  {topSong.artist} • {topSong.album || "Single"}
+                </p>
+                {topSong.playCountFormatted && (
+                  <p className="text-[10px] font-mono text-outline mt-0.5">
+                    {topSong.playCountFormatted} plays
+                  </p>
+                )}
               </div>
-              <span className="material-symbols-outlined text-[14px] flex-shrink-0 group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-            </button>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10 text-xs">
+                <span className="text-[11px] font-mono text-outline">
+                  {topSong.durationFormatted || formatTime(topSong.duration || 210)}
+                </span>
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => addToQueue(topSong)}
+                    className="p-1 rounded-lg text-outline hover:text-primary hover:bg-white/10 transition-colors"
+                    title="Add to Queue"
+                  >
+                    <span className="material-symbols-outlined text-[17px]">playlist_add</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleLike(topSong)}
+                    className={`p-1 rounded-lg transition-colors ${isLiked(topSong.id) ? "text-primary" : "text-outline hover:text-white hover:bg-white/10"}`}
+                    title={isLiked(topSong.id) ? "Liked" : "Like song"}
+                  >
+                    <span
+                      className="material-symbols-outlined text-[17px]"
+                      style={{ fontVariationSettings: isLiked(topSong.id) ? "'FILL' 1" : "'FILL' 0" }}
+                    >
+                      {isLiked(topSong.id) ? "favorite" : "favorite_border"}
+                    </span>
+                  </button>
+                  <SongOptionsMenu track={topSong} />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleTrackClick(topSong, liveTracks)}
+                className="w-full mt-2.5 py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="material-symbols-outlined text-[15px] flex-shrink-0">
+                    {isTopPlaying ? "pause" : "play_arrow"}
+                  </span>
+                  <span className="truncate">{isTopPlaying ? "Pause Track" : "Play Track"}</span>
+                </div>
+                <span className="material-symbols-outlined text-[14px] flex-shrink-0 group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
+              </button>
+            </div>
           </div>
+        </div>
+      );
+    }
+
+    // 3. Album Spotlight if topMatch is an album and no song exists
+    if (matchedAlbum || matchedMovie) {
+      const alb = matchedAlbum || matchedMovie;
+      return (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+              ALBUM SPOTLIGHT
+            </span>
+            <div className="flex items-center gap-1 text-emerald-400">
+              <span className="material-symbols-outlined text-[15px]">album</span>
+              <span className="text-[11px] font-bold">Album</span>
+            </div>
+          </div>
+          {renderAlbumCard(alb, false)}
         </div>
       );
     }
@@ -1680,9 +1678,12 @@ function SearchContent() {
                     </div>
                   ) : (
                     <div className="flex flex-col gap-8">
-                      {/* Mobile Responsive 'All' Layout: 1. Songs List First -> 2. Albums (Image 4 2-col) -> 3. Artists (Image 4 2-col) -> 4. Playlists (Image 4 2-col) */}
+                      {/* Mobile Responsive 'All' Layout: 0. Top Result -> 1. Songs List -> 2. Albums -> 3. Artists -> 4. Playlists */}
                       <div className="flex flex-col gap-6 lg:hidden w-full">
-                        {/* 1. Songs List First */}
+                        {/* 0. Top Result on Mobile */}
+                        {renderTopResultCard()}
+
+                        {/* 1. Songs List */}
                         <div className="flex flex-col gap-2.5">
                           <div className="flex items-center justify-between pb-0.5">
                             <div className="flex items-center gap-1.5">
@@ -1796,51 +1797,37 @@ function SearchContent() {
                         )}
                       </div>
 
-                      {/* Desktop 'All' Layout: Preserved 2-column view (Left: Spotlight & Small Cards, Right: Songs) */}
+                      {/* Desktop 'All' Layout: Preserved 2-column view (Left: Top Result & Spotlights, Right: Songs) */}
                       <div className="hidden lg:flex flex-row gap-6 items-start w-full">
-                        {/* Left Column: Big Spot Album -> Other Albums (Image 4 2-col grid) -> Big Spot Artists -> Other Artists -> Playlists */}
-                        {(spotlightAlbum || spotlightArtist || otherAlbums.length > 0 || otherArtists.length > 0 || leftPlaylists.length > 0) && (
-                          <div className="w-[275px] xl:w-[290px] flex-shrink-0 flex flex-col gap-5">
-                            {/* 1. Big Card: Spot Album (Do NOT change size, exact Image 1) */}
-                            {spotlightAlbum && (
-                              <div className="flex flex-col gap-2">
-                                <div className="flex items-center justify-between px-1">
-                                  <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
-                                    ALBUM SPOTLIGHT
-                                  </span>
-                                  <div className="flex items-center gap-1 text-amber-400">
-                                    <span className="material-symbols-outlined text-[15px]">album</span>
-                                    <span className="text-[11px] font-bold">Official Album</span>
-                                  </div>
-                                </div>
-                                {renderAlbumCard(spotlightAlbum, false)}
-                              </div>
-                            )}
+                        {/* Left Column: Top Result Card -> Other Albums (Image 4 2-col grid) -> Big Spot Artists -> Other Artists -> Playlists */}
+                        <div className="w-[275px] xl:w-[290px] flex-shrink-0 flex flex-col gap-5">
+                          {/* 1. Big Top Result Card (Song, Artist, or Album) */}
+                          {renderTopResultCard()}
 
-                            {/* 2. Other Albums in Small Cards (Only 2 cards side-by-side) */}
-                            {otherAlbums.length > 0 && (
-                              <div className="flex flex-col gap-2">
-                                <div className="flex items-center justify-between px-1">
-                                  <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
-                                    OTHER ALBUMS
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setActiveFilter("Albums")}
-                                    className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
-                                  >
-                                    <span>See all</span>
-                                    <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
-                                  </button>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
-                                  {otherAlbums.slice(0, 2).map((alb) => renderSmallAlbumCard(alb))}
-                                </div>
+                          {/* 2. Other Albums in Small Cards (Only 2 cards side-by-side) */}
+                          {otherAlbums.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center justify-between px-1">
+                                <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+                                  OTHER ALBUMS
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveFilter("Albums")}
+                                  className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                                >
+                                  <span>See all</span>
+                                  <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
+                                </button>
                               </div>
-                            )}
+                              <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                                {otherAlbums.slice(0, 2).map((alb) => renderSmallAlbumCard(alb))}
+                              </div>
+                            </div>
+                          )}
 
-                            {/* 3. Big Card: Spot Artists */}
-                            {spotlightArtist && (
+                            {/* 3. Big Card: Spot Artists (only if not already rendered as Top Result) */}
+                            {spotlightArtist && (!topMatch || topMatch.type !== "artist" || (String(topMatch.id || "") !== String(spotlightArtist.id || "") && (topMatch.name || "").toLowerCase() !== (spotlightArtist.name || "").toLowerCase())) && (
                               <div className="flex flex-col gap-2">
                                 <div className="flex items-center justify-between px-1">
                                   <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
@@ -1899,7 +1886,6 @@ function SearchContent() {
                               </div>
                             )}
                           </div>
-                        )}
 
                         {/* Right: Top Songs List (Unchanged as Image 5) */}
                         <div className="flex-1 min-w-0 flex flex-col gap-2.5">
