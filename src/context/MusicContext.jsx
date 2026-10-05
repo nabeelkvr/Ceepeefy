@@ -504,13 +504,8 @@ export const MusicProvider = ({ children }) => {
           setAutoQueue(parsed);
         }
       }
-      const savedTrack = localStorage.getItem("ceepeefy_current_track");
-      if (savedTrack && !currentTrackRef.current) {
-        const parsed = JSON.parse(savedTrack);
-        if (parsed && parsed.id) {
-          setCurrentTrack(parsed);
-        }
-      }
+      // Strictly runtime player state: ensure no stale song is restored on refresh
+      localStorage.removeItem("ceepeefy_current_track");
     } catch (e) {
       console.warn("[MusicContext] Could not load persisted queue state:", e);
     }
@@ -528,14 +523,6 @@ export const MusicProvider = ({ children }) => {
       localStorage.setItem("ceepeefy_auto_queue", JSON.stringify(autoQueue));
     } catch (e) { }
   }, [autoQueue]);
-
-  useEffect(() => {
-    if (currentTrack) {
-      try {
-        localStorage.setItem("ceepeefy_current_track", JSON.stringify(currentTrack));
-      } catch (e) { }
-    }
-  }, [currentTrack]);
 
   // Account-bound features: accessible only when logged in
   const [likedSongIds, setLikedSongIds] = useState([]);
@@ -2117,6 +2104,80 @@ export const MusicProvider = ({ children }) => {
     } catch (e) { }
   };
 
+  // Web Media Session API: Extract genuine track artwork (never Ceepify logo or placeholder)
+  const getMediaSessionArtwork = (track) => {
+    if (!track) return [];
+    const rawCover =
+      track.coverUrl ||
+      track.thumbnail ||
+      track.image ||
+      track.imageUrl ||
+      (Array.isArray(track.image) && track.image[track.image.length - 1]?.url) ||
+      track.albumArt ||
+      "";
+
+    if (!rawCover || typeof rawCover !== "string") return [];
+    // Strict requirement: Never use logo or default placeholder
+    if (rawCover.includes("icon-512") || rawCover.includes("ceepeefy-logo")) return [];
+
+    let absoluteUrl = rawCover;
+    try {
+      if (
+        !rawCover.startsWith("http://") &&
+        !rawCover.startsWith("https://") &&
+        !rawCover.startsWith("blob:") &&
+        !rawCover.startsWith("data:")
+      ) {
+        if (typeof window !== "undefined") {
+          absoluteUrl = new URL(rawCover, window.location.origin).href;
+        }
+      }
+    } catch {
+      return [];
+    }
+
+    const ext = absoluteUrl.split("?")[0].split(".").pop()?.toLowerCase();
+    const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+
+    return [
+      { src: absoluteUrl, sizes: "96x96", type: mimeType },
+      { src: absoluteUrl, sizes: "128x128", type: mimeType },
+      { src: absoluteUrl, sizes: "192x192", type: mimeType },
+      { src: absoluteUrl, sizes: "256x256", type: mimeType },
+      { src: absoluteUrl, sizes: "384x384", type: mimeType },
+      { src: absoluteUrl, sizes: "512x512", type: mimeType },
+    ];
+  };
+
+  // Immediate Web Media Session metadata synchronization
+  const updateMediaSessionMetadata = (track) => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+
+    if (!track) {
+      try {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = "none";
+      } catch { }
+      return;
+    }
+
+    const title = track.title || "Unknown Title";
+    const artist = track.artist || "Ceepeefy Artist";
+    const album = track.album || track.movie || "";
+    const artwork = getMediaSessionArtwork(track);
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title,
+        artist,
+        album,
+        artwork,
+      });
+    } catch (e) {
+      console.warn("[MediaSession] Metadata error:", e);
+    }
+  };
+
   // Play a specific track: fetches raw direct audio streaming URL from open-source music search
   const playTrack = async (track, tracklist = null, options = {}) => {
     if (!track) return;
@@ -2143,15 +2204,17 @@ export const MusicProvider = ({ children }) => {
       }
     }
 
-    setCurrentTrack(track);
-    setCurrentTime(0);
-    setDuration(track.duration || 210);
-    setIsBuffering(true);
-
     // Record previous song to history for backwards navigation (unless navigating backwards)
     if (!options?.fromHistory && currentTrackRef.current && String(currentTrackRef.current.id) !== String(track.id)) {
       setPlaybackHistory((prev) => [...prev.slice(-30), currentTrackRef.current]);
     }
+
+    setCurrentTrack(track);
+    currentTrackRef.current = track;
+    updateMediaSessionMetadata(track);
+    setCurrentTime(0);
+    setDuration(track.duration || 210);
+    setIsBuffering(true);
 
     if (tracklist && tracklist.length > 0 && options?.context !== "search" && !options?.generatePriorityQueue) {
       originalPlaylistTracksRef.current = tracklist;
@@ -2357,7 +2420,9 @@ export const MusicProvider = ({ children }) => {
     // 1. Consume from Manual Queue first (Strict Priority Rule)
     if (mQ.length > 0) {
       const next = mQ[0];
-      setManualQueue((prev) => prev.slice(1));
+      const remainingManual = mQ.slice(1);
+      manualQueueRef.current = remainingManual;
+      setManualQueue(remainingManual);
       playTrack(next, null, { fromQueue: true, wasManual: true });
       return;
     }
@@ -2365,7 +2430,9 @@ export const MusicProvider = ({ children }) => {
     // 2. Consume from Automatic Priority Queue only after Manual Queue is empty
     if (aQ.length > 0) {
       const next = aQ[0];
-      setAutoQueue((prev) => prev.slice(1));
+      const remainingAuto = aQ.slice(1);
+      autoQueueRef.current = remainingAuto;
+      setAutoQueue(remainingAuto);
       playTrack(next, null, { fromQueue: true, wasManual: false });
       return;
     }
@@ -2609,18 +2676,36 @@ export const MusicProvider = ({ children }) => {
     return pinnedPlaylistIds.includes(pid) || addedPlaylists.some((p) => String(p.id) === pid);
   };
 
+  // Seek bound to audio element's currentTime
+  const seekTo = (seconds) => {
+    const clamped = Math.max(0, Math.min(seconds, duration || 300));
+    setCurrentTime(clamped);
+    if (audioRef.current) {
+      try {
+        audioRef.current.currentTime = clamped;
+      } catch (err) {
+        console.warn("Audio seekTo error:", err);
+      }
+    }
+  };
+
   // Previous track with history and tracklist support
   const handlePrevTrack = () => {
     // If track has been playing for more than 3 seconds, restart current track (Standard Spotify behavior)
-    if (currentTime > 3 && audioRef.current) {
+    const currentAudioTime = audioRef.current?.currentTime ?? currentTime ?? 0;
+    if (currentAudioTime > 3 && audioRef.current) {
       seekTo(0);
+      if (audioRef.current.paused) {
+        audioRef.current.play().catch(() => { });
+      }
       return;
     }
 
-    const hist = playbackHistoryRef.current;
+    const hist = playbackHistoryRef.current || [];
     if (hist.length > 0) {
       const prevTrack = hist[hist.length - 1];
       const newHist = hist.slice(0, -1);
+      playbackHistoryRef.current = newHist;
       setPlaybackHistory(newHist);
       if (currentTrackRef.current) {
         setQueue((q) => [currentTrackRef.current, ...q]);
@@ -2630,7 +2715,7 @@ export const MusicProvider = ({ children }) => {
     }
 
     const cur = currentTrackRef.current;
-    const tracklist = currentTracklistRef.current;
+    const tracklist = currentTracklistRef.current || [];
     if (cur && tracklist.length > 0) {
       const currentIndex = tracklist.findIndex((t) => String(t.id) === String(cur.id));
       if (currentIndex > 0) {
@@ -2646,40 +2731,24 @@ export const MusicProvider = ({ children }) => {
     seekTo(0);
   };
 
+  // Stable refs for action handlers so Media Session handlers are registered once and NEVER torn down on state changes
+  const handleNextTrackRef = useRef(handleNextTrack);
+  const handlePrevTrackRef = useRef(handlePrevTrack);
+  const togglePlayRef = useRef(togglePlay);
+  const seekToRef = useRef(seekTo);
+  const currentTimeRef = useRef(0);
+  const durationRef = useRef(0);
+
+  useEffect(() => { handleNextTrackRef.current = handleNextTrack; });
+  useEffect(() => { handlePrevTrackRef.current = handlePrevTrack; });
+  useEffect(() => { togglePlayRef.current = togglePlay; });
+  useEffect(() => { seekToRef.current = seekTo; });
+  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
+
   // Web Media Session API: Professional OS Notifications, Lock Screen Controls & Background Controls
   useEffect(() => {
-    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
-
-    if (!currentTrack) {
-      try {
-        navigator.mediaSession.metadata = null;
-        navigator.mediaSession.playbackState = "none";
-      } catch { }
-      return;
-    }
-
-    const title = currentTrack.title || "Unknown Title";
-    const artist = currentTrack.artist || "Ceepeefy Artist";
-    const album = currentTrack.album || currentTrack.movie || "Ceepeefy";
-    const cover = currentTrack.coverUrl || currentTrack.thumbnail || currentTrack.image || "/icon-512.png";
-
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title,
-        artist,
-        album,
-        artwork: [
-          { src: cover, sizes: "96x96", type: "image/jpeg" },
-          { src: cover, sizes: "128x128", type: "image/jpeg" },
-          { src: cover, sizes: "192x192", type: "image/jpeg" },
-          { src: cover, sizes: "256x256", type: "image/jpeg" },
-          { src: cover, sizes: "384x384", type: "image/jpeg" },
-          { src: cover, sizes: "512x512", type: "image/jpeg" },
-        ],
-      });
-    } catch (e) {
-      console.warn("[MediaSession] Metadata error:", e);
-    }
+    updateMediaSessionMetadata(currentTrack);
 
     // Keep document title strictly "Ceepeefy" as required
     try {
@@ -2691,59 +2760,80 @@ export const MusicProvider = ({ children }) => {
   useEffect(() => {
     if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
     try {
-      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+      if (!currentTrack) {
+        navigator.mediaSession.playbackState = "none";
+      } else {
+        navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+      }
     } catch { }
-  }, [isPlaying]);
+  }, [isPlaying, currentTrack]);
 
   // Sync Media Session Playback Position
   useEffect(() => {
     if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
     if (!("setPositionState" in navigator.mediaSession)) return;
-    if (!duration || isNaN(duration) || duration <= 0) return;
+    if (!currentTrack || !duration || isNaN(duration) || duration <= 0) return;
 
     try {
-      navigator.mediaSession.setPositionState({
-        duration: Math.max(0, duration),
-        playbackRate: 1.0,
-        position: Math.max(0, Math.min(currentTime || 0, duration)),
-      });
+      const validDuration = Number(duration);
+      const validPosition = Math.max(0, Math.min(Number(currentTime) || 0, validDuration));
+      if (validDuration > 0 && isFinite(validDuration) && isFinite(validPosition)) {
+        navigator.mediaSession.setPositionState({
+          duration: validDuration,
+          playbackRate: 1.0,
+          position: validPosition,
+        });
+      }
     } catch { }
-  }, [currentTime, duration]);
+  }, [currentTime, duration, currentTrack]);
 
-  // Register OS Media Controls Action Handlers
+  // Register OS Media Controls Action Handlers ONCE on mount
   useEffect(() => {
     if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
 
     const actionHandlers = [
       ["play", () => {
-        if (audioRef.current && !isPlaying) {
+        if (audioRef.current && audioRef.current.paused) {
           audioRef.current.play().catch(() => { });
+        } else if (togglePlayRef.current) {
+          togglePlayRef.current();
         }
       }],
       ["pause", () => {
-        if (audioRef.current && isPlaying) {
+        if (audioRef.current && !audioRef.current.paused) {
           audioRef.current.pause();
+        } else if (togglePlayRef.current) {
+          togglePlayRef.current();
         }
       }],
       ["nexttrack", () => {
-        handleNextTrack();
+        if (handleNextTrackRef.current) {
+          handleNextTrackRef.current();
+        }
       }],
       ["previoustrack", () => {
-        handlePrevTrack();
+        if (handlePrevTrackRef.current) {
+          handlePrevTrackRef.current();
+        }
       }],
       ["seekbackward", (details) => {
         const offset = details?.seekOffset || 10;
-        const cur = audioRef.current?.currentTime || currentTime;
-        seekTo(Math.max(0, cur - offset));
+        const cur = audioRef.current?.currentTime ?? currentTimeRef.current ?? 0;
+        if (seekToRef.current) {
+          seekToRef.current(Math.max(0, cur - offset));
+        }
       }],
       ["seekforward", (details) => {
         const offset = details?.seekOffset || 10;
-        const cur = audioRef.current?.currentTime || currentTime;
-        seekTo(Math.min(duration, cur + offset));
+        const cur = audioRef.current?.currentTime ?? currentTimeRef.current ?? 0;
+        const dur = audioRef.current?.duration ?? durationRef.current ?? 300;
+        if (seekToRef.current) {
+          seekToRef.current(Math.min(dur, cur + offset));
+        }
       }],
       ["seekto", (details) => {
-        if (details?.seekTime !== undefined) {
-          seekTo(details.seekTime);
+        if (details?.seekTime !== undefined && seekToRef.current) {
+          seekToRef.current(details.seekTime);
         }
       }],
       ["stop", () => {
@@ -2758,7 +2848,9 @@ export const MusicProvider = ({ children }) => {
     actionHandlers.forEach(([action, handler]) => {
       try {
         navigator.mediaSession.setActionHandler(action, handler);
-      } catch { }
+      } catch (err) {
+        console.debug(`[MediaSession] Action "${action}" not supported:`, err);
+      }
     });
 
     return () => {
@@ -2768,20 +2860,7 @@ export const MusicProvider = ({ children }) => {
         } catch { }
       });
     };
-  }, [currentTime, duration, isPlaying]);
-
-  // Seek bound to audio element's currentTime
-  const seekTo = (seconds) => {
-    const clamped = Math.max(0, Math.min(seconds, duration || 300));
-    setCurrentTime(clamped);
-    if (audioRef.current) {
-      try {
-        audioRef.current.currentTime = clamped;
-      } catch (err) {
-        console.warn("Audio seekTo error:", err);
-      }
-    }
-  };
+  }, []);
 
   // Toggle Like (Accepts track object or trackId)
   const toggleLike = (trackOrId, optionalTrackObj) => {

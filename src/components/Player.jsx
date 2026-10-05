@@ -680,23 +680,23 @@ export default function Player() {
         </aside>
       )}
 
-      {/* 3b. FULL-LENGTH BOTTOM PLAYER BAR (Desktop Default View md:flex) */}
+      {/* 3b. FULL-LENGTH FLOATING BOTTOM PLAYER BAR (Image 2 style: Floating island pill with full data) */}
       {playerMode === "bar" && (
-        <footer className="hidden md:flex fixed bottom-0 left-0 right-0 h-24 bg-surface-container-lowest/95 backdrop-blur-2xl border-t border-white/10 px-4 md:px-6 z-50 items-center justify-between shadow-[0_-10px_30px_rgba(0,0,0,0.5)] select-none animate-slide-up">
+        <footer className="hidden md:flex fixed bottom-3 md:bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-5xl md:max-w-6xl h-20 rounded-2xl bg-[#0a0f1d]/85 backdrop-blur-2xl border border-white/12 px-4 md:px-6 z-50 items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.75)] select-none animate-slide-up transition-all">
           {/* Left: Track Details */}
-          <div className="flex items-center gap-3 md:gap-4 w-48 sm:w-64 md:w-80 min-w-0">
+          <div className="flex items-center gap-3 md:gap-3.5 w-48 sm:w-60 md:w-72 min-w-0">
             <div
               onClick={() => setPlayerMode("card")}
-              className="relative w-12 h-12 md:w-14 md:h-14 rounded-xl overflow-hidden bg-surface-container flex-shrink-0 flex items-center justify-center shadow-lg border border-white/10 group cursor-pointer"
+              className="relative w-12 h-12 md:w-13 md:h-13 rounded-[4px] overflow-hidden bg-[#161922] flex-shrink-0 flex items-center justify-center shadow-md border border-white/10 group cursor-pointer"
               title="Click for Big Photo Card View"
             >
               <img
                 alt={currentTrack.title}
                 src={currentTrack.coverUrl}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                className="w-full h-full object-cover rounded-[4px] group-hover:scale-110 transition-transform duration-300"
               />
-              <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <span className="material-symbols-outlined text-white text-[20px]">
+              <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-[4px]">
+                <span className="material-symbols-outlined text-white text-[18px]">
                   aspect_ratio
                 </span>
               </div>
@@ -705,26 +705,26 @@ export default function Player() {
             <div className="flex flex-col min-w-0">
               <span
                 onClick={() => setPlayerMode("card")}
-                className="text-xs md:text-sm font-semibold text-white truncate hover:text-primary transition-colors cursor-pointer"
+                className="text-xs md:text-sm font-bold text-white truncate hover:text-primary transition-colors cursor-pointer"
                 title="Click to view card"
               >
                 {currentTrack.title}
               </span>
-              <span className="text-[11px] md:text-xs text-on-surface-variant truncate hover:underline cursor-pointer mt-0.5">
+              <span className="text-[10px] md:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate hover:underline cursor-pointer mt-0.5">
                 {currentTrack.artist}
               </span>
             </div>
 
             <button
               onClick={() => toggleLike(currentTrack)}
-              className={`flex-shrink-0 p-1.5 md:p-2 rounded-full hover:bg-surface-container ml-1 transition-colors ${isLiked(currentTrack.id)
+              className={`flex-shrink-0 p-1.5 rounded-full hover:bg-surface-container ml-1 transition-colors ${isLiked(currentTrack.id)
                 ? "text-primary hover:text-cyan-300"
                 : "text-outline hover:text-primary"
                 }`}
               title={isLiked(currentTrack.id) ? "Remove from favorites" : "Add to favorites"}
             >
               <span
-                className="material-symbols-outlined text-[20px] md:text-[22px]"
+                className="material-symbols-outlined text-[19px] md:text-[21px]"
                 style={{
                   fontVariationSettings: isLiked(currentTrack.id) ? "'FILL' 1" : "'FILL' 0",
                 }}

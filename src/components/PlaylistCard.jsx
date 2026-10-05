@@ -79,11 +79,11 @@ export default function PlaylistCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`w-[110px] sm:w-[125px] md:w-[135px] lg:w-[145px] flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1 ${className}`}
+      className={`w-[135px] sm:w-[150px] md:w-[165px] lg:w-[175px] flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1 ${className}`}
     >
-      {/* Square Artwork (Subtle 8px edge blend, No Column Border Box) */}
+      {/* Square Artwork (Sharp 3px edge blend, No Column Border Box) */}
       <div
-        className={`relative aspect-square w-full rounded-[8px] overflow-hidden bg-[#161922] shadow-md transition-all duration-200 ${
+        className={`relative aspect-square w-full rounded-[3px] overflow-hidden bg-[#161922] shadow-md transition-all duration-200 ${
           isPlaylistPlaying
             ? "ring-2 ring-primary shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.35)]"
             : "ring-1 ring-white/10 group-hover:ring-white/25"
@@ -94,7 +94,7 @@ export default function PlaylistCard({
             tracks={tracks}
             fallbackUrl={coverUrl}
             alt={playlist.title}
-            className="w-full h-full object-cover rounded-[8px] group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover rounded-[3px] group-hover:scale-105 transition-transform duration-500"
           />
         ) : (
           <img
@@ -106,7 +106,7 @@ export default function PlaylistCard({
               e.currentTarget.src =
                 "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
             }}
-            className="w-full h-full object-cover rounded-[8px] group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover rounded-[3px] group-hover:scale-105 transition-transform duration-500"
           />
         )}
 

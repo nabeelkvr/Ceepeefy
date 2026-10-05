@@ -21,6 +21,7 @@ import {
   isSupabaseConfigured,
 } from "../../../services/supabaseClient";
 import { getAccountUserId } from "../../../config/authConfig";
+import PlaylistSkeleton from "../../../components/PlaylistSkeleton";
 
 export default function PlaylistPage() {
   const params = useParams();
@@ -108,6 +109,10 @@ export default function PlaylistPage() {
         .finally(() => setIsLoadingRemote(false));
     }
   }, [playlistId, localMatch]);
+
+  if (isLoadingRemote && !localMatch && !remotePlaylist) {
+    return <PlaylistSkeleton />;
+  }
 
   const playlist = localMatch || remotePlaylist || NOCTURNE_PLAYLISTS[0];
 

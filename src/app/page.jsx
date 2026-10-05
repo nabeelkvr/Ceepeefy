@@ -21,6 +21,12 @@ import PlaylistCover from "../components/PlaylistCover";
 import SongCard from "../components/SongCard";
 import PlaylistCard from "../components/PlaylistCard";
 import { formatPlaylistDuration } from "../utils/playlistUtils";
+import { fetchSpotifyDiscovery } from "../services/spotifyClientService";
+import SpotifyArtistCard from "../components/SpotifyArtistCard";
+import SpotifyPlaylistCard from "../components/SpotifyPlaylistCard";
+import SpotifyBadge, { SpotifyIcon } from "../components/SpotifyBadge";
+import RecommendationCard from "../components/RecommendationCard";
+import { getPersonalizedRecommendations } from "../utils/personalizedRecommendations";
 import {
   SPOTIFY_STYLE_PLAYLISTS,
   MALAYALAM_HITS,
@@ -128,6 +134,60 @@ export default function HomePage() {
   const recentsContainerRef = useRef(null);
   const selfMixesSectionRef = useRef(null);
   const playlistsSectionRef = useRef(null);
+  const spotifyPlaylistsRef = useRef(null);
+  const spotifyArtistsRef = useRef(null);
+
+  // Spotify Discovery state (populated from Spotify Web API discovery endpoint)
+  const [spotifyDiscovery, setSpotifyDiscovery] = useState({ artists: [], playlists: [] });
+  const [isSpotifyLoading, setIsSpotifyLoading] = useState(false);
+
+  // Dynamic Personalized Recommendations (Ranked by user listening history & behavior)
+  const [recommendationSeed, setRecommendationSeed] = useState(0);
+
+  const recommendedTracks = useMemo(() => {
+    return getPersonalizedRecommendations(recentlyPlayedTracks, {
+      limit: 12,
+      refreshSeed: recommendationSeed,
+    });
+  }, [recentlyPlayedTracks, recommendationSeed]);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsSpotifyLoading(true);
+    fetchSpotifyDiscovery()
+      .then((data) => {
+        if (isMounted && data) {
+          setSpotifyDiscovery({
+            artists: Array.isArray(data.artists) ? data.artists : [],
+            playlists: Array.isArray(data.playlists) ? data.playlists : [],
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn("[Spotify Home] Discovery error:", err);
+      })
+      .finally(() => {
+        if (isMounted) setIsSpotifyLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const scrollSpotifyPlaylists = (direction) => {
+    if (spotifyPlaylistsRef.current) {
+      const scrollAmount = direction === "left" ? -400 : 400;
+      spotifyPlaylistsRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    }
+  };
+
+  const scrollSpotifyArtists = (direction) => {
+    if (spotifyArtistsRef.current) {
+      const scrollAmount = direction === "left" ? -350 : 350;
+      spotifyArtistsRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    }
+  };
 
   // 4 big cards in 2 rows, randomly chosen from curated featured collection
   const [featuredCards, setFeaturedCards] = useState(() => FEATURED_PLAYLIST_COLLECTION.slice(0, 4));
@@ -496,26 +556,49 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Section 3: Made for You - Single-row header */}
+      {/* Section 3: Redesigned Recommended for You (Horizontal Compact Cards: 3/row Desktop, 2/row Mobile) */}
       <section className="flex flex-col gap-3.5 md:gap-4.5">
         <div className="flex items-center justify-between">
           <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
             Recommended for You
           </h2>
-          <Link
-            href="/search"
-            className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
-          >
-            <span>Explore More</span>
-            <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
-              arrow_forward
-            </span>
-          </Link>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setRecommendationSeed((prev) => prev + 1)}
+              className="flex items-center gap-1 text-xs font-semibold text-outline hover:text-white hover:border-white/20 transition-all px-2.5 py-1 rounded-lg bg-surface-container/60 hover:bg-surface-container border border-white/5 cursor-pointer active:scale-95"
+              title="Refresh recommendations"
+            >
+              <span className="material-symbols-outlined text-[15px]">refresh</span>
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+            <Link
+              href="/search"
+              className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
+            >
+              <span>Explore More</span>
+              <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+                arrow_forward
+              </span>
+            </Link>
+          </div>
         </div>
 
-        <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
-          {MADE_FOR_YOU_TRACKS.map((track) => (
-            <SongCard key={track.id} track={track} trackList={MADE_FOR_YOU_TRACKS} />
+        {/* Responsive Grid: EXACTLY 3 cards per row on Desktop, 2 on Tablet, EXACTLY 2 on Mobile */}
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 lg:gap-3.5">
+          {recommendedTracks.map((track) => (
+            <RecommendationCard
+              key={track.id}
+              track={track}
+              trackList={recommendedTracks}
+              onPlay={() => {
+                if (currentTrack?.id === track.id) {
+                  togglePlay();
+                } else {
+                  playTrack(track, recommendedTracks);
+                }
+              }}
+            />
           ))}
         </div>
       </section>
@@ -607,6 +690,116 @@ export default function HomePage() {
           })}
         </div>
       </section>
+
+      {/* Spotify Discovery: Spotify Playlists */}
+      {spotifyDiscovery.playlists.length > 0 && (
+        <section className="flex flex-col gap-3.5 md:gap-4.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <SpotifyIcon className="w-5 h-5 text-[#1DB954]" />
+              <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+                Spotify Playlists
+              </h2>
+              <SpotifyBadge label="Spotify" size="xs" />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => scrollSpotifyPlaylists("left")}
+                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 flex items-center justify-center text-outline hover:text-white transition-colors cursor-pointer"
+                  title="Scroll left"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollSpotifyPlaylists("right")}
+                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 flex items-center justify-center text-outline hover:text-white transition-colors cursor-pointer"
+                  title="Scroll right"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                </button>
+              </div>
+
+              <Link
+                href="/search"
+                className="flex items-center gap-1 text-on-surface-variant hover:text-[#1ed760] transition-colors text-xs font-semibold uppercase tracking-wider group"
+              >
+                <span>Search Spotify</span>
+                <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
+          </div>
+
+          <div
+            ref={spotifyPlaylistsRef}
+            className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4 pb-2 pt-1 -mx-2 px-2"
+          >
+            {spotifyDiscovery.playlists.map((pl) => (
+              <SpotifyPlaylistCard key={pl.id} playlist={pl} isCarousel={true} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Spotify Discovery: Spotify Artists */}
+      {spotifyDiscovery.artists.length > 0 && (
+        <section className="flex flex-col gap-3.5 md:gap-4.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <SpotifyIcon className="w-5 h-5 text-[#1DB954]" />
+              <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+                Spotify Artists
+              </h2>
+              <SpotifyBadge label="Spotify" size="xs" />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => scrollSpotifyArtists("left")}
+                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 flex items-center justify-center text-outline hover:text-white transition-colors cursor-pointer"
+                  title="Scroll left"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollSpotifyArtists("right")}
+                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 flex items-center justify-center text-outline hover:text-white transition-colors cursor-pointer"
+                  title="Scroll right"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                </button>
+              </div>
+
+              <Link
+                href="/search"
+                className="flex items-center gap-1 text-on-surface-variant hover:text-[#1ed760] transition-colors text-xs font-semibold uppercase tracking-wider group"
+              >
+                <span>Search Spotify</span>
+                <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
+          </div>
+
+          <div
+            ref={spotifyArtistsRef}
+            className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4 pb-2 pt-1 -mx-2 px-2"
+          >
+            {spotifyDiscovery.artists.map((artist) => (
+              <SpotifyArtistCard key={artist.id} artist={artist} isCarousel={true} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Section 5: Malayalam Hits */}
       <section className="flex flex-col gap-3.5 md:gap-4.5">

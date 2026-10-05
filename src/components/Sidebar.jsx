@@ -347,20 +347,20 @@ export default function Sidebar({ className = "", onClose }) {
                       key={pl.id}
                       href={`/playlist/${pl.id}`}
                       onClick={handleNavClick}
-                      className="flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-surface-container/70 transition-colors group cursor-pointer relative"
+                      className="flex items-center gap-3 px-2 py-1.5 rounded-md hover:bg-surface-container/70 transition-colors group cursor-pointer relative"
                     >
-                      <div className="w-9 h-9 rounded-lg bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden border border-primary/30 group-hover:border-primary transition-colors shadow-sm relative">
+                      <div className="w-9 h-9 rounded-[4px] bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden border border-primary/20 group-hover:border-primary/50 transition-colors shadow-sm relative">
                         <img
                           alt={pl.title}
                           src={pl.coverUrl}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          className="w-full h-full object-cover rounded-[4px] group-hover:scale-105 transition-transform duration-300"
                         />
                         {isPinned ? (
-                          <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-primary rounded-bl flex items-center justify-center shadow-sm">
+                          <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-primary rounded-bl-[2px] flex items-center justify-center shadow-sm">
                             <span className="material-symbols-outlined text-[10px] text-surface-container-lowest rotate-45 font-bold">push_pin</span>
                           </div>
                         ) : (
-                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-tl bg-primary" />
+                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-tl-[2px] bg-primary" />
                         )}
                       </div>
                       <div className="flex flex-col min-w-0 flex-1">

@@ -19,6 +19,10 @@ import DownloadButton from "../../components/DownloadButton";
 import ArtistAvatar from "../../components/ArtistAvatar";
 import SongOptionsMenu from "../../components/SongOptionsMenu";
 import { formatPlaylistDuration } from "../../utils/playlistUtils";
+import { searchSpotify } from "../../services/spotifyClientService";
+import SpotifyArtistCard from "../../components/SpotifyArtistCard";
+import SpotifyPlaylistCard from "../../components/SpotifyPlaylistCard";
+import SpotifyBadge, { SpotifyIcon } from "../../components/SpotifyBadge";
 
 function SearchContent() {
   const {
@@ -44,6 +48,8 @@ function SearchContent() {
   const searchInputRef = useRef(null);
   const artistsCarouselRef = useRef(null);
   const albumsCarouselRef = useRef(null);
+  const spotifyArtistsCarouselRef = useRef(null);
+  const spotifyPlaylistsCarouselRef = useRef(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -62,6 +68,11 @@ function SearchContent() {
   const [rawArtists, setRawArtists] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [artistTracks, setArtistTracks] = useState([]);
+
+  // Spotify Discovery State
+  const [spotifyArtists, setSpotifyArtists] = useState([]);
+  const [spotifyPlaylists, setSpotifyPlaylists] = useState([]);
+  const [isSpotifyLoading, setIsSpotifyLoading] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
@@ -156,17 +167,23 @@ function SearchContent() {
         trackCount: pl.tracks?.length || pl.songsCount || 0,
       }));
 
-    const matchingRemote = (playlists || []).map((pl) => ({
+    // Spotify Playlists (strictly from Spotify Web API)
+    const spotifyRemote = (spotifyPlaylists || []).map((pl) => ({
       id: String(pl.id),
-      title: pl.title,
-      subtitle: pl.subtitle || pl.description || "Curated Playlist",
-      description: pl.description || pl.subtitle || "Curated Playlist",
+      title: pl.title || pl.name,
+      subtitle: pl.description || "Spotify Playlist",
+      description: pl.description || "",
       coverUrl: pl.coverUrl || pl.image || pl.thumbnail,
-      curator: pl.curator || "JioSaavn Editor",
-      trackCount: pl.songCount || pl.trackCount || null,
+      curator: pl.curator || "Spotify",
+      trackCount: pl.trackCount || null,
+      spotifyUrl: pl.spotifyUrl,
       isCustom: false,
-      tracks: pl.tracks || [],
+      isSpotify: true,
+      source: "spotify",
+      tracks: [],
     }));
+
+    const remoteToUse = spotifyRemote;
 
     const seenIds = new Set();
     const result = [];
@@ -179,8 +196,8 @@ function SearchContent() {
         result.push(pl);
       }
     }
-    // Then remote public playlists
-    for (const pl of matchingRemote) {
+    // Then remote Spotify playlists
+    for (const pl of remoteToUse) {
       const pid = String(pl.id);
       if (pid && !seenIds.has(pid)) {
         seenIds.add(pid);
@@ -189,7 +206,7 @@ function SearchContent() {
     }
 
     return result;
-  }, [debouncedQuery, customPlaylists, selfMixes, playlists]);
+  }, [debouncedQuery, customPlaylists, spotifyPlaylists]);
 
   // Combined user playlists for Browse Catalog featured section (default playlists removed)
   const allPlaylists = useMemo(
@@ -326,6 +343,9 @@ function SearchContent() {
       setRawArtists([]);
       setPlaylists([]);
       setArtistTracks([]);
+      setSpotifyArtists([]);
+      setSpotifyPlaylists([]);
+      setIsSpotifyLoading(false);
       setIsLoading(false);
       setSearchError(null);
       return;
@@ -434,7 +454,30 @@ function SearchContent() {
       }
     };
 
+    // 1. Existing JioSaavn search (unchanged)
     fetchResults();
+
+    // 2. Independent Spotify search (parallel, failure-isolated)
+    setIsSpotifyLoading(true);
+    searchSpotify(trimmed)
+      .then((spData) => {
+        if (!isCancelled) {
+          setSpotifyArtists(Array.isArray(spData?.artists) ? spData.artists : []);
+          setSpotifyPlaylists(Array.isArray(spData?.playlists) ? spData.playlists : []);
+        }
+      })
+      .catch((err) => {
+        console.warn("Spotify search error:", err);
+        if (!isCancelled) {
+          setSpotifyArtists([]);
+          setSpotifyPlaylists([]);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsSpotifyLoading(false);
+        }
+      });
 
     return () => {
       isCancelled = true;
@@ -651,6 +694,20 @@ function SearchContent() {
     if (albumsCarouselRef.current) {
       const amount = direction === "left" ? -350 : 350;
       albumsCarouselRef.current.scrollBy({ left: amount, behavior: "smooth" });
+    }
+  };
+
+  const scrollSpotifyArtistsContainer = (direction) => {
+    if (spotifyArtistsCarouselRef.current) {
+      const amount = direction === "left" ? -350 : 350;
+      spotifyArtistsCarouselRef.current.scrollBy({ left: amount, behavior: "smooth" });
+    }
+  };
+
+  const scrollSpotifyPlaylistsContainer = (direction) => {
+    if (spotifyPlaylistsCarouselRef.current) {
+      const amount = direction === "left" ? -350 : 350;
+      spotifyPlaylistsCarouselRef.current.scrollBy({ left: amount, behavior: "smooth" });
     }
   };
 
@@ -1744,54 +1801,70 @@ function SearchContent() {
                           </div>
                         )}
 
-                        {/* 3. Artists (Image 4 small cards in 2-col grid) */}
-                        {allArtists.length > 0 && (
+                        {/* 3. Artists (Spotify) */}
+                        {(spotifyArtists.length > 0 || allArtists.length > 0) && (
                           <div className="flex flex-col gap-2.5">
                             <div className="flex items-center justify-between pb-0.5">
                               <div className="flex items-center gap-1.5">
-                                <span className="material-symbols-outlined text-primary text-[18px]">mic</span>
+                                {spotifyArtists.length > 0 ? (
+                                  <SpotifyIcon className="w-4 h-4 text-[#1DB954]" />
+                                ) : (
+                                  <span className="material-symbols-outlined text-primary text-[18px]">mic</span>
+                                )}
                                 <h2 className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
-                                  Artists
+                                  {spotifyArtists.length > 0 ? "Spotify Artists" : "Artists"}
                                 </h2>
-                                <span className="text-[11px] font-mono text-outline">({allArtists.length})</span>
+                                <span className="text-[11px] font-mono text-outline">
+                                  ({spotifyArtists.length > 0 ? spotifyArtists.length : allArtists.length})
+                                </span>
+                                {spotifyArtists.length > 0 && (
+                                  <SpotifyBadge label="Spotify" size="xs" />
+                                )}
                               </div>
                               <button
                                 type="button"
                                 onClick={() => setActiveFilter("Artists")}
-                                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                                className="text-xs font-semibold text-[#1ed760] hover:underline flex items-center gap-1 cursor-pointer"
                               >
                                 <span>See all</span>
                                 <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                               </button>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                              {allArtists.slice(0, 6).map((artist) => renderSmallArtistCard(artist))}
+                              {spotifyArtists.length > 0
+                                ? spotifyArtists.slice(0, 6).map((artist) => (
+                                    <SpotifyArtistCard key={artist.id} artist={artist} />
+                                  ))
+                                : allArtists.slice(0, 6).map((artist) => renderSmallArtistCard(artist))}
                             </div>
                           </div>
                         )}
 
-                        {/* 4. Playlists (Image 4 small cards in 2-col grid) */}
-                        {mergedPlaylists.length > 0 && (
+                        {/* 4. Playlists (Spotify) */}
+                        {spotifyPlaylists.length > 0 && (
                           <div className="flex flex-col gap-2.5">
                             <div className="flex items-center justify-between pb-0.5">
                               <div className="flex items-center gap-1.5">
-                                <span className="material-symbols-outlined text-primary text-[18px]">queue_music</span>
+                                <SpotifyIcon className="w-4 h-4 text-[#1DB954]" />
                                 <h2 className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
-                                  Playlists
+                                  Spotify Playlists
                                 </h2>
-                                <span className="text-[11px] font-mono text-outline">({mergedPlaylists.length})</span>
+                                <span className="text-[11px] font-mono text-outline">({spotifyPlaylists.length})</span>
+                                <SpotifyBadge label="Spotify" size="xs" />
                               </div>
                               <button
                                 type="button"
                                 onClick={() => setActiveFilter("Playlists")}
-                                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                                className="text-xs font-semibold text-[#1ed760] hover:underline flex items-center gap-1 cursor-pointer"
                               >
                                 <span>See all</span>
                                 <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                               </button>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                              {mergedPlaylists.slice(0, 6).map((pl) => renderSmallPlaylistCard(pl))}
+                              {spotifyPlaylists.slice(0, 6).map((pl) => (
+                                <SpotifyPlaylistCard key={pl.id} playlist={pl} />
+                              ))}
                             </div>
                           </div>
                         )}
@@ -1826,8 +1899,18 @@ function SearchContent() {
                             </div>
                           )}
 
-                            {/* 3. Big Card: Spot Artists (only if not already rendered as Top Result) */}
-                            {spotlightArtist && (!topMatch || topMatch.type !== "artist" || (String(topMatch.id || "") !== String(spotlightArtist.id || "") && (topMatch.name || "").toLowerCase() !== (spotlightArtist.name || "").toLowerCase())) && (
+                            {/* 3. Spot Artist (Spotify preferred) */}
+                            {spotifyArtists.length > 0 ? (
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center justify-between px-1">
+                                  <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+                                    SPOTIFY ARTIST
+                                  </span>
+                                  <SpotifyBadge label="Spotify" size="xs" />
+                                </div>
+                                <SpotifyArtistCard artist={spotifyArtists[0]} />
+                              </div>
+                            ) : spotlightArtist && (!topMatch || topMatch.type !== "artist" || (String(topMatch.id || "") !== String(spotlightArtist.id || "") && (topMatch.name || "").toLowerCase() !== (spotlightArtist.name || "").toLowerCase())) ? (
                               <div className="flex flex-col gap-2">
                                 <div className="flex items-center justify-between px-1">
                                   <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
@@ -1840,10 +1923,31 @@ function SearchContent() {
                                 </div>
                                 {renderArtistCard(spotlightArtist, false)}
                               </div>
-                            )}
+                            ) : null}
 
-                            {/* 4. Other Artist in Small Cards (Only 2 cards side-by-side) */}
-                            {otherArtists.length > 0 && (
+                            {/* 4. Other Artist in Small Cards (Spotify secondary artists or fallback) */}
+                            {spotifyArtists.length > 1 ? (
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center justify-between px-1">
+                                  <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+                                    MORE ARTISTS
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveFilter("Artists")}
+                                    className="text-[11px] text-[#1ed760] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                                  >
+                                    <span>See all</span>
+                                    <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                                  {spotifyArtists.slice(1, 3).map((art) => (
+                                    <SpotifyArtistCard key={art.id} artist={art} />
+                                  ))}
+                                </div>
+                              </div>
+                            ) : otherArtists.length > 0 && spotifyArtists.length === 0 ? (
                               <div className="flex flex-col gap-2">
                                 <div className="flex items-center justify-between px-1">
                                   <span className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
@@ -1862,7 +1966,7 @@ function SearchContent() {
                                   {otherArtists.slice(0, 2).map((art) => renderSmallArtistCard(art))}
                                 </div>
                               </div>
-                            )}
+                            ) : null}
 
                             {/* 5. Playlists in Small Cards (4 small cards in 2x2 grid) */}
                             {leftPlaylists.length > 0 && (
@@ -1874,14 +1978,20 @@ function SearchContent() {
                                   <button
                                     type="button"
                                     onClick={() => setActiveFilter("Playlists")}
-                                    className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                                    className="text-[11px] text-[#1ed760] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
                                   >
                                     <span>See all</span>
                                     <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
                                   </button>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
-                                  {leftPlaylists.slice(0, 4).map((pl) => renderSmallPlaylistCard(pl))}
+                                  {leftPlaylists.slice(0, 4).map((pl) => (
+                                    pl.isSpotify || pl.source === "spotify" ? (
+                                      <SpotifyPlaylistCard key={pl.id} playlist={pl} />
+                                    ) : (
+                                      renderSmallPlaylistCard(pl)
+                                    )
+                                  ))}
                                 </div>
                               </div>
                             )}
@@ -1917,40 +2027,51 @@ function SearchContent() {
                         </div>
                       </div>
 
-                      {/* Horizontal Carousel: Matching Artists (Desktop only) */}
-                      {allArtists.length > 0 && (
+                      {/* Horizontal Carousel: Spotify Artists (Desktop only) */}
+                      {(spotifyArtists.length > 0 || allArtists.length > 0) && (
                         <div className="hidden lg:flex flex-col gap-3 pt-2">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-primary text-[20px]">mic</span>
+                              {spotifyArtists.length > 0 ? (
+                                <SpotifyIcon className="w-5 h-5 text-[#1DB954]" />
+                              ) : (
+                                <span className="material-symbols-outlined text-primary text-[20px]">mic</span>
+                              )}
                               <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                                Artists
+                                {spotifyArtists.length > 0 ? "Spotify Artists" : "Artists"}
                               </h2>
-                              <span className="text-xs font-mono text-outline">({allArtists.length})</span>
+                              <span className="text-xs font-mono text-outline">
+                                ({spotifyArtists.length > 0 ? spotifyArtists.length : allArtists.length})
+                              </span>
+                              {spotifyArtists.length > 0 && (
+                                <SpotifyBadge label="Spotify" size="xs" />
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
-                              {allArtists.length > 5 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveFilter("Artists")}
-                                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                                >
-                                  <span>See all</span>
-                                  <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => setActiveFilter("Artists")}
+                                className="text-xs font-semibold text-[#1ed760] hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>See all</span>
+                                <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                              </button>
                             </div>
                           </div>
                           <div
-                            ref={artistsCarouselRef}
+                            ref={spotifyArtistsCarouselRef}
                             className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth pb-2 pt-1"
                           >
-                            {allArtists.map((artist) => renderArtistCard(artist, true))}
+                            {spotifyArtists.length > 0
+                              ? spotifyArtists.map((artist) => (
+                                  <SpotifyArtistCard key={artist.id} artist={artist} isCarousel={true} />
+                                ))
+                              : allArtists.map((artist) => renderArtistCard(artist, true))}
                           </div>
                         </div>
                       )}
 
-                      {/* Horizontal Carousel: Matching Albums & Soundtracks (Desktop only) */}
+                      {/* Horizontal Carousel: Matching Albums & Soundtracks (JioSaavn) */}
                       {allAlbums.length > 0 && (
                         <div className="hidden lg:flex flex-col gap-3 pt-2">
                           <div className="flex items-center justify-between">
@@ -1979,6 +2100,42 @@ function SearchContent() {
                             className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth pb-2 pt-1"
                           >
                             {allAlbums.map((album) => renderAlbumCard(album, true))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Horizontal Carousel: Spotify Playlists (Desktop only) */}
+                      {spotifyPlaylists.length > 0 && (
+                        <div className="hidden lg:flex flex-col gap-3 pt-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <SpotifyIcon className="w-5 h-5 text-[#1DB954]" />
+                              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                                Spotify Playlists
+                              </h2>
+                              <span className="text-xs font-mono text-outline">({spotifyPlaylists.length})</span>
+                              <SpotifyBadge label="Spotify" size="xs" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {spotifyPlaylists.length > 4 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveFilter("Playlists")}
+                                  className="text-xs font-semibold text-[#1ed760] hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>See all</span>
+                                  <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div
+                            ref={spotifyPlaylistsCarouselRef}
+                            className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth pb-2 pt-1"
+                          >
+                            {spotifyPlaylists.map((pl) => (
+                              <SpotifyPlaylistCard key={pl.id} playlist={pl} isCarousel={true} />
+                            ))}
                           </div>
                         </div>
                       )}
@@ -2059,19 +2216,27 @@ function SearchContent() {
                 </div>
               )}
 
-              {/* 4. 'Artists' Layout: Responsive grid of matching artist profile cards */}
+              {/* 4. 'Artists' Layout: Responsive grid of matching artist profile cards (Spotify preferred) */}
               {activeFilter === "Artists" && (
                 <div className="w-full flex flex-col gap-4">
                   <div className="flex items-center justify-between pb-0.5">
-                    <h2 className="text-xs font-bold uppercase tracking-widest text-outline">
-                      ARTIST PROFILES
-                    </h2>
-                    <span className="text-xs font-mono font-bold text-primary uppercase tracking-wider">
-                      {allArtists.length} FOUND
+                    <div className="flex items-center gap-2">
+                      {spotifyArtists.length > 0 ? (
+                        <SpotifyIcon className="w-4 h-4 text-[#1DB954]" />
+                      ) : (
+                        <span className="material-symbols-outlined text-primary text-[18px]">mic</span>
+                      )}
+                      <h2 className="text-xs font-bold uppercase tracking-widest text-outline">
+                        {spotifyArtists.length > 0 ? "SPOTIFY ARTIST PROFILES" : "ARTIST PROFILES"}
+                      </h2>
+                      {spotifyArtists.length > 0 && <SpotifyBadge label="Spotify" size="xs" />}
+                    </div>
+                    <span className="text-xs font-mono font-bold text-[#1ed760] uppercase tracking-wider">
+                      {(spotifyArtists.length > 0 ? spotifyArtists.length : allArtists.length)} FOUND
                     </span>
                   </div>
 
-                  {allArtists.length === 0 ? (
+                  {spotifyArtists.length === 0 && allArtists.length === 0 ? (
                     <div className="py-16 text-center flex flex-col items-center gap-3">
                       <div className="w-14 h-14 rounded-full bg-surface-container/80 border border-white/10 flex items-center justify-center text-outline mb-1">
                         <span className="material-symbols-outlined text-[28px]">mic</span>
@@ -2083,9 +2248,25 @@ function SearchContent() {
                           : "Type in the search bar above to search for artists."}
                       </p>
                     </div>
+                  ) : spotifyArtists.length > 0 ? (
+                    <>
+                      {/* Mobile Responsive: Small Cards in 2-column grid */}
+                      <div className="grid grid-cols-2 gap-3 sm:hidden">
+                        {spotifyArtists.map((artist) => (
+                          <SpotifyArtistCard key={artist.id} artist={artist} />
+                        ))}
+                      </div>
+
+                      {/* Desktop / Tablet */}
+                      <div className="hidden sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 sm:gap-6">
+                        {spotifyArtists.map((artist) => (
+                          <SpotifyArtistCard key={artist.id} artist={artist} />
+                        ))}
+                      </div>
+                    </>
                   ) : (
                     <>
-                      {/* Mobile Responsive: Small Cards in 2-column grid like Image 4 */}
+                      {/* Mobile Responsive: Small Cards in 2-column grid */}
                       <div className="grid grid-cols-2 gap-3 sm:hidden">
                         {allArtists.map((artist) => renderSmallArtistCard(artist))}
                       </div>
@@ -2099,19 +2280,23 @@ function SearchContent() {
                 </div>
               )}
 
-              {/* 5. 'Playlists' Layout: Merged local custom playlists + JioSaavn public playlists */}
+              {/* 5. 'Playlists' Layout: Strictly Spotify public playlists */}
               {activeFilter === "Playlists" && (
                 <div className="w-full flex flex-col gap-4">
                   <div className="flex items-center justify-between pb-0.5">
-                    <h2 className="text-xs font-bold uppercase tracking-widest text-outline">
-                      PLAYLISTS
-                    </h2>
-                    <span className="text-xs font-mono font-bold text-primary uppercase tracking-wider">
-                      {mergedPlaylists.length} FOUND
+                    <div className="flex items-center gap-2">
+                      <SpotifyIcon className="w-4 h-4 text-[#1DB954]" />
+                      <h2 className="text-xs font-bold uppercase tracking-widest text-outline">
+                        PLAYLISTS
+                      </h2>
+                      <SpotifyBadge label="Spotify" size="xs" />
+                    </div>
+                    <span className="text-xs font-mono font-bold text-[#1ed760] uppercase tracking-wider">
+                      {spotifyPlaylists.length} FOUND
                     </span>
                   </div>
 
-                  {mergedPlaylists.length === 0 ? (
+                  {spotifyPlaylists.length === 0 ? (
                     <div className="py-16 text-center flex flex-col items-center gap-3">
                       <div className="w-14 h-14 rounded-full bg-surface-container/80 border border-white/10 flex items-center justify-center text-outline mb-1">
                         <span className="material-symbols-outlined text-[28px]">queue_music</span>
@@ -2119,20 +2304,24 @@ function SearchContent() {
                       <h3 className="text-base font-semibold text-white">No playlists found</h3>
                       <p className="text-xs text-outline max-w-md">
                         {hasQuery
-                          ? `No public or custom playlists match "${debouncedQuery}".`
-                          : "You have no custom playlists yet. Create one or search for public playlists."}
+                          ? `No Spotify playlists match "${debouncedQuery}".`
+                          : "Type in the search bar above to discover Spotify playlists."}
                       </p>
                     </div>
                   ) : (
                     <>
-                      {/* Mobile Responsive: Small Cards in 2-column grid like Image 4 */}
+                      {/* Mobile Responsive: Small Cards in 2-column grid */}
                       <div className="grid grid-cols-2 gap-3 sm:hidden">
-                        {mergedPlaylists.map((pl) => renderSmallPlaylistCard(pl))}
+                        {spotifyPlaylists.map((pl) => (
+                          <SpotifyPlaylistCard key={pl.id} playlist={pl} />
+                        ))}
                       </div>
 
                       {/* Desktop / Tablet */}
                       <div className="hidden sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 sm:gap-6">
-                        {mergedPlaylists.map((pl) => renderPlaylistCard(pl, false))}
+                        {spotifyPlaylists.map((pl) => (
+                          <SpotifyPlaylistCard key={pl.id} playlist={pl} />
+                        ))}
                       </div>
                     </>
                   )}

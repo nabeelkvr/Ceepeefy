@@ -74,9 +74,9 @@ export default function SongCard({
       onClick={handleCardClick}
       className={`w-[140px] sm:w-[155px] md:w-[170px] lg:w-[180px] flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1 ${className}`}
     >
-      {/* Rectangular Portrait Artwork (Aspect 4/5, Subtle 8px edge blend) */}
+      {/* Rectangular Portrait Artwork (Aspect 4/5, Sharp 3px edge blend) */}
       <div
-        className={`relative aspect-[4/5] w-full rounded-[8px] overflow-hidden bg-[#161922] shadow-lg transition-all duration-200 ${
+        className={`relative aspect-[4/5] w-full rounded-[3px] overflow-hidden bg-[#161922] shadow-lg transition-all duration-200 ${
           isCurrent
             ? "ring-2 ring-primary shadow-[0_0_18px_rgba(var(--color-primary-rgb),0.4)]"
             : "ring-1 ring-white/10 group-hover:ring-white/30"
@@ -91,7 +91,7 @@ export default function SongCard({
             e.currentTarget.src =
               "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
           }}
-          className="w-full h-full object-cover rounded-[8px] group-hover:scale-105 transition-transform duration-500"
+          className="w-full h-full object-cover rounded-[3px] group-hover:scale-105 transition-transform duration-500"
         />
 
         {/* Hover Circular Play Button Overlay */}
@@ -121,7 +121,7 @@ export default function SongCard({
 
         {/* Playing Animated Equalizer Bar in top-left */}
         {isCurrentPlaying && (
-          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-sm bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-0.5">
+          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-[2px] bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-0.5">
             <span className="w-0.5 h-2.5 bg-primary rounded-full animate-pulse" />
             <span className="w-0.5 h-3.5 bg-primary rounded-full animate-pulse delay-75" />
             <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse delay-150" />
@@ -129,11 +129,11 @@ export default function SongCard({
         )}
       </div>
 
-      {/* Structure matching Image 1:
-          Row 1: ARTIST NAME (uppercase / muted) + 3 dots menu on the right
+      {/* Structure matching Image 1 & 4:
+          Row 1: ARTIST NAME (uppercase / muted) + 3 dots menu on the right edge
           Row 2: Song Title (bold white) */}
-      <div className="flex flex-col mt-2 min-w-0">
-        {/* Row 1: Artist + 3 dots */}
+      <div className="flex flex-col mt-1.5 min-w-0">
+        {/* Row 1: Artist + 3 dots right beneath the artwork border */}
         <div className="flex items-center justify-between gap-1 min-w-0">
           <p
             className="text-[10px] sm:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate flex-1"
@@ -145,8 +145,8 @@ export default function SongCard({
             <SongOptionsMenu
               track={track}
               playlistId={playlistId}
-              iconClassName="text-[17px]"
-              buttonClassName="p-0.5 text-neutral-400 hover:text-white opacity-80 group-hover:opacity-100 transition-opacity"
+              iconClassName="text-[16px] sm:text-[17px]"
+              buttonClassName="p-0.5 text-neutral-400 hover:text-white opacity-80 group-hover:opacity-100 transition-opacity cursor-pointer"
             />
           </div>
         </div>

@@ -1,17 +1,15 @@
 /**
- * Spotify-Inspired 6-Tier Intelligent Recommendation Engine
+ * Ceepify — Intelligent Automatic Queue Algorithm & Recommendation Engine
  *
- * Implements deterministic priority hierarchy based on candidate song metadata
- * relative to the currently playing reference (seed) song.
+ * Implements the deterministic Priority Hierarchy & Scoring System:
+ * 1. SAME LANGUAGE — HIGHEST PRIORITY (Weight: 35)
+ * 2. SAME SONG TYPE / MOOD — VERY HIGH PRIORITY (Weight: 30)
+ * 3. TRENDING / POPULARITY — HIGH PRIORITY (Weight: 20)
+ * 4. ARTIST DIVERSITY & PUZZLE FACTOR — LOW PRIORITY (Weight: 10)
+ * 5. CONTROLLED RANDOMNESS & DISCOVERY FACTOR (Weight: 5)
  *
- * Exact Priority Hierarchy:
- * Priority 1: Same Movie/Album + Same Artist + Same Song Type (matches all 3)
- * Priority 2: Same Artist + Same Song Type (matches both)
- * Priority 3: Same Movie/Album + Same Song Type (matches both)
- * Priority 4: Same Artist (matches artist only)
- * Priority 5: Same Song Type (matches genre, mood, or musical style only)
- * Priority 6: Same Movie/Album (matches movie or album only)
- * Excluded: Does not match any of the six tiers.
+ * Scoring Formula:
+ * Queue Score = (Language Match * 35) + (Mood Match * 30) + (Popularity * 20) + (Artist Diversity * 10) + (Discovery Factor * 5)
  */
 
 /**
@@ -92,7 +90,6 @@ export function extractArtists(track) {
     if (Array.isArray(artistMap.featured_artists)) {
       artistMap.featured_artists.forEach((a) => addName(a.name));
     }
-    // Object map format: { "Artist Name": "artistId" }
     for (const [key, val] of Object.entries(artistMap)) {
       if (typeof key === "string" && isNaN(Number(key))) {
         addName(key);
@@ -116,7 +113,6 @@ export function isArtistMatch(trackA, trackB) {
   for (const a of artistsA) {
     for (const b of artistsB) {
       if (a === b) return true;
-      // Allow prefix/substring matching for multi-word full names (e.g. "shreya ghoshal" & "shreya")
       if (a.length > 5 && b.length > 5) {
         if (a.includes(b) || b.includes(a)) return true;
       }
@@ -159,7 +155,6 @@ export function extractMovieName(track) {
     return cleanStr(track.more_info.movie_name);
   }
 
-  // Extract from title with patterns like: (From "Movie"), [From "Movie"], - From Movie
   const title = track.title || track.song || "";
   const match =
     title.match(/\(\s*from\s+["']?([^"')\]]+)["']?\s*\)/i) ||
@@ -172,7 +167,6 @@ export function extractMovieName(track) {
     }
   }
 
-  // If explicitly flagged as a film/movie track
   const isMovie = Boolean(
     track.isMovie ||
     track.isMovieTrack ||
@@ -192,8 +186,7 @@ export function extractMovieName(track) {
 }
 
 /**
- * Checks whether candidate originates from the EXACT SAME MOVIE as seedTrack.
- * Priority 1: Same Movie
+ * Checks whether candidate originates from the exact same movie as seedTrack.
  */
 export function isMovieMatch(trackA, trackB) {
   if (!trackA || !trackB) return false;
@@ -207,7 +200,6 @@ export function isMovieMatch(trackA, trackB) {
     }
   }
 
-  // If one or both are marked as movie tracks and their album/soundtrack is identical
   const isMovieA = Boolean(
     trackA.isMovie ||
     trackA.isMovieTrack ||
@@ -236,17 +228,14 @@ export function isMovieMatch(trackA, trackB) {
 
 /**
  * Checks whether track A and track B originate from the same album.
- * Priority 2: Same Album
  */
 export function isAlbumMatch(trackA, trackB) {
   if (!trackA || !trackB) return false;
 
-  // 1. Direct album_id check
   const idA = String(trackA.album_id || trackA.albumId || trackA.more_info?.album_id || "").trim();
   const idB = String(trackB.album_id || trackB.albumId || trackB.more_info?.album_id || "").trim();
   if (idA && idB && idA === idB) return true;
 
-  // 2. Normalized album title check
   const albumA = normalizeMovieAlbum(trackA.movieName || trackA.album || trackA.albumName || trackA.more_info?.album || "");
   const albumB = normalizeMovieAlbum(trackB.movieName || trackB.album || trackB.albumName || trackB.more_info?.album || "");
 
@@ -257,48 +246,91 @@ export function isAlbumMatch(trackA, trackB) {
     }
   }
 
-  // Explicit isSameAlbum flag
   if (trackA.isSameAlbum || trackB.isSameAlbum) return true;
 
   return false;
 }
 
-/**
- * Legacy alias for backwards compatibility
- */
 export function isMovieAlbumMatch(trackA, trackB) {
   return isMovieMatch(trackA, trackB) || isAlbumMatch(trackA, trackB);
 }
 
 /**
- * Checks whether track A and track B share the same audio language.
- * Priority 4: Same Language
+ * --------------------------------------------------------------------------
+ * 1. SAME LANGUAGE — HIGHEST PRIORITY (Score: 100, 40, 0 | Weight: 35)
+ * --------------------------------------------------------------------------
  */
+export const RELATED_LANGUAGES = {
+  malayalam: ["tamil"],
+  tamil: ["malayalam", "telugu"],
+  telugu: ["tamil", "kannada"],
+  kannada: ["telugu", "tamil"],
+  hindi: ["urdu", "punjabi", "bhojpuri"],
+  urdu: ["hindi", "punjabi"],
+  punjabi: ["hindi", "urdu"],
+  bhojpuri: ["hindi"],
+  bengali: ["hindi", "assamese"],
+  marathi: ["hindi"],
+  gujarati: ["hindi"],
+  arabic: [],
+  english: [],
+  spanish: [],
+};
+
+export function extractLanguage(track) {
+  if (!track) return "";
+  const raw =
+    track.language ||
+    track.more_info?.language ||
+    (typeof track.subtitle === "string" && track.subtitle.includes("•")
+      ? track.subtitle.split("•")[0]
+      : "") ||
+    "";
+  return cleanStr(raw);
+}
+
 export function isLanguageMatch(trackA, trackB) {
-  if (!trackA || !trackB) return false;
-  const langA = cleanStr(trackA.language || trackA.more_info?.language || "");
-  const langB = cleanStr(trackB.language || trackB.more_info?.language || "");
+  const langA = extractLanguage(trackA);
+  const langB = extractLanguage(trackB);
   if (langA && langB && langA === langB) return true;
   return false;
 }
 
-/**
- * Checks whether track candidate is related to seed track (genre, mood, or recommendation link).
- * Priority 5: Related Songs
- */
-export function isRelatedMatch(candidate, seedTrack) {
-  if (!candidate || !seedTrack) return false;
-  if (candidate.isRelated || candidate.fromRadio) return true;
-  return isSongTypeMatch(candidate, seedTrack);
+export function getLanguageMatchScore(candidate, seedTrack) {
+  const langSeed = extractLanguage(seedTrack);
+  const langCand = extractLanguage(candidate);
+
+  if (!langSeed || !langCand) {
+    // If either language is unknown, default to neutral related score
+    return 40;
+  }
+
+  if (langSeed === langCand) {
+    return 100; // Exact same language
+  }
+
+  const related = RELATED_LANGUAGES[langSeed];
+  if (Array.isArray(related) && related.includes(langCand)) {
+    return 40; // Closely related language
+  }
+
+  return 0; // Different language
 }
 
 /**
- * Canonical song-type, genre, and mood detection.
- * Returns a Set of canonical category identifiers.
+ * --------------------------------------------------------------------------
+ * 2. SAME SONG TYPE / MOOD — VERY HIGH PRIORITY (Score: 100, 80, 50, 10 | Weight: 30)
+ * --------------------------------------------------------------------------
+ * Core categories supported:
+ * - bgm (BGM, Instrumental, movie background themes, cinematic instrumentals)
+ * - feel_good (Feel-good, happy, light, positive-energy)
+ * - sad (Sad, emotional, melancholic, heartbreak)
+ * - romantic (Romantic, love, soft romantic)
+ * - chill (Chill, relaxing, lo-fi, calm)
+ * - energetic (High-energy, dance, workout, fast-paced, mass)
  */
-export function detectSongTypes(track) {
-  if (!track) return new Set();
-  const types = new Set();
+export function classifySongMood(track) {
+  if (!track) return { primary: "feel_good", secondary: [], isBgm: false };
 
   const textToScan = [
     track.genre,
@@ -311,415 +343,518 @@ export function detectSongTypes(track) {
     track.more_info?.mood,
     track.title,
     track.song,
+    track.album,
+    track.more_info?.album,
+    track.description,
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
 
-  // 1. Feel-good / Upbeat / Vibe / Happy / Fun
+  const titleLower = (track.title || track.song || "").toLowerCase();
+  const hasLyricsExplicit = track.has_lyrics === "false" || track.has_lyrics === false || track.has_lyrics === 0;
+
+  // 1. BGM / Instrumental Detection
+  const bgmRegex = /\b(bgm|theme|instrumental|score|ost|soundtrack|cinematic|interlude|original score|flute|piano|violin|orchestral)\b/i;
+  const isBgm =
+    bgmRegex.test(titleLower) ||
+    bgmRegex.test(track.genre || "") ||
+    bgmRegex.test(track.more_info?.genre || "") ||
+    (hasLyricsExplicit && /\b(theme|bgm|score|version)\b/i.test(titleLower));
+
+  if (isBgm) {
+    return { primary: "bgm", secondary: ["instrumental", "chill"], isBgm: true };
+  }
+
+  // 2. Romantic / Love
   if (
-    /(feel[\s-]?good|happy|upbeat|vibe|groove|chill|fun|dance|party|celebrat|cheerful|joy|summer\s*vibe|enjoy)/i.test(
+    /\b(romantic|romance|love|kadhal|premam|dil|pyar|ishq|heart|duet|soulful|affection|couple|mohabbat|pranayam|anbe|kanmani|humsafar|saathiya|deewani|sanam)\b/i.test(
       textToScan
     )
   ) {
-    types.add("feel_good");
+    return { primary: "romantic", secondary: ["chill", "melody"], isBgm: false };
   }
 
-  // 2. Rap / Hip-Hop / Trap / Drill
+  // 3. Sad / Emotional
   if (
-    /(rap|hip[\s-]?hop|hiphop|trap|flow|cypher|mc|beat|drill|street|bars|rhyme|freestyle|boom\s*bap)/i.test(
+    /\b(sad|pain|broken|tears|lonely|alone|dardi|emotional|crying|separation|judaai|maranam|viraham|heartbreak|sorrow|depress|melanchol|dard|alvida)\b/i.test(
       textToScan
     )
   ) {
-    types.add("rap_hiphop");
+    return { primary: "sad", secondary: ["chill", "slow"], isBgm: false };
   }
 
-  // 3. Romantic / Love / Romance / Soulful Duet
+  // 4. Energetic / Dance / Mass / Workout
   if (
-    /(romantic|romance|love|kadhal|premam|dil|pyar|ishq|heart|duet|soulful|affection|couple)/i.test(
+    /\b(energy|energetic|dance|party|club|edm|mass|dappan|kuthu|workout|gym|beat|bass|drop|remix|fast|drill|trap|hip[\s-]?hop|rap|anthem|festival|dhol)\b/i.test(
       textToScan
     )
   ) {
-    types.add("romantic");
+    return { primary: "energetic", secondary: ["dance", "feel_good"], isBgm: false };
   }
 
-  // 4. Sad / Emotional / Heartbreak / Melancholy
+  // 5. Chill / Relaxing / Lo-Fi
   if (
-    /(sad|pain|broken|tears|lonely|alone|dardi|emotional|crying|separation|judaai|maranam|viraham|heartbreak|sorrow|depress|melanchol)/i.test(
+    /\b(chill|relax|lo[\s-]?fi|lofi|calm|soothing|slow|ambient|sleep|acoustic|coffee|peace|peaceful|serene|meditat|unplugged)\b/i.test(
       textToScan
     )
   ) {
-    types.add("sad");
+    return { primary: "chill", secondary: ["feel_good", "acoustic"], isBgm: false };
   }
 
-  // 5. Melody / Melodious / Acoustic / Soft / Serene
-  if (
-    /(melody|melodious|acoustic|unplugged|soft|serene|classical\s*melody|raga|ragam|breeze|lullaby|nostalgia|soothing|slow|gentle)/i.test(
-      textToScan
-    )
-  ) {
-    types.add("melody");
-  }
-
-  // 6. Dance / Mass / High Energy / Club
-  if (/(mass|energy|edm|club|bass|drop|anthem|dappan|kuthu|dhol|folk\s*beat|festival|fast)/i.test(textToScan)) {
-    types.add("dance");
-  }
-
-  // 7. Pop / Global Chart
-  if (/(pop|synth[\s-]?pop|dance[\s-]?pop|alt[\s-]?pop|billboard|radio[\s-]?hit)/i.test(textToScan)) {
-    types.add("pop");
-  }
-
-  // 8. Rock / Indie Rock / Metal
-  if (/(rock|indie|alt[\s-]?rock|guitar|grunge|metal|punk)/i.test(textToScan)) {
-    types.add("rock");
-  }
-
-  // 9. Ambient / Lo-Fi / Study
-  if (/(ambient|lo[\s-]?fi|chillhop|relax|sleep|drone|atmospheric|meditat)/i.test(textToScan)) {
-    types.add("ambient");
-  }
-
-  // 10. R&B / Soul
-  if (/(r&b|rnb|soul|neo[\s-]?soul|blues)/i.test(textToScan)) {
-    types.add("rnb");
-  }
-
-  // 11. Jazz
-  if (/(jazz|swing|saxophone|trumpet|bebop)/i.test(textToScan)) {
-    types.add("jazz");
-  }
-
-  // 12. Classical / Orchestral
-  if (/(classical|orchestra|symphony|piano|violin|instrumental\s*soundtrack)/i.test(textToScan)) {
-    types.add("classical");
-  }
-
-  return types;
+  // 6. Feel-Good / Happy / Positive (Default energetic positive)
+  return { primary: "feel_good", secondary: ["pop", "upbeat"], isBgm: false };
 }
 
 /**
- * Checks whether candidate track matches the seed track's song type, genre, or mood.
+ * Returns exact mood match score (100, 80, 50, 10)
  */
+export function getMoodMatchScore(candidate, seedTrack) {
+  const seedMood = classifySongMood(seedTrack);
+  const candMood = classifySongMood(candidate);
+
+  // Exact same primary mood
+  if (seedMood.primary === candMood.primary) {
+    return 100;
+  }
+
+  // If seed is BGM, protect it strictly: vocal pop or party songs are only 10 pts
+  if (seedMood.isBgm) {
+    if (candMood.isBgm) return 100;
+    if (candMood.primary === "chill" || candMood.secondary.includes("instrumental")) return 50;
+    return 10;
+  }
+
+  // Very similar pairs (80 points)
+  const p1 = seedMood.primary;
+  const p2 = candMood.primary;
+  const isVerySimilar =
+    (p1 === "feel_good" && (p2 === "chill" || p2 === "energetic")) ||
+    (p1 === "chill" && (p2 === "feel_good" || p2 === "romantic" || p2 === "sad")) ||
+    (p1 === "romantic" && (p2 === "chill" || p2 === "feel_good")) ||
+    (p1 === "energetic" && p2 === "feel_good") ||
+    (p1 === "sad" && p2 === "chill");
+
+  if (isVerySimilar) {
+    return 80;
+  }
+
+  // Related pairs (50 points)
+  const isRelated =
+    (p1 === "romantic" && p2 === "sad") ||
+    (p1 === "feel_good" && p2 === "romantic") ||
+    seedMood.secondary.some((s) => candMood.secondary.includes(s));
+
+  if (isRelated) {
+    return 50;
+  }
+
+  // Different mood (10 points)
+  return 10;
+}
+
+export function detectSongTypes(track) {
+  const mood = classifySongMood(track);
+  return new Set([mood.primary, ...mood.secondary]);
+}
+
 export function isSongTypeMatch(candidate, seedTrack) {
-  const seedTypes = detectSongTypes(seedTrack);
-  const candTypes = detectSongTypes(candidate);
+  return getMoodMatchScore(candidate, seedTrack) >= 80;
+}
 
-  if (seedTypes.size === 0 || candTypes.size === 0) {
-    // If no specific mood/genre detected, check raw genre string equality
-    const rawGenreSeed = cleanStr(seedTrack?.genre || "");
-    const rawGenreCand = cleanStr(candidate?.genre || "");
-    if (rawGenreSeed && rawGenreCand && rawGenreSeed === rawGenreCand) {
-      return true;
-    }
-    return false;
-  }
-
-  for (const type of seedTypes) {
-    if (candTypes.has(type)) return true;
-  }
-
-  return false;
+export function isRelatedMatch(candidate, seedTrack) {
+  return getMoodMatchScore(candidate, seedTrack) >= 50;
 }
 
 /**
- * Determines which exact Priority Tier (1 through 6) a candidate belongs to
- * when compared against the seed track according to the strict priority algorithm:
- *
- * Tier 1: Same Movie (other available songs from the same movie)
- * Tier 2: Same Album (songs from the same album if not already same movie)
- * Tier 3: Same Artist (songs by the same artist)
- * Tier 4: Same Language (songs in the same language)
- * Tier 5: Related Songs (songs related based on genre/mood/webradio recommendations)
- * Tier 6: Autoplay (general recommended/autoplay songs)
+ * --------------------------------------------------------------------------
+ * 3. TRENDING / POPULARITY — HIGH PRIORITY (Score: 0 to 100 | Weight: 20)
+ * --------------------------------------------------------------------------
+ * Combines play count metrics with release recency to favor current trending hits.
+ */
+export function calculatePopularityScore(track) {
+  if (!track) return 30;
+
+  let playCount = 0;
+  if (track.play_count !== undefined && track.play_count !== null) {
+    playCount = Number(track.play_count) || 0;
+  } else if (track.playCount !== undefined && track.playCount !== null) {
+    playCount = Number(track.playCount) || 0;
+  } else if (track.more_info?.play_count) {
+    playCount = Number(track.more_info.play_count) || 0;
+  }
+
+  // Play count base score (0 to 75 points)
+  let playScore = 35; // Default baseline for tracks without explicit counter
+  if (playCount >= 50000000) {
+    playScore = 75;
+  } else if (playCount >= 10000000) {
+    playScore = 60 + Math.min(15, Math.floor(((playCount - 10000000) / 40000000) * 15));
+  } else if (playCount >= 2000000) {
+    playScore = 45 + Math.min(15, Math.floor(((playCount - 2000000) / 8000000) * 15));
+  } else if (playCount >= 500000) {
+    playScore = 30 + Math.min(15, Math.floor(((playCount - 500000) / 1500000) * 15));
+  } else if (playCount >= 100000) {
+    playScore = 20 + Math.min(10, Math.floor(((playCount - 100000) / 400000) * 10));
+  } else if (playCount > 0) {
+    playScore = 15;
+  }
+
+  // Recency / Trending score (0 to 25 points)
+  // "Prefer current popularity over songs that were popular years ago."
+  let recencyScore = 5;
+  const rawYear = track.year || track.more_info?.year || track.release_date?.slice(0, 4);
+  const year = parseInt(rawYear || "0", 10);
+  if (year >= 2024) {
+    recencyScore = 25; // Currently trending / hot release
+  } else if (year >= 2022) {
+    recencyScore = 20; // Recent hit
+  } else if (year >= 2020) {
+    recencyScore = 15;
+  } else if (year >= 2017) {
+    recencyScore = 10;
+  }
+
+  return Math.min(100, Math.max(0, playScore + recencyScore));
+}
+
+/**
+ * --------------------------------------------------------------------------
+ * 4. ARTIST DIVERSITY & PUZZLE FACTOR (Score: 0 to 100 | Weight: 10)
+ * --------------------------------------------------------------------------
+ * "DO NOT make the next songs primarily from the same artist."
+ * Same artist is allowed occasionally (1-2 times in 8-10 songs), never back-to-back.
+ */
+export function calculateArtistDiversityScore(candidate, seedTrack, artistCounts = new Map(), lastArtistName = null) {
+  const candArtists = extractArtists(candidate);
+  const seedArtists = extractArtists(seedTrack);
+  const isSeedArtistMatch = candArtists.some((ca) => seedArtists.includes(ca));
+
+  const primaryLead = candArtists[0] || cleanStr(candidate.primary_artist || candidate.artist || "");
+
+  // Never place back-to-back identical artist
+  if (lastArtistName && primaryLead && lastArtistName === primaryLead) {
+    return 0;
+  }
+
+  const timesAppeared = artistCounts.get(primaryLead) || 0;
+
+  // Already appeared 2 or more times: drop heavily
+  if (timesAppeared >= 2) {
+    return 0;
+  }
+
+  // Already appeared once
+  if (timesAppeared === 1) {
+    return 20;
+  }
+
+  // Not yet appeared in queue
+  if (isSeedArtistMatch) {
+    // Reference song's artist: allowed occasionally as a pleasant surprise
+    return 50;
+  }
+
+  // Fresh diverse artist
+  return 100;
+}
+
+/**
+ * --------------------------------------------------------------------------
+ * QUEUE SCORING FORMULA
+ * --------------------------------------------------------------------------
+ * Queue Score =
+ *     Language Match       × 35
+ *   + Mood/Type Match      × 30
+ *   + Trending/Popularity  × 20
+ *   + Artist Diversity     × 10
+ *   + Discovery Factor     × 5
+ */
+export function calculateQueueScore(candidate, seedTrack, options = {}) {
+  const { artistCounts = new Map(), lastArtist = null } = options;
+
+  const langMatch = getLanguageMatchScore(candidate, seedTrack);
+  const moodMatch = getMoodMatchScore(candidate, seedTrack);
+  const popScore = calculatePopularityScore(candidate);
+  const artDiversity = calculateArtistDiversityScore(candidate, seedTrack, artistCounts, lastArtist);
+  const discoveryFactor = Math.floor(Math.random() * 80) + 20; // Controlled randomness (20 to 100)
+
+  const totalScore =
+    langMatch * 35 +
+    moodMatch * 30 +
+    popScore * 20 +
+    artDiversity * 10 +
+    discoveryFactor * 5;
+
+  return {
+    totalScore,
+    langMatch,
+    moodMatch,
+    popScore,
+    artDiversity,
+    discoveryFactor,
+  };
+}
+
+/**
+ * Backwards compatibility helper for existing references
  */
 export function assignCandidateTier(candidate, seedTrack) {
-  if (!candidate || !seedTrack) {
-    return {
-      tier: 6,
-      tierReason: "Autoplay",
-      sameMovie: false,
-      sameAlbum: false,
-      sameArtist: false,
-      sameLanguage: false,
-      isRelated: false,
-    };
-  }
+  const langMatch = getLanguageMatchScore(candidate, seedTrack);
+  const moodMatch = getMoodMatchScore(candidate, seedTrack);
 
-  // 1. Same Movie
-  const sameMovie = isMovieMatch(candidate, seedTrack);
-  if (sameMovie) {
-    return {
-      tier: 1,
-      tierReason: "Same Movie",
-      sameMovie: true,
-      sameAlbum: true,
-      sameArtist: isArtistMatch(candidate, seedTrack),
-      sameLanguage: isLanguageMatch(candidate, seedTrack),
-      isRelated: true,
-    };
+  if (langMatch === 100 && moodMatch >= 80) {
+    return { tier: 1, tierReason: "Same Language & Mood", sameLanguage: true, isRelated: true };
   }
-
-  // 2. Same Album
-  const sameAlbum = isAlbumMatch(candidate, seedTrack);
-  if (sameAlbum) {
-    return {
-      tier: 2,
-      tierReason: "Same Album",
-      sameMovie: false,
-      sameAlbum: true,
-      sameArtist: isArtistMatch(candidate, seedTrack),
-      sameLanguage: isLanguageMatch(candidate, seedTrack),
-      isRelated: true,
-    };
+  if (langMatch === 100 && moodMatch >= 50) {
+    return { tier: 2, tierReason: "Same Language", sameLanguage: true, isRelated: true };
   }
-
-  // 3. Same Artist
-  const sameArtist = isArtistMatch(candidate, seedTrack);
-  if (sameArtist) {
-    return {
-      tier: 3,
-      tierReason: "Same Artist",
-      sameMovie: false,
-      sameAlbum: false,
-      sameArtist: true,
-      sameLanguage: isLanguageMatch(candidate, seedTrack),
-      isRelated: true,
-    };
+  if (langMatch >= 40 && moodMatch >= 50) {
+    return { tier: 3, tierReason: "Related Language & Mood", sameLanguage: false, isRelated: true };
   }
-
-  // 4. Same Language
-  const sameLanguage = isLanguageMatch(candidate, seedTrack);
-  if (sameLanguage) {
-    return {
-      tier: 4,
-      tierReason: "Same Language",
-      sameMovie: false,
-      sameAlbum: false,
-      sameArtist: false,
-      sameLanguage: true,
-      isRelated: isRelatedMatch(candidate, seedTrack),
-    };
-  }
-
-  // 5. Related Songs
-  const isRelated = isRelatedMatch(candidate, seedTrack);
-  if (isRelated) {
-    return {
-      tier: 5,
-      tierReason: "Related Songs",
-      sameMovie: false,
-      sameAlbum: false,
-      sameArtist: false,
-      sameLanguage: false,
-      isRelated: true,
-    };
-  }
-
-  // 6. Autoplay
-  return {
-    tier: 6,
-    tierReason: "Autoplay",
-    sameMovie: false,
-    sameAlbum: false,
-    sameArtist: false,
-    sameLanguage: false,
-    isRelated: false,
-  };
+  return { tier: 4, tierReason: "Fallback Discovery", sameLanguage: false, isRelated: false };
 }
 
-/**
- * Calculates secondary relevance score within the same priority tier.
- * Factors: Language match, play count / popularity, era proximity, and slight deterministic variance.
- */
 export function calculateSecondaryScore(candidate, seedTrack, tierInfo = {}) {
-  let score = 0;
-
-  // Language match (+300 pts)
-  const langSeed = cleanStr(seedTrack?.language || seedTrack?.more_info?.language || "");
-  const langCand = cleanStr(candidate?.language || candidate?.more_info?.language || "");
-  if (langSeed && langCand && langSeed === langCand) {
-    score += 300;
-  }
-
-  // Primary artist lead match (+200 pts)
-  const leadSeed = cleanStr(seedTrack?.primary_artist || seedTrack?.primaryArtist || "");
-  const leadCand = cleanStr(candidate?.primary_artist || candidate?.primaryArtist || "");
-  if (leadSeed && leadCand && leadSeed === leadCand) {
-    score += 200;
-  }
-
-  // Popularity / Play Count (+0 to 200 pts)
-  const plays = Number(candidate?.play_count || candidate?.playCount || candidate?.plays || 0);
-  if (!isNaN(plays) && plays > 0) {
-    score += Math.min(200, Math.floor(plays / 50000));
-  }
-
-  // Era / Year proximity (+0 to 50 pts)
-  const yearSeed = parseInt(seedTrack?.year || "0", 10) || 0;
-  const yearCand = parseInt(candidate?.year || "0", 10) || 0;
-  if (yearSeed > 1900 && yearCand > 1900) {
-    const diff = Math.abs(yearSeed - yearCand);
-    if (diff <= 2) score += 50;
-    else if (diff <= 5) score += 30;
-    else if (diff <= 10) score += 10;
-  }
-
-  // Deterministic variance hash based on ID to break ties dynamically
-  const idStr = String(candidate?.id || candidate?.title || "");
-  let hash = 0;
-  for (let i = 0; i < idStr.length; i++) {
-    hash = (hash * 31 + idStr.charCodeAt(i)) & 0xfff;
-  }
-  score += hash % 20;
-
-  return score;
+  const scoreObj = calculateQueueScore(candidate, seedTrack);
+  return scoreObj.totalScore;
 }
 
 /**
- * Standard track normalization for clean output
+ * --------------------------------------------------------------------------
+ * INTELLIGENT QUEUE BUILDER WITH CONTROLLED RANDOMNESS & ARTIST PUZZLE
+ * --------------------------------------------------------------------------
+ * 1. Filter out seed track, session history duplicates, and invalid tracks.
+ * 2. Classify candidates into 4 strict Fallback Levels:
+ *    - Level 1: Same language + same mood/type + popular
+ *    - Level 2: Same language + similar mood/type + popular
+ *    - Level 3: Same language + related music + trending
+ *    - Level 4: Any language + highly suitable mood/type + popular (only when necessary)
+ * 3. Enforce Artist Diversity Rule:
+ *    - Same artist normally appears no more than 1–2 times within the next 8–10 songs.
+ *    - Never place the same artist repeatedly back-to-back.
+ *    - Seed artist appears as an occasional pleasant surprise (slot 2+, not slot 0/1).
+ * 4. Controlled Randomness:
+ *    - Divides into score tiers and randomly selects from the top candidate tier.
+ * 5. Returns 10-15 ranked songs.
  */
-function normalizeOutputTrack(track, tierInfo, score) {
-  const durSec = Number(track.duration || 210);
-  const m = Math.floor(durSec / 60);
-  const s = Math.floor(durSec % 60);
-  const durationFormatted = track.durationFormatted || `${m}:${s < 10 ? "0" : ""}${s}`;
-
-  return {
-    ...track,
-    id: String(track.id),
-    title: track.title || track.song || "Unknown Track",
-    artist: track.artist || track.primary_artists || "Unknown Artist",
-    tier: tierInfo.tier,
-    tierReason: tierInfo.tierReason,
-    score,
-    sameMovie: tierInfo.sameMovie,
-    sameAlbum: tierInfo.sameAlbum,
-    sameArtist: tierInfo.sameArtist,
-    sameLanguage: tierInfo.sameLanguage,
-    isRelated: tierInfo.isRelated,
-    isManual: false,
-    duration: durSec,
-    durationFormatted,
-  };
-}
-
-/**
- * Central recommendation ranking function:
- * generateRecommendedQueue(currentSong, musicCatalog, options)
- *
- * 1. Excludes current song.
- * 2. Compares candidate metadata with current song.
- * 3. Assigns each candidate its highest matching tier (1 to 6).
- * 4. Filters out candidates that do not match any tier.
- * 5. Sorts candidates strictly by priority tier in ascending order (Tier 1 before 2, etc.).
- * 6. Within the same tier, sorts by secondary relevance signals.
- * 7. Removes duplicate song IDs and identical title+artist duplicates.
- * 8. Excludes recently played songs when possible.
- * 9. Returns the ranked recommendation queue.
- *
- * @param {Object} currentSong - The seed track
- * @param {Array<Object>} musicCatalog - Available songs to rank
- * @param {Object} [options] - Configuration options:
- *   - excludeIds: Set or Array of song IDs to exclude
- *   - sessionPlayedIds: Set of recently played song IDs to filter out when possible
- *   - maxResults: Maximum number of tracks to return (default: 25)
- * @returns {Array<Object>} Ranked upcoming queue
- */
-export function generateRecommendedQueue(currentSong, musicCatalog, options = {}) {
-  if (!currentSong || !Array.isArray(musicCatalog) || musicCatalog.length === 0) {
+export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
+  if (!seedTrack || !Array.isArray(candidatePool) || candidatePool.length === 0) {
     return [];
   }
 
-  const currentId = String(currentSong.id || "").trim();
-  const maxResults = options.maxResults || 25;
+  const maxResults = options.maxResults || 15;
 
-  // Build exclusion sets
-  const excludeSet = new Set();
-  if (currentId) excludeSet.add(currentId);
-
-  if (options.excludeIds) {
-    const rawList = Array.isArray(options.excludeIds)
+  const excludeIds = new Set(
+    (Array.isArray(options.excludeIds)
       ? options.excludeIds
       : options.excludeIds instanceof Set
       ? Array.from(options.excludeIds)
-      : String(options.excludeIds).split(",");
-    for (const id of rawList) {
-      if (id) excludeSet.add(String(id).trim());
-    }
-  }
+      : String(options.excludeIds || "").split(",")
+    )
+      .map((s) => String(s).trim())
+      .filter(Boolean)
+  );
 
-  const sessionPlayedSet = new Set();
-  if (options.sessionPlayedIds) {
-    const playedList = Array.isArray(options.sessionPlayedIds)
+  const sessionPlayedIds = new Set(
+    (Array.isArray(options.sessionPlayedIds)
       ? options.sessionPlayedIds
       : options.sessionPlayedIds instanceof Set
       ? Array.from(options.sessionPlayedIds)
-      : String(options.sessionPlayedIds).split(",");
-    for (const id of playedList) {
-      if (id) sessionPlayedSet.add(String(id).trim());
-    }
-  }
+      : String(options.sessionPlayedIds || "").split(",")
+    )
+      .map((s) => String(s).trim())
+      .filter(Boolean)
+  );
 
-  // 1. Evaluate every candidate in catalog
-  const scoredCandidates = [];
+  const seedId = String(seedTrack.id || "").trim();
+  if (seedId) excludeIds.add(seedId);
+
+  // 1. Clean & Deduplicate candidates
   const seenIds = new Set();
   const seenTitleArtist = new Set();
+  const validCandidates = [];
 
-  for (const candidate of musicCatalog) {
-    if (!candidate || !candidate.id) continue;
-    const candId = String(candidate.id).trim();
+  for (const track of candidatePool) {
+    if (!track || !track.id) continue;
+    const tid = String(track.id).trim();
+    if (excludeIds.has(tid)) continue;
+    if (seenIds.has(tid)) continue;
 
-    // Exclude current seed song and explicit exclusions
-    if (excludeSet.has(candId)) continue;
-    if (seenIds.has(candId)) continue;
+    const cleanT = cleanStr(track.title || track.song || "");
+    const cleanA = cleanStr(track.artist || track.primary_artist || "");
+    const taKey = `${cleanT}:::${cleanA}`;
+    if (cleanT && cleanA && seenTitleArtist.has(taKey)) continue;
 
-    // Deduplication by title + artist key
-    const cleanT = cleanStr(candidate.title || candidate.song || "");
-    const cleanA = cleanStr(candidate.artist || candidate.primary_artists || "");
-    const key = `${cleanT}:::${cleanA}`;
-    if (cleanT && cleanA && seenTitleArtist.has(key)) continue;
-
-    // 2. Assign highest matching priority tier (1 - 6)
-    const tierInfo = assignCandidateTier(candidate, currentSong);
-    if (!tierInfo.tier) {
-      // Excluded: Does not match any of the six tiers
-      continue;
-    }
-
-    seenIds.add(candId);
-    if (cleanT && cleanA) seenTitleArtist.add(key);
-
-    const score = calculateSecondaryScore(candidate, currentSong);
-    const normalized = normalizeOutputTrack(candidate, tierInfo, score);
-    scoredCandidates.push(normalized);
+    seenIds.add(tid);
+    if (cleanT && cleanA) seenTitleArtist.add(taKey);
+    validCandidates.push(track);
   }
 
-  // 3. Strict 6-Tier Ordering:
-  // Priority 1 songs MUST appear before Priority 2 songs.
-  // Priority 2 songs MUST appear before Priority 3 songs...
-  // NEVER allow a lower tier to precede a higher tier!
-  scoredCandidates.sort((a, b) => {
-    // Primary Sort: Tier ascending (1 to 6)
-    if (a.tier !== b.tier) {
-      return a.tier - b.tier;
-    }
-    // Secondary Sort: Relevance score descending within identical tier
-    return b.score - a.score;
-  });
-
-  // 4. Session History Exclusion:
-  // If excluding recently played songs still leaves enough candidates, prioritize fresh tracks.
-  if (sessionPlayedSet.size > 0) {
-    const freshTracks = scoredCandidates.filter((t) => !sessionPlayedSet.has(String(t.id)));
-    if (freshTracks.length >= Math.min(8, maxResults)) {
-      return freshTracks.slice(0, maxResults);
-    }
-    // If filtering would starve the queue, place fresh tracks first, followed by played tracks
-    const playedTracks = scoredCandidates.filter((t) => sessionPlayedSet.has(String(t.id)));
-    return [...freshTracks, ...playedTracks].slice(0, maxResults);
+  // Exclude session history tracks when enough fresh candidates exist
+  let pool = validCandidates.filter((t) => !sessionPlayedIds.has(String(t.id)));
+  if (pool.length < maxResults) {
+    const played = validCandidates.filter((t) => sessionPlayedIds.has(String(t.id)));
+    pool = [...pool, ...played];
   }
 
-  return scoredCandidates.slice(0, maxResults);
+  const finalQueue = [];
+  const artistCounts = new Map();
+  const seedArtists = extractArtists(seedTrack);
+  const seedLeadArtist = seedArtists[0] || "";
+  let lastArtist = seedLeadArtist; // Reference song is currently playing; slot 0 must NOT be seed artist!
+  let seedArtistAppearances = 0;
+
+  // 2. Iteratively build queue slots
+  while (finalQueue.length < maxResults && pool.length > 0) {
+    const queueIndex = finalQueue.length;
+
+    // Segment remaining candidates into the 4 Fallback Levels
+    const level1 = []; // Same language (100) + same mood/type (>= 80)
+    const level2 = []; // Same language (100) + similar mood/type (>= 50)
+    const level3 = []; // Same language (100) + related (>= 10) OR related language (40) + mood (>= 50)
+    const level4 = []; // Any language + mood (>= 80)
+
+    for (const cand of pool) {
+      const lang = getLanguageMatchScore(cand, seedTrack);
+      const mood = getMoodMatchScore(cand, seedTrack);
+
+      if (lang === 100 && mood >= 80) {
+        level1.push(cand);
+      } else if (lang === 100 && mood >= 50) {
+        level2.push(cand);
+      } else if ((lang === 100 && mood >= 10) || (lang === 40 && mood >= 50)) {
+        level3.push(cand);
+      } else if (mood >= 80) {
+        level4.push(cand);
+      } else {
+        level4.push(cand);
+      }
+    }
+
+    // Always select from highest available non-empty Fallback Level
+    const activeLevel =
+      level1.length > 0
+        ? level1
+        : level2.length > 0
+        ? level2
+        : level3.length > 0
+        ? level3
+        : level4;
+
+    // Calculate dynamic scores for active level items
+    const scoredList = activeLevel.map((cand) => {
+      const scoreObj = calculateQueueScore(cand, seedTrack, {
+        artistCounts,
+        lastArtist,
+      });
+      return {
+        track: cand,
+        ...scoreObj,
+      };
+    });
+
+    // Apply Artist Diversity & Surprise Rules:
+    // a. Never place the same artist repeatedly back-to-back
+    // b. In slots 0 & 1, do NOT pick seed artist (let user discover other artists first)
+    // c. Seed artist max 2 appearances in a 15-song queue
+    // d. Other artists max 2 appearances in queue
+    let eligible = scoredList.filter((item) => {
+      const candArtists = extractArtists(item.track);
+      const lead = candArtists[0] || cleanStr(item.track.primary_artist || item.track.artist || "");
+
+      // No back-to-back identical artist
+      if (lastArtist && lead && lastArtist === lead) return false;
+
+      const isSeedArtist = candArtists.some((ca) => seedArtists.includes(ca));
+
+      // Seed artist puzzle: do not appear in the very first 2 upcoming slots
+      if (queueIndex < 2 && isSeedArtist) return false;
+
+      // Seed artist appearance cap
+      if (isSeedArtist && seedArtistAppearances >= 2) return false;
+
+      // Other artist appearance cap
+      const count = artistCounts.get(lead) || 0;
+      if (count >= 2) return false;
+
+      return true;
+    });
+
+    // If filters were too strict for the remaining pool, gently relax back-to-back or count limits
+    if (eligible.length === 0) {
+      eligible = scoredList.filter((item) => {
+        const candArtists = extractArtists(item.track);
+        const lead = candArtists[0] || cleanStr(item.track.primary_artist || item.track.artist || "");
+        const count = artistCounts.get(lead) || 0;
+        return count < 3;
+      });
+    }
+
+    if (eligible.length === 0) {
+      eligible = scoredList;
+    }
+
+    // Sort eligible by totalScore descending
+    eligible.sort((a, b) => b.totalScore - a.totalScore);
+
+    // Controlled Randomness:
+    // Take the top tier slice (e.g. top 4-5 candidates) and randomly pick one
+    const sliceSize = Math.min(5, eligible.length);
+    const topSlice = eligible.slice(0, sliceSize);
+    const selectedItem = topSlice[Math.floor(Math.random() * topSlice.length)];
+
+    const chosenTrack = selectedItem.track;
+    const chosenArtists = extractArtists(chosenTrack);
+    const chosenLead = chosenArtists[0] || cleanStr(chosenTrack.primary_artist || chosenTrack.artist || "");
+
+    // Update state tracking
+    lastArtist = chosenLead;
+    artistCounts.set(chosenLead, (artistCounts.get(chosenLead) || 0) + 1);
+    if (chosenArtists.some((ca) => seedArtists.includes(ca))) {
+      seedArtistAppearances++;
+    }
+
+    // Format output track
+    const durSec = Number(chosenTrack.duration || 210);
+    const m = Math.floor(durSec / 60);
+    const s = Math.floor(durSec % 60);
+    const durationFormatted = chosenTrack.durationFormatted || `${m}:${s < 10 ? "0" : ""}${s}`;
+
+    finalQueue.push({
+      ...chosenTrack,
+      id: String(chosenTrack.id),
+      title: chosenTrack.title || chosenTrack.song || "Unknown Track",
+      artist: chosenTrack.artist || chosenTrack.primary_artist || "Unknown Artist",
+      tier: selectedItem.langMatch === 100 ? (selectedItem.moodMatch >= 80 ? 1 : 2) : 3,
+      tierReason: selectedItem.langMatch === 100 ? (selectedItem.moodMatch >= 80 ? "Same Language & Mood" : "Same Language") : "Related Music",
+      queueScore: selectedItem.totalScore,
+      score: selectedItem.totalScore,
+      duration: durSec,
+      durationFormatted,
+      isManual: false,
+      queueMeta: {
+        score: selectedItem.totalScore,
+        languageScore: selectedItem.langMatch,
+        moodScore: selectedItem.moodMatch,
+        popularityScore: selectedItem.popScore,
+        artistScore: selectedItem.artDiversity,
+        discoveryScore: selectedItem.discoveryFactor,
+        isSameArtist: chosenArtists.some((ca) => seedArtists.includes(ca)),
+      },
+    });
+
+    // Remove chosen track from active candidate pool
+    const chosenId = String(chosenTrack.id);
+    pool = pool.filter((t) => String(t.id) !== chosenId);
+  }
+
+  return finalQueue;
+}
+
+/**
+ * Main external export: generateRecommendedQueue(currentSong, musicCatalog, options)
+ */
+export function generateRecommendedQueue(currentSong, musicCatalog, options = {}) {
+  return buildIntelligentQueue(currentSong, musicCatalog, options);
 }

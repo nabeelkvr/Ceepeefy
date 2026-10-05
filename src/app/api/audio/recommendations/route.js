@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import CryptoJS from "crypto-js";
 import { NOCTURNE_TRACKS } from "../../../../data/nocturneData";
 import { CURATED_GENRES } from "../../../../data/genreData";
-import { generateRecommendedQueue } from "../../../../utils/recommendationEngine";
+import { generateRecommendedQueue, classifySongMood } from "../../../../utils/recommendationEngine";
 
 // In-memory cache for recommendation queries
 const recoCache = new Map();
@@ -213,7 +213,7 @@ export async function GET(request) {
     });
   }
 
-  const cacheKey = `reco_v3:::${songId}:::${album_id}:::${artist}:::${language}:::${movieName}:::${excludeIdsParam}`;
+  const cacheKey = `reco_v4_iq:::${songId}:::${album_id}:::${artist}:::${language}:::${movieName}:::${excludeIdsParam}`;
   if (recoCache.has(cacheKey)) {
     return NextResponse.json(recoCache.get(cacheKey));
   }
@@ -342,23 +342,28 @@ export async function GET(request) {
   }
 
   // -------------------------------------------------------------
-  // 2. Artist Track Catalog: Pull tracks by primary artist(s)
+  // -------------------------------------------------------------
+  // 2. Artist Track Catalog: Pull small subset (max 4-5) for puzzle / surprise factor
+  // DO NOT flood candidate pool with the same artist!
   // -------------------------------------------------------------
   if (seedDetails.primary_artist || seedDetails.artist) {
     const artistToQuery = seedDetails.primary_artist || seedDetails.artist;
     try {
-      const artistUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=25&q=${encodeURIComponent(
+      const artistUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=6&q=${encodeURIComponent(
         artistToQuery
       )}`;
       const artRes = await fetch(artistUrl, { headers, next: { revalidate: 1800 } });
       if (artRes.ok) {
         const artData = await artRes.json();
         const artList = artData.results || [];
+        let addedArtistCount = 0;
         for (const s of artList) {
           if (s && s.id && String(s.id) !== String(songId) && !excludeIdSet.has(String(s.id))) {
             const formatted = formatSongItem(s);
             if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
               rawCandidateMap.set(String(formatted.id), formatted);
+              addedArtistCount++;
+              if (addedArtistCount >= 4) break;
             }
           }
         }
@@ -369,7 +374,7 @@ export async function GET(request) {
   }
 
   // -------------------------------------------------------------
-  // 3. WebRadio Station & Reco Endpoints
+  // 3. WebRadio Station & Reco Endpoints (JioSaavn Radio Recommendations)
   // -------------------------------------------------------------
   if (songId) {
     try {
@@ -439,43 +444,64 @@ export async function GET(request) {
   }
 
   // -------------------------------------------------------------
-  // 4. Targeted Language, Album & Vibe Contextual Query
+  // 4. Targeted Language & Mood Queries (Guarantees Language & Mood Consistency)
   // -------------------------------------------------------------
-  if (rawCandidateMap.size < 30) {
+  const seedMoodObj = classifySongMood(seedDetails);
+  const detectedMood = seedMoodObj.primary;
+  const seedLang = seedDetails.language ? seedDetails.language.toLowerCase().trim() : "";
+
+  const queries = [];
+  if (seedLang) {
+    if (detectedMood === "bgm" || seedMoodObj.isBgm) {
+      queries.push(`${seedLang} bgm`);
+      queries.push(`${seedLang} instrumental score`);
+      queries.push(`${seedLang} movie theme`);
+    } else if (detectedMood === "romantic") {
+      queries.push(`${seedLang} romantic love songs`);
+      queries.push(`${seedLang} romantic hits`);
+    } else if (detectedMood === "sad") {
+      queries.push(`${seedLang} sad emotional songs`);
+      queries.push(`${seedLang} sad melody`);
+    } else if (detectedMood === "chill") {
+      queries.push(`${seedLang} chill melody songs`);
+      queries.push(`${seedLang} acoustic songs`);
+    } else if (detectedMood === "energetic") {
+      queries.push(`${seedLang} dance energy party`);
+      queries.push(`${seedLang} mass songs`);
+    } else {
+      queries.push(`${seedLang} feel good songs`);
+      queries.push(`${seedLang} hit songs`);
+      queries.push(`${seedLang} trending songs`);
+    }
+  }
+
+  if (seedDetails.album && !seedMoodObj.isBgm) {
+    queries.push(`${seedDetails.album} songs`);
+  }
+
+  for (const q of queries) {
+    if (rawCandidateMap.size >= 55) break;
     try {
-      const queries = [];
-      if (seedDetails.album) {
-        queries.push(`${seedDetails.album} songs`.trim());
-      }
-      if (seedDetails.language && seedDetails.genre) {
-        queries.push(`${seedDetails.language} ${seedDetails.genre} songs`.trim());
-      } else if (seedDetails.language) {
-        queries.push(`${seedDetails.language} hit songs`.trim());
-      }
+      const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=15&q=${encodeURIComponent(
+        q
+      )}`;
 
-      for (const q of queries.slice(0, 2)) {
-        if (rawCandidateMap.size >= 45) break;
-        const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=20&q=${encodeURIComponent(
-          q
-        )}`;
-
-        const sRes = await fetch(searchUrl, { headers, next: { revalidate: 1800 } });
-        if (sRes.ok) {
-          const sData = await sRes.json();
-          const results = sData.results || [];
-          for (const item of results) {
-            if (item && item.id && String(item.id) !== String(songId) && !excludeIdSet.has(String(item.id))) {
-              const formatted = formatSongItem(item);
-              if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
-                rawCandidateMap.set(String(formatted.id), formatted);
-              }
+      const sRes = await fetch(searchUrl, { headers, next: { revalidate: 1800 } });
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        const results = sData.results || [];
+        for (const item of results) {
+          if (item && item.id && String(item.id) !== String(songId) && !excludeIdSet.has(String(item.id))) {
+            const formatted = formatSongItem(item);
+            if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
+              rawCandidateMap.set(String(formatted.id), formatted);
             }
-            if (rawCandidateMap.size >= 45) break;
           }
+          if (rawCandidateMap.size >= 55) break;
         }
       }
     } catch (err) {
-      console.warn("[Recommendations] Targeted contextual search failed:", err);
+      console.warn("[Recommendations] Targeted contextual search failed for query:", q, err);
     }
   }
 
@@ -521,7 +547,7 @@ export async function GET(request) {
 
   const responseData = {
     success: true,
-    source: "spotify_6_tier_intelligent_reco",
+    source: "ceepify_intelligent_queue",
     seedTrack: seedDetails,
     candidatePoolCount: candidatePool.length,
     tracks: rankedQueue,
