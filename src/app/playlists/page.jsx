@@ -236,14 +236,14 @@ export default function PlaylistsPage() {
               <div
                 key={pl.id}
                 onClick={() => router.push(targetUrl)}
-                className={`w-full md:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none ${
+                className={`w-full md:w-56 p-2 sm:p-2.5 rounded-[4px] border transition-all duration-300 hover:-translate-y-1 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none ${
                   isPinned
                     ? "border-primary/40 bg-surface-container/95 shadow-[0_0_20px_rgba(var(--color-primary-rgb),0.15)]"
                     : "border-white/5 hover:border-primary/30 hover:bg-surface-container/90"
                 }`}
               >
                 <div>
-                  <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2 sm:mb-3">
+                  <div className="relative aspect-square w-full rounded-[4px] overflow-hidden bg-surface-container-highest shadow-md mb-2 sm:mb-2.5">
                     <PlaylistCover
                       tracks={tracks}
                       fallbackUrl={pl.coverUrl}

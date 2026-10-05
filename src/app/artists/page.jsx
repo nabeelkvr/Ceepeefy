@@ -155,7 +155,7 @@ export default function ArtistsPage() {
               <Link
                 key={artist.id}
                 href={`/artist/${artist.id}`}
-                className="group flex flex-col items-center text-center gap-2 p-3 sm:p-4 rounded-xl sm:rounded-2xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/80 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1.5 select-none relative"
+                className="group flex flex-col items-center text-center gap-2 p-2 sm:p-2.5 rounded-[4px] hover:bg-white/[0.04] transition-all duration-200 cursor-pointer select-none relative"
               >
                 <div className="relative w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full bg-surface-container-highest shadow-md p-1 ring-2 ring-primary/20 group-hover:ring-primary group-hover:shadow-[0_0_20px_rgba(76,215,246,0.3)] transition-all">
                   <div className="w-full h-full rounded-full overflow-hidden">

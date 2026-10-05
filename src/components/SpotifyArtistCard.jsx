@@ -34,8 +34,8 @@ export default function SpotifyArtistCard({
   return (
     <Link
       href={discoveryUrl}
-      className={`group flex flex-col items-center text-center p-3.5 sm:p-4 rounded-2xl glass-card border border-white/10 hover:border-[#1DB954]/50 bg-surface-container/75 hover:bg-surface-container transition-all duration-300 shadow-lg hover:shadow-[0_8px_30px_rgba(29,185,84,0.18)] hover:-translate-y-1.5 select-none relative cursor-pointer ${
-        isCarousel ? "w-40 sm:w-44 flex-shrink-0" : "w-full"
+      className={`group flex flex-col items-center text-center p-2 sm:p-2.5 rounded-[4px] hover:bg-white/[0.04] transition-all duration-200 select-none relative cursor-pointer ${
+        isCarousel ? "w-36 sm:w-40 flex-shrink-0" : "w-full"
       } ${className}`}
       title={`Discover ${artistName} on Ceepeefy`}
     >

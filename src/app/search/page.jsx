@@ -21,7 +21,6 @@ import SongOptionsMenu from "../../components/SongOptionsMenu";
 import { formatPlaylistDuration } from "../../utils/playlistUtils";
 import { searchSpotify } from "../../services/spotifyClientService";
 import SpotifyArtistCard from "../../components/SpotifyArtistCard";
-import SpotifyPlaylistCard from "../../components/SpotifyPlaylistCard";
 import SpotifyBadge, { SpotifyIcon } from "../../components/SpotifyBadge";
 
 function SearchContent() {
@@ -49,7 +48,7 @@ function SearchContent() {
   const artistsCarouselRef = useRef(null);
   const albumsCarouselRef = useRef(null);
   const spotifyArtistsCarouselRef = useRef(null);
-  const spotifyPlaylistsCarouselRef = useRef(null);
+  const playlistsCarouselRef = useRef(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -69,9 +68,8 @@ function SearchContent() {
   const [playlists, setPlaylists] = useState([]);
   const [artistTracks, setArtistTracks] = useState([]);
 
-  // Spotify Discovery State
+  // Spotify Discovery State (Artists only)
   const [spotifyArtists, setSpotifyArtists] = useState([]);
-  const [spotifyPlaylists, setSpotifyPlaylists] = useState([]);
   const [isSpotifyLoading, setIsSpotifyLoading] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -167,23 +165,28 @@ function SearchContent() {
         trackCount: pl.tracks?.length || pl.songsCount || 0,
       }));
 
-    // Spotify Playlists (strictly from Spotify Web API)
-    const spotifyRemote = (spotifyPlaylists || []).map((pl) => ({
+    // JioSaavn Playlists (strictly from JioSaavn music catalog)
+    const jioSaavnRemote = (playlists || []).map((pl) => ({
       id: String(pl.id),
-      title: pl.title || pl.name,
-      subtitle: pl.description || "Spotify Playlist",
-      description: pl.description || "",
-      coverUrl: pl.coverUrl || pl.image || pl.thumbnail,
-      curator: pl.curator || "Spotify",
-      trackCount: pl.trackCount || null,
-      spotifyUrl: pl.spotifyUrl,
+      name: pl.title || pl.name || "Playlist",
+      title: pl.title || pl.name || "Playlist",
+      subtitle: pl.subtitle || pl.description || "Curated Playlist",
+      description: pl.description || pl.subtitle || "",
+      coverUrl: pl.coverUrl || pl.image || pl.thumbnail || "",
+      image: pl.coverUrl || pl.image || pl.thumbnail || "",
+      thumbnail: pl.thumbnail || pl.coverUrl || pl.image || "",
+      curator: pl.curator || pl.owner || "Saavn Editor",
+      owner: pl.curator || pl.owner || "Saavn Editor",
+      songCount: pl.songCount || pl.trackCount || 0,
+      trackCount: pl.trackCount || pl.songCount || 0,
+      url: pl.url || `/playlist/${pl.id}`,
       isCustom: false,
-      isSpotify: true,
-      source: "spotify",
-      tracks: [],
+      source: "jiosaavn",
+      type: "playlist",
+      tracks: pl.tracks || [],
     }));
 
-    const remoteToUse = spotifyRemote;
+    const remoteToUse = jioSaavnRemote;
 
     const seenIds = new Set();
     const result = [];
@@ -196,7 +199,7 @@ function SearchContent() {
         result.push(pl);
       }
     }
-    // Then remote Spotify playlists
+    // Then remote JioSaavn playlists
     for (const pl of remoteToUse) {
       const pid = String(pl.id);
       if (pid && !seenIds.has(pid)) {
@@ -206,7 +209,7 @@ function SearchContent() {
     }
 
     return result;
-  }, [debouncedQuery, customPlaylists, spotifyPlaylists]);
+  }, [debouncedQuery, customPlaylists, playlists]);
 
   // Combined user playlists for Browse Catalog featured section (default playlists removed)
   const allPlaylists = useMemo(
@@ -344,7 +347,6 @@ function SearchContent() {
       setPlaylists([]);
       setArtistTracks([]);
       setSpotifyArtists([]);
-      setSpotifyPlaylists([]);
       setIsSpotifyLoading(false);
       setIsLoading(false);
       setSearchError(null);
@@ -457,20 +459,18 @@ function SearchContent() {
     // 1. Existing JioSaavn search (unchanged)
     fetchResults();
 
-    // 2. Independent Spotify search (parallel, failure-isolated)
+    // 2. Independent Spotify search (parallel, failure-isolated, Artists only)
     setIsSpotifyLoading(true);
     searchSpotify(trimmed)
       .then((spData) => {
         if (!isCancelled) {
           setSpotifyArtists(Array.isArray(spData?.artists) ? spData.artists : []);
-          setSpotifyPlaylists(Array.isArray(spData?.playlists) ? spData.playlists : []);
         }
       })
       .catch((err) => {
         console.warn("Spotify search error:", err);
         if (!isCancelled) {
           setSpotifyArtists([]);
-          setSpotifyPlaylists([]);
         }
       })
       .finally(() => {
@@ -704,10 +704,10 @@ function SearchContent() {
     }
   };
 
-  const scrollSpotifyPlaylistsContainer = (direction) => {
-    if (spotifyPlaylistsCarouselRef.current) {
+  const scrollPlaylistsContainer = (direction) => {
+    if (playlistsCarouselRef.current) {
       const amount = direction === "left" ? -350 : 350;
-      spotifyPlaylistsCarouselRef.current.scrollBy({ left: amount, behavior: "smooth" });
+      playlistsCarouselRef.current.scrollBy({ left: amount, behavior: "smooth" });
     }
   };
 
@@ -1014,7 +1014,7 @@ function SearchContent() {
     );
   };
 
-  // Small Album Card Component (matches Image 4 style: 2-column grid, badge top-left, telemetry capsule bottom)
+  // Small Album Card Component (matches clean frameless style with rounded-[4px] artwork)
   const renderSmallAlbumCard = (album) => {
     const isThisAlbumPlaying =
       isPlaying &&
@@ -1026,31 +1026,31 @@ function SearchContent() {
       <div
         key={album.id}
         onClick={(e) => handleMovieCardClick(album, e)}
-        className="group flex flex-col gap-2.5 glass-card p-3 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 shadow-lg select-none cursor-pointer"
+        className="group flex flex-col gap-1.5 p-1.5 rounded-[4px] hover:bg-white/[0.04] transition-all duration-200 select-none cursor-pointer"
       >
         {/* Cover Image */}
-        <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+        <div className="relative aspect-square w-full rounded-[4px] overflow-hidden bg-surface-container-highest shadow-md">
           <img
             src={album.image || album.thumbnail || album.coverUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80"}
             alt={album.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 rounded-[4px]"
             loading="lazy"
           />
           {/* Top-left Badge */}
-          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[9px] font-bold text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-md">
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-[3px] bg-black/75 backdrop-blur-md text-[9px] font-bold text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-md">
             <span className="material-symbols-outlined text-[12px]">{album.isMovie ? "movie" : "album"}</span>
             <span>{album.isMovie ? "FILM" : "ALBUM"}</span>
           </div>
 
           {/* Hover / Playing Play Button */}
           <div
-            className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 transition-opacity duration-300 ${
+            className={`absolute inset-0 bg-black/35 flex items-end justify-end p-2 transition-opacity duration-200 ${
               isThisAlbumPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}
           >
             <div
               onClick={(e) => handlePlayAlbumQuick(album, e)}
-              className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300 cursor-pointer"
+              className="w-8 h-8 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform hover:scale-110 active:scale-95 transition-all cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">
                 {isThisAlbumPlaying ? "pause" : "play_arrow"}
@@ -1064,42 +1064,21 @@ function SearchContent() {
           <h3 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
             {album.title}
           </h3>
-          <p className="text-[10.5px] sm:text-xs text-on-surface-variant truncate mt-0.5">
+          <p className="text-[10.5px] sm:text-xs text-neutral-400 truncate mt-0.5">
             {album.isMovie ? "Film Soundtrack" : "Album"} • {album.artist || "Soundtrack"}
           </p>
         </div>
 
-        {/* Modern Audio Telemetry Capsule (Image 4 exact match) */}
-        <div className="mt-auto pt-1.5">
-          <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
-            {/* Pill 1: Equalizer Soundwave + Songs count */}
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
-              <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
-                <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
-                <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
-                <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
-              </div>
-              <span className="tabular-nums whitespace-nowrap">
-                {songCount} {songCount === 1 ? "song" : "songs"}
-              </span>
-            </div>
-
-            {/* Pill 2: Year or Soundtrack */}
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-white/5 border border-white/10 text-on-surface-variant text-[9.5px] font-semibold flex-shrink-0">
-              <span className="material-symbols-outlined text-[11px] text-outline">
-                {album.year ? "calendar_today" : "album"}
-              </span>
-              <span className="tabular-nums truncate max-w-[50px]">
-                {album.year || "Studio"}
-              </span>
-            </div>
-          </div>
+        {/* Audio Telemetry */}
+        <div className="flex items-center justify-between text-[10px] font-mono text-outline pt-0.5">
+          <span>{songCount} {songCount === 1 ? "song" : "songs"}</span>
+          <span>{album.year || "Studio"}</span>
         </div>
       </div>
     );
   };
 
-  // Small Artist Card Component (matches Image 4 style: 2-column grid, badge top-left, telemetry capsule bottom)
+  // Small Artist Card Component (matches clean frameless style with rounded-[4px] hover)
   const renderSmallArtistCard = (artist) => {
     const isThisArtistPlaying =
       isPlaying &&
@@ -1111,31 +1090,25 @@ function SearchContent() {
       <div
         key={artist.id || artist.name}
         onClick={(e) => handleArtistCardClick(artist, e)}
-        className="group flex flex-col gap-2.5 glass-card p-3 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 shadow-lg select-none cursor-pointer"
+        className="group flex flex-col gap-1.5 p-1.5 rounded-[4px] hover:bg-white/[0.04] transition-all duration-200 select-none cursor-pointer"
       >
         {/* Cover Image */}
-        <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+        <div className="relative aspect-square w-full rounded-full overflow-hidden bg-surface-container-highest shadow-md p-0.5 ring-1 ring-white/10 group-hover:ring-primary/40 transition-all">
           <ArtistAvatar
             name={artist.name}
             avatar={artist.avatar || artist.image}
-            className="w-full h-full"
-            imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full rounded-full"
+            imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 rounded-full"
           />
-          {/* Top-left Badge */}
-          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1 shadow-md">
-            <span className="material-symbols-outlined text-[12px]">mic</span>
-            <span>ARTIST</span>
-          </div>
-
           {/* Hover / Playing Play Button */}
           <div
-            className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 transition-opacity duration-300 ${
+            className={`absolute inset-0 bg-black/35 rounded-full flex items-center justify-center transition-opacity duration-200 ${
               isThisArtistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}
           >
             <div
               onClick={(e) => handlePlayArtistQuick(artist, e)}
-              className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300 cursor-pointer"
+              className="w-8 h-8 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform hover:scale-110 active:scale-95 transition-all cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">
                 {isThisArtistPlaying ? "pause" : "play_arrow"}
@@ -1145,38 +1118,19 @@ function SearchContent() {
         </div>
 
         {/* Title & Subtitle */}
-        <div className="flex flex-col min-w-0">
+        <div className="flex flex-col min-w-0 text-center">
           <h3 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
             {artist.name}
           </h3>
-          <p className="text-[10.5px] sm:text-xs text-on-surface-variant truncate mt-0.5">
-            Artist • {artist.role || artist.genre || "Verified Artist"}
+          <p className="text-[10.5px] sm:text-xs text-neutral-400 truncate mt-0.5">
+            {artist.role || artist.genre || "Artist"}
           </p>
-        </div>
-
-        {/* Modern Audio Telemetry Capsule (Image 4 exact match) */}
-        <div className="mt-auto pt-1.5">
-          <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
-            {/* Pill 1: Verified badge with pulse */}
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
-              <span className="material-symbols-outlined text-[11px] text-primary">verified</span>
-              <span className="whitespace-nowrap">Verified</span>
-            </div>
-
-            {/* Pill 2: Role / Genre */}
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-white/5 border border-white/10 text-on-surface-variant text-[9.5px] font-semibold flex-shrink-0">
-              <span className="material-symbols-outlined text-[11px] text-outline">graphic_eq</span>
-              <span className="tabular-nums truncate max-w-[50px]">
-                {artist.genre || artist.role || "Artist"}
-              </span>
-            </div>
-          </div>
         </div>
       </div>
     );
   };
 
-  // Small Playlist Card Component (matches Image 4 style: 2-column grid, badge top-left, telemetry capsule bottom)
+  // Small Playlist Card Component (matches clean frameless style with rounded-[4px] artwork)
   const renderSmallPlaylistCard = (pl) => {
     const trackCount = pl.trackCount || pl.tracks?.length || pl.songsCount || (pl.isCustom ? 0 : 25);
     const isThisPlaylistPlaying =
@@ -1186,31 +1140,31 @@ function SearchContent() {
       <div
         key={pl.id}
         onClick={(e) => handlePlaylistClick(pl, e)}
-        className="group flex flex-col gap-2.5 glass-card p-3 rounded-2xl border border-white/5 hover:border-primary/40 hover:bg-surface-container/90 transition-all duration-300 shadow-lg select-none cursor-pointer"
+        className="group flex flex-col gap-1.5 p-1.5 rounded-[4px] hover:bg-white/[0.04] transition-all duration-200 select-none cursor-pointer"
       >
         {/* Cover Image */}
-        <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
+        <div className="relative aspect-square w-full rounded-[4px] overflow-hidden bg-surface-container-highest shadow-md">
           <img
             src={pl.coverUrl || pl.image || pl.thumbnail || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"}
             alt={pl.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 rounded-[4px]"
             loading="lazy"
           />
           {/* Top-left Badge */}
-          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1 shadow-md">
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-[3px] bg-black/75 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1 shadow-md">
             <span className="material-symbols-outlined text-[12px]">queue_music</span>
             <span>{pl.isCustom ? "BY YOU" : "PLAYLIST"}</span>
           </div>
 
           {/* Hover / Playing Play Button */}
           <div
-            className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-end p-2.5 transition-opacity duration-300 ${
+            className={`absolute inset-0 bg-black/35 flex items-end justify-end p-2 transition-opacity duration-200 ${
               isThisPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}
           >
             <div
               onClick={(e) => handlePlayPlaylistQuick(pl, e)}
-              className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_14px_rgba(76,215,246,0.6)] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300 cursor-pointer"
+              className="w-8 h-8 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform hover:scale-110 active:scale-95 transition-all cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">
                 {isThisPlaylistPlaying ? "pause" : "play_arrow"}
@@ -1224,34 +1178,15 @@ function SearchContent() {
           <h3 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
             {pl.title}
           </h3>
-          <p className="text-[10.5px] sm:text-xs text-on-surface-variant truncate mt-0.5">
+          <p className="text-[10.5px] sm:text-xs text-neutral-400 truncate mt-0.5">
             {pl.subtitle || pl.curator || pl.description || "Curated Playlist"}
           </p>
         </div>
 
-        {/* Modern Audio Telemetry Capsule (Image 4 exact match) */}
-        <div className="mt-auto pt-1.5">
-          <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner overflow-hidden w-full">
-            {/* Pill 1: Equalizer Soundwave + Tracks count */}
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[9.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)] flex-shrink-0">
-              <div className="flex items-end gap-[1.5px] h-2.5 flex-shrink-0">
-                <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
-                <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
-                <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
-              </div>
-              <span className="tabular-nums whitespace-nowrap">
-                {trackCount} {trackCount === 1 ? "track" : "tracks"}
-              </span>
-            </div>
-
-            {/* Pill 2: Duration / Lossless */}
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-white/5 border border-white/10 text-on-surface-variant text-[9.5px] font-semibold flex-shrink-0">
-              <span className="material-symbols-outlined text-[11px] text-outline">schedule</span>
-              <span className="tabular-nums truncate max-w-[50px]">
-                {pl.duration || "Lossless"}
-              </span>
-            </div>
-          </div>
+        {/* Audio Telemetry */}
+        <div className="flex items-center justify-between text-[10px] font-mono text-outline pt-0.5">
+          <span>{trackCount} {trackCount === 1 ? "track" : "tracks"}</span>
+          <span>{pl.duration || "Lossless"}</span>
         </div>
       </div>
     );
@@ -1378,24 +1313,24 @@ function SearchContent() {
           </div>
           <div
             onClick={(e) => handleArtistCardClick(art, e)}
-            className="group relative p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/40 bg-surface-container/80 hover:bg-surface-container transition-all cursor-pointer shadow-lg flex flex-col justify-between select-none w-full"
+            className="group relative p-2 rounded-[4px] hover:bg-white/[0.04] transition-all cursor-pointer flex flex-col justify-between select-none w-full"
           >
             <div>
-              <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2.5">
+              <div className="relative w-full aspect-square rounded-full overflow-hidden bg-surface-container-highest shadow-md mb-2.5 p-1 ring-1 ring-white/10 group-hover:ring-primary/40 transition-all">
                 <ArtistAvatar
                   name={art.name}
                   avatar={art.avatar || art.image}
-                  className="w-full h-full"
-                  imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  className="w-full h-full rounded-full"
+                  imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 rounded-full"
                 />
-                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-primary flex items-center gap-1 shadow-md">
+                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-[3px] text-[9px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-primary flex items-center gap-1 shadow-md">
                   <span className="material-symbols-outlined text-[12px] text-primary">mic</span>
                   <span className="uppercase tracking-wider font-bold">Artist</span>
                 </div>
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                   <div
                     onClick={(e) => handlePlayArtistQuick(art, e)}
-                    className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
+                    className="w-11 h-11 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[24px]">
                       {isArtistPlaying ? "pause" : "play_arrow"}
@@ -1404,11 +1339,11 @@ function SearchContent() {
                 </div>
               </div>
 
-              <div className="flex flex-col min-w-0">
+              <div className="flex flex-col min-w-0 text-center">
                 <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-primary transition-colors truncate">
                   {art.name}
                 </h3>
-                <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                <p className="text-[11px] text-neutral-400 truncate mt-0.5">
                   {art.role || "Artist"} • {art.genre || "Popular Artist"}
                 </p>
               </div>
@@ -1429,7 +1364,7 @@ function SearchContent() {
               <button
                 type="button"
                 onClick={(e) => handleArtistCardClick(art, e)}
-                className="w-full mt-2.5 py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
+                className="w-full mt-2.5 py-1.5 px-3 rounded-[4px] bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="material-symbols-outlined text-[15px] flex-shrink-0">queue_music</span>
@@ -1460,16 +1395,16 @@ function SearchContent() {
           </div>
           <div
             onClick={() => handleTrackClick(topSong, liveTracks)}
-            className="group relative p-3 sm:p-3.5 rounded-2xl glass-card border border-white/10 hover:border-primary/40 bg-surface-container/80 hover:bg-surface-container transition-all cursor-pointer shadow-lg flex flex-col justify-between select-none w-full"
+            className="group relative p-2 rounded-[4px] hover:bg-white/[0.04] transition-all cursor-pointer flex flex-col justify-between select-none w-full"
           >
             <div>
-              <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-2.5">
+              <div className="relative w-full aspect-square rounded-[4px] overflow-hidden bg-surface-container-highest shadow-md mb-2.5">
                 <img
                   src={topSong.thumbnail || topSong.image || topSong.coverUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80"}
                   alt={topSong.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 rounded-[4px]"
                 />
-                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-primary flex items-center gap-1 shadow-md">
+                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-[3px] text-[9px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 text-primary flex items-center gap-1 shadow-md">
                   <span className="material-symbols-outlined text-[12px] text-primary">music_note</span>
                   <span className="uppercase tracking-wider font-bold">Top Song</span>
                 </div>
@@ -1479,7 +1414,7 @@ function SearchContent() {
                       e.stopPropagation();
                       handleTrackClick(topSong, liveTracks);
                     }}
-                    className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
+                    className="w-11 h-11 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform scale-90 group-hover:scale-100 transition-transform duration-300 cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[24px]">
                       {isTopPlaying ? "pause" : "play_arrow"}
@@ -1492,7 +1427,7 @@ function SearchContent() {
                 <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-primary transition-colors truncate">
                   {topSong.title}
                 </h3>
-                <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                <p className="text-[11px] text-neutral-400 truncate mt-0.5">
                   {topSong.artist} • {topSong.album || "Single"}
                 </p>
                 {topSong.playCountFormatted && (
@@ -1512,7 +1447,7 @@ function SearchContent() {
                   <button
                     type="button"
                     onClick={() => addToQueue(topSong)}
-                    className="p-1 rounded-lg text-outline hover:text-primary hover:bg-white/10 transition-colors"
+                    className="p-1 rounded-[4px] text-outline hover:text-primary hover:bg-white/10 transition-colors"
                     title="Add to Queue"
                   >
                     <span className="material-symbols-outlined text-[17px]">playlist_add</span>
@@ -1520,7 +1455,7 @@ function SearchContent() {
                   <button
                     type="button"
                     onClick={() => toggleLike(topSong)}
-                    className={`p-1 rounded-lg transition-colors ${isLiked(topSong.id) ? "text-primary" : "text-outline hover:text-white hover:bg-white/10"}`}
+                    className={`p-1 rounded-[4px] transition-colors ${isLiked(topSong.id) ? "text-primary" : "text-outline hover:text-white hover:bg-white/10"}`}
                     title={isLiked(topSong.id) ? "Liked" : "Like song"}
                   >
                     <span
@@ -1537,7 +1472,7 @@ function SearchContent() {
               <button
                 type="button"
                 onClick={() => handleTrackClick(topSong, liveTracks)}
-                className="w-full mt-2.5 py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
+                className="w-full mt-2.5 py-1.5 px-3 rounded-[4px] bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary hover:text-white font-bold text-xs flex items-center justify-between transition-all shadow-sm group/btn cursor-pointer"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="material-symbols-outlined text-[15px] flex-shrink-0">
@@ -1840,31 +1775,28 @@ function SearchContent() {
                           </div>
                         )}
 
-                        {/* 4. Playlists (Spotify) */}
-                        {spotifyPlaylists.length > 0 && (
+                        {/* 4. Playlists (JioSaavn) */}
+                        {playlists.length > 0 && (
                           <div className="flex flex-col gap-2.5">
                             <div className="flex items-center justify-between pb-0.5">
                               <div className="flex items-center gap-1.5">
-                                <SpotifyIcon className="w-4 h-4 text-[#1DB954]" />
+                                <span className="material-symbols-outlined text-primary text-[18px]">queue_music</span>
                                 <h2 className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
-                                  Spotify Playlists
+                                  Playlists
                                 </h2>
-                                <span className="text-[11px] font-mono text-outline">({spotifyPlaylists.length})</span>
-                                <SpotifyBadge label="Spotify" size="xs" />
+                                <span className="text-[11px] font-mono text-outline">({playlists.length})</span>
                               </div>
                               <button
                                 type="button"
                                 onClick={() => setActiveFilter("Playlists")}
-                                className="text-xs font-semibold text-[#1ed760] hover:underline flex items-center gap-1 cursor-pointer"
+                                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                               >
                                 <span>See all</span>
                                 <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                               </button>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                              {spotifyPlaylists.slice(0, 6).map((pl) => (
-                                <SpotifyPlaylistCard key={pl.id} playlist={pl} />
-                              ))}
+                              {playlists.slice(0, 6).map((pl) => renderSmallPlaylistCard(pl))}
                             </div>
                           </div>
                         )}
@@ -1978,20 +1910,14 @@ function SearchContent() {
                                   <button
                                     type="button"
                                     onClick={() => setActiveFilter("Playlists")}
-                                    className="text-[11px] text-[#1ed760] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                                    className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
                                   >
                                     <span>See all</span>
                                     <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
                                   </button>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
-                                  {leftPlaylists.slice(0, 4).map((pl) => (
-                                    pl.isSpotify || pl.source === "spotify" ? (
-                                      <SpotifyPlaylistCard key={pl.id} playlist={pl} />
-                                    ) : (
-                                      renderSmallPlaylistCard(pl)
-                                    )
-                                  ))}
+                                  {leftPlaylists.slice(0, 4).map((pl) => renderSmallPlaylistCard(pl))}
                                 </div>
                               </div>
                             )}
@@ -2104,24 +2030,23 @@ function SearchContent() {
                         </div>
                       )}
 
-                      {/* Horizontal Carousel: Spotify Playlists (Desktop only) */}
-                      {spotifyPlaylists.length > 0 && (
+                      {/* Horizontal Carousel: JioSaavn Playlists (Desktop only) */}
+                      {playlists.length > 0 && (
                         <div className="hidden lg:flex flex-col gap-3 pt-2">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <SpotifyIcon className="w-5 h-5 text-[#1DB954]" />
+                              <span className="material-symbols-outlined text-primary text-[20px]">queue_music</span>
                               <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                                Spotify Playlists
+                                Playlists
                               </h2>
-                              <span className="text-xs font-mono text-outline">({spotifyPlaylists.length})</span>
-                              <SpotifyBadge label="Spotify" size="xs" />
+                              <span className="text-xs font-mono text-outline">({playlists.length})</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              {spotifyPlaylists.length > 4 && (
+                              {playlists.length > 4 && (
                                 <button
                                   type="button"
                                   onClick={() => setActiveFilter("Playlists")}
-                                  className="text-xs font-semibold text-[#1ed760] hover:underline flex items-center gap-1 cursor-pointer"
+                                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                                 >
                                   <span>See all</span>
                                   <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
@@ -2130,12 +2055,10 @@ function SearchContent() {
                             </div>
                           </div>
                           <div
-                            ref={spotifyPlaylistsCarouselRef}
+                            ref={playlistsCarouselRef}
                             className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth pb-2 pt-1"
                           >
-                            {spotifyPlaylists.map((pl) => (
-                              <SpotifyPlaylistCard key={pl.id} playlist={pl} isCarousel={true} />
-                            ))}
+                            {playlists.map((pl) => renderPlaylistCard(pl, true))}
                           </div>
                         </div>
                       )}
@@ -2280,23 +2203,22 @@ function SearchContent() {
                 </div>
               )}
 
-              {/* 5. 'Playlists' Layout: Strictly Spotify public playlists */}
+              {/* 5. 'Playlists' Layout: JioSaavn playlists */}
               {activeFilter === "Playlists" && (
                 <div className="w-full flex flex-col gap-4">
                   <div className="flex items-center justify-between pb-0.5">
                     <div className="flex items-center gap-2">
-                      <SpotifyIcon className="w-4 h-4 text-[#1DB954]" />
+                      <span className="material-symbols-outlined text-primary text-[18px]">queue_music</span>
                       <h2 className="text-xs font-bold uppercase tracking-widest text-outline">
                         PLAYLISTS
                       </h2>
-                      <SpotifyBadge label="Spotify" size="xs" />
                     </div>
-                    <span className="text-xs font-mono font-bold text-[#1ed760] uppercase tracking-wider">
-                      {spotifyPlaylists.length} FOUND
+                    <span className="text-xs font-mono font-bold text-primary uppercase tracking-wider">
+                      {playlists.length} FOUND
                     </span>
                   </div>
 
-                  {spotifyPlaylists.length === 0 ? (
+                  {playlists.length === 0 ? (
                     <div className="py-16 text-center flex flex-col items-center gap-3">
                       <div className="w-14 h-14 rounded-full bg-surface-container/80 border border-white/10 flex items-center justify-center text-outline mb-1">
                         <span className="material-symbols-outlined text-[28px]">queue_music</span>
@@ -2304,24 +2226,20 @@ function SearchContent() {
                       <h3 className="text-base font-semibold text-white">No playlists found</h3>
                       <p className="text-xs text-outline max-w-md">
                         {hasQuery
-                          ? `No Spotify playlists match "${debouncedQuery}".`
-                          : "Type in the search bar above to discover Spotify playlists."}
+                          ? `No playlists match "${debouncedQuery}".`
+                          : "Type in the search bar above to discover playlists."}
                       </p>
                     </div>
                   ) : (
                     <>
                       {/* Mobile Responsive: Small Cards in 2-column grid */}
                       <div className="grid grid-cols-2 gap-3 sm:hidden">
-                        {spotifyPlaylists.map((pl) => (
-                          <SpotifyPlaylistCard key={pl.id} playlist={pl} />
-                        ))}
+                        {playlists.map((pl) => renderSmallPlaylistCard(pl))}
                       </div>
 
                       {/* Desktop / Tablet */}
                       <div className="hidden sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 sm:gap-6">
-                        {spotifyPlaylists.map((pl) => (
-                          <SpotifyPlaylistCard key={pl.id} playlist={pl} />
-                        ))}
+                        {playlists.map((pl) => renderPlaylistCard(pl, false))}
                       </div>
                     </>
                   )}
@@ -2647,7 +2565,7 @@ function SearchContent() {
                     router.replace(`/search?genre=${genre.id}`, { scroll: false });
                   }}
                   style={{ background: genre.bgStyle }}
-                  className="group relative h-36 sm:h-44 p-3.5 sm:p-5 rounded-2xl sm:rounded-2xl border border-white/15 hover:border-white/40 overflow-hidden cursor-pointer shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1.5 active:scale-[0.98] select-none flex flex-col justify-between"
+                  className="group relative h-36 sm:h-44 p-3.5 sm:p-5 rounded-[4px] border border-white/15 hover:border-white/40 overflow-hidden cursor-pointer shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1.5 active:scale-[0.98] select-none flex flex-col justify-between"
                 >
                   {/* Subtle top ambient specular shine */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-white/10 pointer-events-none" />

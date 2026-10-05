@@ -6,13 +6,12 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const market = searchParams.get("market")?.trim() || process.env.SPOTIFY_MARKET || "IN";
 
-    const { artists, playlists } = await getSpotifyDiscovery(market);
+    const { artists } = await getSpotifyDiscovery(market);
 
     return NextResponse.json({
       success: true,
       market,
       artists: artists || [],
-      playlists: playlists || [],
     });
   } catch (err) {
     console.error("[Spotify API] Discovery error:", err);
@@ -22,7 +21,6 @@ export async function GET(request) {
         success: false,
         error: "Spotify discovery unavailable",
         artists: [],
-        playlists: [],
       },
       { status: 200 }
     );

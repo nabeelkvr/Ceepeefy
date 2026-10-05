@@ -22,7 +22,7 @@ export const SPOTIFY_STYLE_PLAYLISTS = [
     title: "RapCaviar",
     description: "Music from Kendrick Lamar, Drake, Travis Scott, J. Cole, and future icons.",
     curator: "Spotify",
-    coverUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80",
+    coverUrl: "https://images.unsplash.com/photo-1606813907291-d86efa9b94db?w=600&auto=format&fit=crop&q=80",
     tracks: NOCTURNE_TRACKS.filter((t) => t.genre === "Hip-Hop" || t.genre === "Trap"),
   },
   {
@@ -31,7 +31,7 @@ export const SPOTIFY_STYLE_PLAYLISTS = [
     title: "Late Night Lo-Fi",
     description: "Gentle low-tempo beats, warm vinyl dust, and calming keys for nocturnal focus.",
     curator: "Nocturne Labs",
-    coverUrl: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
+    coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
     tracks: NOCTURNE_TRACKS.slice(0, 8),
   },
   {
@@ -40,7 +40,7 @@ export const SPOTIFY_STYLE_PLAYLISTS = [
     title: "Cyberpunk Atmosphere",
     description: "Rain-slicked neon soundscapes, modular synthesizer pulses, and dark drones.",
     curator: "Elani",
-    coverUrl: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80",
+    coverUrl: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600&auto=format&fit=crop&q=80",
     tracks: NOCTURNE_TRACKS.slice(1, 9),
   },
   {
@@ -49,7 +49,7 @@ export const SPOTIFY_STYLE_PLAYLISTS = [
     title: "golden hour",
     description: "Warm acoustic melodies, soulful sunsets, and relaxed late afternoon vibes.",
     curator: "Ceepeefy",
-    coverUrl: "https://images.unsplash.com/photo-1509233725247-49e657c54213?w=600&auto=format&fit=crop&q=80",
+    coverUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80",
     tracks: NOCTURNE_TRACKS.slice(4, 12),
   },
   {

@@ -15,18 +15,16 @@ export async function GET(request) {
         query: "",
         market,
         artists: [],
-        playlists: [],
       });
     }
 
-    const { artists, playlists } = await searchSpotifyCatalog(query, market, limit);
+    const { artists } = await searchSpotifyCatalog(query, market, limit);
 
     return NextResponse.json({
       success: true,
       query,
       market,
       artists: artists || [],
-      playlists: playlists || [],
     });
   } catch (err) {
     console.error("[Spotify API] Search error:", err?.message || err);
@@ -36,7 +34,6 @@ export async function GET(request) {
         success: false,
         error: "Spotify search unavailable",
         artists: [],
-        playlists: [],
       },
       { status: 200 }
     );

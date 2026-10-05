@@ -680,9 +680,15 @@ export default function Player() {
         </aside>
       )}
 
-      {/* 3b. FULL-LENGTH FLOATING BOTTOM PLAYER BAR (Image 2 style: Floating island pill with full data) */}
+      {/* 3b. FULL-LENGTH FLOATING BOTTOM PLAYER BAR (Floating island pill centered in main content) */}
       {playerMode === "bar" && (
-        <footer className="hidden md:flex fixed bottom-3 md:bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-5xl md:max-w-6xl h-20 rounded-2xl bg-[#0a0f1d]/85 backdrop-blur-2xl border border-white/12 px-4 md:px-6 z-50 items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.75)] select-none animate-slide-up transition-all">
+        <footer
+          className={`hidden md:flex fixed bottom-3 md:bottom-4 ${
+            isQueueOpen
+              ? "left-64 right-[380px] lg:right-[400px]"
+              : "left-64 right-0"
+          } mx-auto w-[calc(100%-18rem)] max-w-5xl lg:max-w-6xl h-20 rounded-2xl bg-[#0a0f1d]/85 backdrop-blur-2xl border border-white/12 px-4 md:px-6 z-50 items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.75)] select-none animate-slide-up transition-all`}
+        >
           {/* Left: Track Details */}
           <div className="flex items-center gap-3 md:gap-3.5 w-48 sm:w-60 md:w-72 min-w-0">
             <div

@@ -252,9 +252,15 @@ export function getPersonalizedRecommendations(recentlyPlayedTracks = [], option
       }
     }
 
-    // Controlled variation based on refresh seed (ensures top items remain stable while introducing pleasant variety)
-    const variation = (seededRandom(tid, refreshSeed) - 0.5) * 14;
-    score += variation;
+    // Dynamic variation based on refresh seed (ensures top items refresh and rotate on every click)
+    if (refreshSeed > 0) {
+      const seedNoise = seededRandom(`${tid}_v${refreshSeed}`, refreshSeed * 9973);
+      const variation = (seedNoise - 0.5) * 90;
+      score += variation;
+    } else {
+      const initialVariation = (seededRandom(tid, 42) - 0.5) * 10;
+      score += initialVariation;
+    }
 
     return {
       track: candidate,
