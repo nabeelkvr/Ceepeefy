@@ -31,72 +31,63 @@ import {
   MALAYALAM_HITS,
   MADE_FOR_YOU_TRACKS,
   CHILL_RELAX_TRACKS,
+  HINDI_BESTS_TRACKS,
+  TAMIL_HITS,
+  ENGLISH_VIBES_TRACKS,
 } from "../data/curatedDiscovery";
 
 const FEATURED_PLAYLIST_COLLECTION = [
   {
-    id: "hindi-hits",
-    playlistId: "midnight-reverie",
-    title: "Hindi",
-    subtitle: "हिट्स",
-    gradient: "from-[#6f0f1b] via-[#480a11] to-[#1c0307]",
-    image: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80",
-  },
-  {
-    id: "english-top-hits",
-    playlistId: "midnight-club",
-    title: "English",
-    subtitle: "Top Hits",
-    gradient: "from-[#0c4a6e] via-[#082f49] to-[#02131e]",
-    image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&auto=format&fit=crop&q=80",
-  },
-  {
     id: "chill-vibes",
-    playlistId: "late-night-lofi",
-    title: "Chill",
-    subtitle: "Vibes",
-    gradient: "from-[#4a123f] via-[#2f0c29] to-[#120410]",
-    image: "https://images.unsplash.com/photo-1509233725247-49e657c54213?w=600&auto=format&fit=crop&q=80",
+    playlistId: "chill-vibes",
+    badgeIcon: "music_note",
+    badgeLabel: "Chill Vibes",
+    badgeClass: "bg-[#6366f1]/25 text-[#c7d2fe] border-[#818cf8]/40",
+    buttonBg: "from-[#6366f1] to-[#818cf8]",
+    cardBorder: "border-[#6366f1]/30 hover:border-[#818cf8]/70 hover:shadow-[0_0_30px_rgba(99,102,241,0.3)]",
+    cardGradient: "from-[#0f0c29]/95 via-[#1b143f]/85 to-[#0b0819]/90",
+    title: "Chill Vibes",
+    subtitle: "Relax • Unwind • Feel Good",
+    image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80",
   },
   {
-    id: "workout-beats",
-    playlistId: "deep-state",
-    title: "Workout",
-    subtitle: "Beats",
-    gradient: "from-[#1e293b] via-[#0f172a] to-[#020617]",
-    image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600&auto=format&fit=crop&q=80",
+    id: "top-hits-2025",
+    playlistId: "top-hits-2025",
+    badgeIcon: "local_fire_department",
+    badgeLabel: "Top Hits",
+    badgeClass: "bg-[#f43f5e]/25 text-[#fecdd3] border-[#fb7185]/40",
+    buttonBg: "from-[#f43f5e] to-[#fb7185]",
+    cardBorder: "border-[#f43f5e]/30 hover:border-[#fb7185]/70 hover:shadow-[0_0_30px_rgba(244,63,94,0.3)]",
+    cardGradient: "from-[#200511]/95 via-[#3b0821]/85 to-[#12020a]/90",
+    title: "Top Hits 2025",
+    subtitle: "Trending Now",
+    image: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=80",
   },
   {
-    id: "punjabi-hits",
-    playlistId: "cyberpunk-atmosphere",
-    title: "Punjabi",
-    subtitle: "ਪੰਜਾਬੀ Pop",
-    gradient: "from-[#78350f] via-[#451a03] to-[#1c0802]",
-    image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80",
+    id: "gym-power",
+    playlistId: "gym-power",
+    badgeIcon: "star",
+    badgeLabel: "Workout",
+    badgeClass: "bg-[#059669]/25 text-[#a7f3d0] border-[#34d399]/40",
+    buttonBg: "from-[#059669] to-[#10b981]",
+    cardBorder: "border-[#059669]/30 hover:border-[#34d399]/70 hover:shadow-[0_0_30px_rgba(16,185,129,0.3)]",
+    cardGradient: "from-[#021f18]/95 via-[#06382b]/85 to-[#01140f]/90",
+    title: "Gym Power",
+    subtitle: "Be Stronger Every Day",
+    image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=800&auto=format&fit=crop&q=80",
   },
   {
-    id: "malayalam-chill",
-    playlistId: "acoustic-focus",
-    title: "Malayalam",
-    subtitle: "മലയാളം Hits",
-    gradient: "from-[#064e3b] via-[#022c22] to-[#01140f]",
-    image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&auto=format&fit=crop&q=80",
-  },
-  {
-    id: "bollywood-romance",
-    playlistId: "coffee-chill",
-    title: "Bollywood",
-    subtitle: "Romance",
-    gradient: "from-[#831843] via-[#500724] to-[#1f020d]",
-    image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=600&auto=format&fit=crop&q=80",
-  },
-  {
-    id: "lofi-midnight",
-    playlistId: "study-lofi",
-    title: "Lo-Fi",
-    subtitle: "Midnight",
-    gradient: "from-[#312e81] via-[#1e1b4b] to-[#090820]",
-    image: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
+    id: "love-ballads",
+    playlistId: "love-ballads",
+    badgeIcon: "favorite",
+    badgeLabel: "Romantic",
+    badgeClass: "bg-[#c026d3]/25 text-[#f5d0fe] border-[#e879f9]/40",
+    buttonBg: "from-[#c026d3] to-[#d946ef]",
+    cardBorder: "border-[#c026d3]/30 hover:border-[#e879f9]/70 hover:shadow-[0_0_30px_rgba(217,70,239,0.3)]",
+    cardGradient: "from-[#1d0628]/95 via-[#350b4a]/85 to-[#0f0215]/90",
+    title: "Love Ballads",
+    subtitle: "For Special Moments",
+    image: "https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=800&auto=format&fit=crop&q=80",
   },
 ];
 
@@ -179,14 +170,7 @@ export default function HomePage() {
     }
   };
 
-  // 4 big cards in 2 rows, randomly chosen from curated featured collection
-  const [featuredCards, setFeaturedCards] = useState(() => FEATURED_PLAYLIST_COLLECTION.slice(0, 4));
 
-  useEffect(() => {
-    // Randomize 4 cards on client mount to display in 2 rows randomly
-    const shuffled = [...FEATURED_PLAYLIST_COLLECTION].sort(() => 0.5 - Math.random());
-    setFeaturedCards(shuffled.slice(0, 4));
-  }, []);
 
   const scrollRecents = (direction) => {
     if (recentsContainerRef.current) {
@@ -341,6 +325,25 @@ export default function HomePage() {
     return getArtistsByCategory(artistCategory, effectiveSeed, liveTrendingArtists, 12);
   }, [artistCategory, refreshSeed, liveTrendingArtists]);
 
+  // Automatically rotates Malayalam Hits every calendar day with random popular songs
+  const dailyMalayalamHits = useMemo(() => {
+    const daySeed = getTodayDaySeed();
+    const list = [...MALAYALAM_HITS];
+    let m = list.length, t, i;
+    let seed = daySeed * 47;
+    const random = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    while (m) {
+      i = Math.floor(random() * m--);
+      t = list[m];
+      list[m] = list[i];
+      list[i] = t;
+    }
+    return list;
+  }, []);
+
   const handleArtistPlay = async (artist, e) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
@@ -441,7 +444,7 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Section 2: Featured Playlists (Image 1: 4 big cards in 2 rows randomly) */}
+      {/* Section 2: Featured Playlists (Image 1: 4 modern cards in a row with badges and Play Now buttons) */}
       <section ref={playlistsSectionRef} id="featured-playlists" className="flex flex-col gap-3.5 sm:gap-4.5 scroll-mt-6">
         <div className="flex items-center justify-between">
           <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
@@ -459,11 +462,18 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* 4 Big Cards in 2 Rows */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-5">
-          {featuredCards.map((card) => {
+        {/* 4 Cards in 1 Row (Responsive: 1 col on mobile, 2 col on tablet, 4 col on desktop) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 md:gap-4.5">
+          {FEATURED_PLAYLIST_COLLECTION.map((card) => {
+            const spotPl = SPOTIFY_STYLE_PLAYLISTS.find(
+              (p) => p.id === card.playlistId || p.playlistId === card.playlistId
+            );
             const nocturnePl = NOCTURNE_PLAYLISTS.find((p) => p.id === card.playlistId);
-            const playlistTracks = nocturnePl?.tracks?.length ? nocturnePl.tracks : NOCTURNE_TRACKS;
+            const playlistTracks = spotPl?.tracks?.length
+              ? spotPl.tracks
+              : nocturnePl?.tracks?.length
+              ? nocturnePl.tracks
+              : NOCTURNE_TRACKS;
             const isCardPlaying = isPlaying && playlistTracks.some((t) => t.id === currentTrack?.id);
 
             const handleCardClick = () => {
@@ -484,52 +494,70 @@ export default function HomePage() {
               <div
                 key={card.id}
                 onClick={handleCardClick}
-                className={`relative h-24 sm:h-28 md:h-32 rounded-[4px] overflow-hidden bg-gradient-to-r ${card.gradient} border border-white/10 hover:border-primary/50 transition-all duration-300 hover:scale-[1.02] shadow-xl group cursor-pointer flex items-center justify-between p-3.5 sm:p-5 md:p-6 select-none`}
+                className={`relative h-44 sm:h-48 lg:h-52 rounded-2xl overflow-hidden bg-gradient-to-br ${card.cardGradient} border ${card.cardBorder} transition-all duration-300 hover:scale-[1.02] shadow-xl group cursor-pointer flex flex-col justify-between p-4 sm:p-5 select-none`}
               >
-                {/* Left: Big Bold Title & Subtitle */}
-                <div className="flex flex-col justify-center min-w-0 z-10 max-w-[55%]">
-                  <h3 className="text-base sm:text-lg md:text-2xl font-black text-white tracking-tight leading-none drop-shadow-md">
-                    {card.title}
-                  </h3>
-                  <p className="text-xs sm:text-sm font-semibold text-white/75 mt-1 sm:mt-1.5 drop-shadow-sm truncate">
-                    {card.subtitle}
-                  </p>
-                </div>
-
-                {/* Right: Cover Photo with Smooth Mask Gradient */}
+                {/* Background Image with Ambient Smooth Mask */}
                 <div
-                  className="absolute right-0 top-0 bottom-0 w-1/2 sm:w-5/12 h-full overflow-hidden select-none pointer-events-none"
+                  className="absolute right-0 top-0 bottom-0 w-3/5 sm:w-7/12 h-full overflow-hidden select-none pointer-events-none"
                   style={{
-                    maskImage: "linear-gradient(to left, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)",
-                    WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)",
+                    maskImage: "linear-gradient(to left, rgba(0,0,0,0.95) 30%, rgba(0,0,0,0) 100%)",
+                    WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,0.95) 30%, rgba(0,0,0,0) 100%)",
                   }}
                 >
                   <img
                     src={card.image}
                     alt={card.title}
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
                     loading="lazy"
                   />
                 </div>
 
-                {/* Hover / Active Play Button */}
-                <div className="absolute right-3 sm:right-5 bottom-2.5 sm:bottom-3.5 z-20">
-                  <button
-                    type="button"
-                    onClick={handlePlayClick}
-                    className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_0_20px_rgba(var(--color-primary-rgb),0.6)] transition-all duration-300 hover:scale-110 active:scale-95 ${
-                      isCardPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100 transform translate-y-1 group-hover:translate-y-0"
-                    }`}
-                    title={isCardPlaying ? "Pause" : "Play"}
+                {/* Top Badge */}
+                <div className="z-10 flex items-center">
+                  <div
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold backdrop-blur-md border ${card.badgeClass}`}
                   >
-                    <span className="material-symbols-outlined text-[20px] sm:text-[24px]">
-                      {isCardPlaying ? "pause" : "play_arrow"}
+                    <span className="material-symbols-outlined text-[14px] leading-none">
+                      {card.badgeIcon}
                     </span>
-                  </button>
+                    <span>{card.badgeLabel}</span>
+                  </div>
+                </div>
+
+                {/* Bottom Content: Title, Subtitle, Play Button */}
+                <div className="z-10 flex flex-col mt-auto pt-2">
+                  <h3 className="text-base sm:text-lg lg:text-xl font-bold text-white tracking-tight leading-tight drop-shadow-md">
+                    {card.title}
+                  </h3>
+                  <p className="text-[11px] sm:text-xs font-normal text-white/75 mt-0.5 drop-shadow-sm truncate max-w-[85%]">
+                    {card.subtitle}
+                  </p>
+
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={handlePlayClick}
+                      className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r ${card.buttonBg} text-white text-xs sm:text-sm font-bold shadow-lg hover:scale-105 active:scale-95 transition-all w-fit cursor-pointer`}
+                    >
+                      <span className="material-symbols-outlined text-[16px] leading-none">
+                        {isCardPlaying ? "pause" : "play_arrow"}
+                      </span>
+                      <span>{isCardPlaying ? "Pause" : "Play Now"}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })}
+        </div>
+
+        {/* Carousel Pagination Indicator (Image 1) */}
+        <div className="flex items-center justify-center gap-1.5 pt-1.5 pb-1">
+          <div className="w-4 h-1.5 rounded-full bg-primary/80" />
+          <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
+          <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
+          <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
+          <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
         </div>
 
         {/* Under the 4 Big Cards: Spotify-Style Curated Playlist Row (Image 1) */}
@@ -754,23 +782,28 @@ export default function HomePage() {
         </div>
 
         <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
-          {MALAYALAM_HITS.map((track) => (
-            <SongCard key={track.id} track={track} trackList={MALAYALAM_HITS} />
+          {dailyMalayalamHits.map((track) => (
+            <SongCard key={track.id} track={track} trackList={dailyMalayalamHits} />
           ))}
         </div>
       </section>
 
-      {/* Section 6: Chill & Relax */}
+      {/* Section 6: Hindi Bests */}
       <section className="flex flex-col gap-3.5 md:gap-4.5">
         <div className="flex items-center justify-between">
-          <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
-            Chill &amp; Relax
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+              Hindi Bests
+            </h2>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30 font-semibold flex-shrink-0">
+              Trending
+            </span>
+          </div>
           <Link
-            href="/playlist/late-night-lofi"
+            href="/search?genre=hindi"
             className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
           >
-            <span>Chill Stream</span>
+            <span>Explore All</span>
             <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
               arrow_forward
             </span>
@@ -778,196 +811,76 @@ export default function HomePage() {
         </div>
 
         <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
-          {CHILL_RELAX_TRACKS.map((track) => (
-            <SongCard key={track.id} track={track} trackList={CHILL_RELAX_TRACKS} />
+          {HINDI_BESTS_TRACKS.map((track) => (
+            <SongCard key={track.id} track={track} trackList={HINDI_BESTS_TRACKS} />
           ))}
         </div>
       </section>
 
-      {/* Section 7: My self mixes */}
-      <section ref={selfMixesSectionRef} id="self-mixes" className="flex flex-col gap-4 pb-10 scroll-mt-6">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight truncate">
-              My self mixes
+      {/* Section 7: Tamil Hits */}
+      <section className="flex flex-col gap-3.5 md:gap-4.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+              Tamil Hits
             </h2>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-secondary-container/70 text-secondary border border-secondary/30 font-semibold flex-shrink-0">
-              {selfMixes?.length || 0} {selfMixes?.length === 1 ? "Mix" : "Mixes"}
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-400 border border-emerald-400/30 font-semibold flex-shrink-0">
+              Hot & Trending
             </span>
           </div>
-
           <Link
-            href="/self-mix"
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/10 hover:border-primary/50 text-xs font-semibold text-outline hover:text-white transition-all"
+            href="/search?genre=tamil"
+            className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
           >
-            <span className="material-symbols-outlined text-[16px] text-primary">add</span>
-            <span>New Mix</span>
+            <span>Explore All</span>
+            <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+              arrow_forward
+            </span>
           </Link>
         </div>
 
-        {/* Mixes Section: Mobile Sleek Horizontal List + Desktop Responsive Grid */}
-        {(() => {
-          const displayedMixes = (selfMixes && selfMixes.length > 0) ? selfMixes : NOCTURNE_MIXES;
-
-          return (
-            <>
-              {/* 1. Mobile Horizontal Cards (< md) */}
-              <div className="flex flex-col gap-2 md:hidden">
-                {displayedMixes.map((mix, idx) => {
-                  const tracks = mix.tracks || [];
-                  const isMixPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
-                  const rawSpec =
-                    mix.spec || (idx === 0 ? "HI-FI" : idx === 1 ? "SPATIAL 360" : idx === 2 ? "32-BIT" : "FLAC");
-                  const specBadge = rawSpec.includes("24-Bit") ? "24-BIT" : rawSpec.length > 8 ? rawSpec.split("•")[0].trim() : rawSpec;
-
-                  return (
-                    <div
-                      key={mix.id}
-                      onClick={() => router.push(`/self-mix?id=${mix.id}`)}
-                      className="p-1.5 sm:p-2 rounded-[4px] hover:bg-white/[0.04] transition-all flex items-center justify-between gap-3 cursor-pointer group select-none"
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="relative w-12 h-12 rounded-[4px] overflow-hidden bg-surface-container-highest flex-shrink-0 shadow border border-white/10">
-                          <img
-                            src={
-                              mix.coverUrl ||
-                              "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80"
-                            }
-                            alt={mix.title}
-                            loading="lazy"
-                            decoding="async"
-                            className="w-full h-full object-cover rounded-[4px]"
-                          />
-                          {isMixPlaying && (
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-[4px]">
-                              <span className="material-symbols-outlined text-primary text-[16px] animate-pulse">
-                                graphic_eq
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex flex-col min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <h3 className="font-bold text-xs sm:text-sm text-white group-hover:text-primary transition-colors truncate">
-                              {mix.title}
-                            </h3>
-                            <span className="text-[7.5px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex-shrink-0">
-                              {specBadge}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-on-surface-variant truncate mt-0.5">
-                            {tracks.length} {tracks.length === 1 ? "track" : "tracks"} • {mix.curator || "You"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => handleMixPlay(mix, e)}
-                        className="w-8 h-8 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center flex-shrink-0 transition-all shadow-[0_0_12px_rgba(76,215,246,0.5)] active:scale-90 cursor-pointer"
-                        title={isMixPlaying ? "Pause Mix" : "Play Mix"}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          {isMixPlaying ? "pause" : "play_arrow"}
-                        </span>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* 2. Desktop Grid (md:) */}
-              <div
-                ref={mixesContainerRef}
-                className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 overflow-x-auto no-scrollbar scroll-smooth pb-1"
-              >
-                {displayedMixes.map((mix) => {
-                  const tracks = mix.tracks || [];
-                  const isMixPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
-
-                  return (
-                    <Link
-                      key={mix.id}
-                      href={`/self-mix?id=${mix.id}`}
-                      className="group flex flex-col justify-between cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1"
-                    >
-                      <div>
-                        {/* Top Image Box with floating badges & rounded-[4px] edges */}
-                        <div className="relative aspect-[16/10] w-full rounded-[4px] overflow-hidden bg-surface-container-highest shadow-md mb-2">
-                          <img
-                            src={
-                              mix.coverUrl ||
-                              "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80"
-                            }
-                            alt={mix.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 rounded-[4px]"
-                          />
-
-                          {/* Left floating badge */}
-                          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-[3px] bg-black/75 backdrop-blur-md border border-white/10 text-[9px] font-medium text-white flex items-center gap-1 shadow-md">
-                            <span className="material-symbols-outlined text-[12px] text-primary">
-                              queue_music
-                            </span>
-                            <span>SELF MIX</span>
-                          </div>
-
-                          {/* Right floating badge */}
-                          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-[3px] text-[9px] font-mono font-bold tracking-wider uppercase border border-cyan-500/40 bg-cyan-950/80 text-cyan-300 backdrop-blur-md shadow-md">
-                            {tracks.length} {tracks.length === 1 ? "TRACK" : "TRACKS"}
-                          </div>
-
-                          {/* Hover / Playing Play Button */}
-                          <div
-                            className={`absolute inset-0 bg-black/35 flex items-end justify-end p-2 transition-all duration-200 ${
-                              isMixPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={(e) => handleMixPlay(mix, e)}
-                              className="w-8 h-8 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform hover:scale-110 active:scale-95 transition-all cursor-pointer"
-                              title={isMixPlaying ? "Pause Mix" : "Play Mix"}
-                            >
-                              <span className="material-symbols-outlined text-[18px]">
-                                {isMixPlaying ? "pause" : "play_arrow"}
-                              </span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Title & Playing Indicator */}
-                        <div className="flex items-center justify-between gap-1.5">
-                          <h3 className="font-bold text-xs sm:text-sm text-white group-hover:text-primary transition-colors truncate">
-                            {mix.title}
-                          </h3>
-                          {isMixPlaying && (
-                            <div className="flex items-center gap-0.5 flex-shrink-0">
-                              <span className="w-1 h-3 bg-primary rounded-full animate-pulse" />
-                              <span className="w-1 h-4 bg-primary rounded-full animate-pulse delay-75" />
-                              <span className="w-1 h-2 bg-primary rounded-full animate-pulse delay-150" />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Subtitle */}
-                        <p className="text-[11px] text-neutral-400 line-clamp-2 mt-0.5 leading-snug">
-                          {mix.subtitle || mix.description || `Self mix by ${mix.curator || "You"}`}
-                        </p>
-                      </div>
-
-                      {/* Footer: Metadata */}
-                      <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/5 text-[10.5px] font-mono text-outline">
-                        <span>{tracks.length} tracks • {mix.duration || "Self Mix"}</span>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            </>
-          );
-        })()}
+        <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
+          {TAMIL_HITS.map((track) => (
+            <SongCard key={track.id} track={track} trackList={TAMIL_HITS} />
+          ))}
+        </div>
       </section>
+
+      {/* Section 8: English Vibes */}
+      <section className="flex flex-col gap-3.5 md:gap-4.5 pb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+              English Vibes
+            </h2>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-400/15 text-purple-400 border border-purple-400/30 font-semibold flex-shrink-0">
+              Global Hits
+            </span>
+          </div>
+          <Link
+            href="/search?genre=english"
+            className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
+          >
+            <span>Explore All</span>
+            <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+              arrow_forward
+            </span>
+          </Link>
+        </div>
+
+        <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
+          {ENGLISH_VIBES_TRACKS.map((track) => (
+            <SongCard key={track.id} track={track} trackList={ENGLISH_VIBES_TRACKS} />
+          ))}
+        </div>
+      </section>
+
+      {/* Massive Aesthetic Brand Typography Watermark (Matching Image 3) */}
+      <footer className="w-full flex items-center justify-center pt-8 pb-14 sm:pb-20 select-none pointer-events-none overflow-hidden border-t border-white/[0.03] mt-8">
+        <span className="font-black text-4xl sm:text-7xl md:text-8xl lg:text-[9.5rem] tracking-tighter text-white/[0.06] uppercase leading-none text-center">
+          Ceepeefy.com
+        </span>
+      </footer>
     </div>
   );
 }

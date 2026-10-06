@@ -384,9 +384,6 @@ export default function PlaylistsPage() {
                         {pl.title}
                       </h3>
                     )}
-                    <p className="text-[10px] sm:text-[11px] text-on-surface-variant line-clamp-1 mt-0.5">
-                      {pl.description || (pl.isCustom ? `Playlist by ${pl.curator || "You"}` : pl.curator || "Curated collection")}
-                    </p>
                   </div>
                 </div>
 

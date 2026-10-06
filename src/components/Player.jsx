@@ -680,53 +680,45 @@ export default function Player() {
         </aside>
       )}
 
-      {/* 3b. FULL-LENGTH FLOATING BOTTOM PLAYER BAR (Floating island pill centered in main content) */}
+      {/* 3b. FULL-LENGTH FLOATING BOTTOM PLAYER BAR (Floating island bar across main content area, Image 5) */}
       {playerMode === "bar" && (
         <footer
           className={`hidden md:flex fixed bottom-3 md:bottom-4 ${
             isQueueOpen
-              ? "left-64 right-[380px] lg:right-[400px]"
-              : "left-64 right-0"
-          } mx-auto w-[calc(100%-18rem)] max-w-5xl lg:max-w-6xl h-20 rounded-2xl bg-[#0a0f1d]/85 backdrop-blur-2xl border border-white/12 px-4 md:px-6 z-50 items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.75)] select-none animate-slide-up transition-all`}
+              ? "left-[84px] right-[380px] lg:right-[400px]"
+              : "left-[84px] right-3 md:right-4"
+          } h-[88px] rounded-[24px] bg-[#070d1a]/95 backdrop-blur-3xl border border-white/[0.04] px-5 md:px-7 z-40 items-center justify-between shadow-[0_20px_60px_rgba(0,0,0,0.85),0_0_35px_rgba(6,182,212,0.1)] select-none animate-slide-up transition-all duration-300`}
         >
           {/* Left: Track Details */}
-          <div className="flex items-center gap-3 md:gap-3.5 w-48 sm:w-60 md:w-72 min-w-0">
+          <div className="flex items-center gap-3.5 md:gap-4 w-52 sm:w-64 md:w-80 min-w-0">
             <div
-              onClick={() => setPlayerMode("card")}
-              className="relative w-12 h-12 md:w-13 md:h-13 rounded-[4px] overflow-hidden bg-[#161922] flex-shrink-0 flex items-center justify-center shadow-md border border-white/10 group cursor-pointer"
-              title="Click for Big Photo Card View"
+              className="relative w-13 h-13 md:w-14 md:h-14 rounded-2xl overflow-hidden bg-[#161922] flex-shrink-0 flex items-center justify-center shadow-lg border border-white/5 group"
             >
               <img
                 alt={currentTrack.title}
                 src={currentTrack.coverUrl}
-                className="w-full h-full object-cover rounded-[4px] group-hover:scale-110 transition-transform duration-300"
+                className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
               />
-              <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-[4px]">
-                <span className="material-symbols-outlined text-white text-[18px]">
-                  aspect_ratio
-                </span>
-              </div>
             </div>
 
             <div className="flex flex-col min-w-0">
               <span
-                onClick={() => setPlayerMode("card")}
-                className="text-xs md:text-sm font-bold text-white truncate hover:text-primary transition-colors cursor-pointer"
-                title="Click to view card"
+                className="text-xs md:text-sm font-bold text-white truncate"
               >
                 {currentTrack.title}
               </span>
-              <span className="text-[10px] md:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate hover:underline cursor-pointer mt-0.5">
+              <span className="text-[10px] md:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate mt-0.5">
                 {currentTrack.artist}
               </span>
             </div>
 
             <button
               onClick={() => toggleLike(currentTrack)}
-              className={`flex-shrink-0 p-1.5 rounded-full hover:bg-surface-container ml-1 transition-colors ${isLiked(currentTrack.id)
-                ? "text-primary hover:text-cyan-300"
-                : "text-outline hover:text-primary"
-                }`}
+              className={`flex-shrink-0 p-1.5 rounded-full hover:bg-surface-container ml-1 transition-colors ${
+                isLiked(currentTrack.id)
+                  ? "text-primary hover:text-cyan-300"
+                  : "text-outline hover:text-primary"
+              }`}
               title={isLiked(currentTrack.id) ? "Remove from favorites" : "Add to favorites"}
             >
               <span
@@ -745,8 +737,9 @@ export default function Player() {
             <div className="flex items-center gap-3 sm:gap-6">
               <button
                 onClick={() => setIsShuffle(!isShuffle)}
-                className={`p-1.5 rounded-full hover:bg-surface-container transition-colors ${isShuffle ? "text-primary" : "text-outline hover:text-primary"
-                  }`}
+                className={`p-1.5 rounded-full hover:bg-surface-container transition-colors ${
+                  isShuffle ? "text-primary" : "text-outline hover:text-primary"
+                }`}
                 title={`Shuffle: ${isShuffle ? "On" : "Off"}`}
               >
                 <span className="material-symbols-outlined text-[18px] md:text-[20px]">shuffle</span>
@@ -756,10 +749,11 @@ export default function Player() {
                 type="button"
                 onClick={handlePrevTrack}
                 disabled={!hasPrevTrack}
-                className={`p-1.5 rounded-full transition-all active:scale-95 ${hasPrevTrack
+                className={`p-1.5 rounded-full transition-all active:scale-95 ${
+                  hasPrevTrack
                     ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
                     : "opacity-30 text-white/40 cursor-not-allowed"
-                  }`}
+                }`}
                 title={hasPrevTrack ? "Previous track" : "No previous track"}
               >
                 <span className="material-symbols-outlined text-[20px] md:text-[24px]">skip_previous</span>
@@ -767,13 +761,15 @@ export default function Player() {
 
               <button
                 onClick={togglePlay}
-                className={`w-10 h-10 md:w-11 md:h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_22px_rgba(76,215,246,0.6)] ${isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
-                  }`}
+                className={`w-10 h-10 md:w-11 md:h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_22px_rgba(76,215,246,0.6)] ${
+                  isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
+                }`}
                 title={isBuffering ? "Buffering..." : isPlaying ? "Pause" : "Play"}
               >
                 <span
-                  className={`material-symbols-outlined text-[24px] md:text-[28px] ${isBuffering ? "animate-spin text-[20px]" : ""
-                    }`}
+                  className={`material-symbols-outlined text-[24px] md:text-[28px] ${
+                    isBuffering ? "animate-spin text-[20px]" : ""
+                  }`}
                 >
                   {isBuffering ? "progress_activity" : isPlaying ? "pause" : "play_arrow"}
                 </span>
@@ -783,10 +779,11 @@ export default function Player() {
                 type="button"
                 onClick={handleNextTrack}
                 disabled={!hasNextTrack}
-                className={`p-1.5 rounded-full transition-all active:scale-95 ${hasNextTrack
+                className={`p-1.5 rounded-full transition-all active:scale-95 ${
+                  hasNextTrack
                     ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
                     : "opacity-30 text-white/40 cursor-not-allowed"
-                  }`}
+                }`}
                 title={hasNextTrack ? "Next track" : "No next track in queue"}
               >
                 <span className="material-symbols-outlined text-[20px] md:text-[24px]">skip_next</span>
@@ -794,8 +791,9 @@ export default function Player() {
 
               <button
                 onClick={cycleRepeat}
-                className={`p-1.5 rounded-full hover:bg-surface-container transition-colors relative ${repeatMode !== "off" ? "text-primary" : "text-outline hover:text-primary"
-                  }`}
+                className={`p-1.5 rounded-full hover:bg-surface-container transition-colors relative ${
+                  repeatMode !== "off" ? "text-primary" : "text-outline hover:text-primary"
+                }`}
                 title={`Repeat: ${repeatMode}`}
               >
                 <span className="material-symbols-outlined text-[18px] md:text-[20px]">
@@ -806,15 +804,17 @@ export default function Player() {
               {/* Autoplay / Infinite Smart Queue Toggle */}
               <button
                 onClick={toggleAutoplay}
-                className={`p-1.5 rounded-full hover:bg-surface-container transition-colors relative group ${isAutoplayEnabled ? "text-primary" : "text-outline hover:text-primary"
-                  }`}
+                className={`p-1.5 rounded-full hover:bg-surface-container transition-colors relative group ${
+                  isAutoplayEnabled ? "text-primary" : "text-outline hover:text-primary"
+                }`}
                 title={`Autoplay: ${isAutoplayEnabled ? "On (Infinite Smart Queue)" : "Off"}`}
                 aria-label="Toggle Autoplay"
               >
                 <InfinityIcon
                   size={19}
-                  className={`transition-transform duration-200 group-hover:scale-110 ${isAutoplayLoading ? "animate-pulse" : ""
-                    }`}
+                  className={`transition-transform duration-200 group-hover:scale-110 ${
+                    isAutoplayLoading ? "animate-pulse" : ""
+                  }`}
                 />
                 {isAutoplayEnabled && (
                   <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full shadow-[0_0_6px_rgba(76,215,246,0.9)]" />
@@ -849,12 +849,13 @@ export default function Player() {
             </div>
           </div>
 
-          {/* Right: Lyrics, Queue, Device & Volume Controls + Edge 'X' Button (Image 1 fix) */}
+          {/* Right: Lyrics, Queue, Device & Volume Controls + Edge 'X' Button (Image 5) */}
           <div className="flex items-center justify-end gap-1.5 md:gap-2.5 w-48 sm:w-64 md:w-80 min-w-0">
             <button
               onClick={() => setLyricsMode(lyricsMode === "full" ? "hidden" : "full")}
-              className={`p-1.5 md:p-2 rounded-full hover:bg-surface-container transition-colors ${lyricsMode === "full" ? "text-primary bg-surface-container" : "text-outline hover:text-white"
-                }`}
+              className={`p-1.5 md:p-2 rounded-full hover:bg-surface-container transition-colors ${
+                lyricsMode === "full" ? "text-primary bg-surface-container" : "text-outline hover:text-white"
+              }`}
               title="Lyrics (Full-Width View)"
             >
               <span className="material-symbols-outlined text-[18px] md:text-[20px]">lyrics</span>
@@ -869,14 +870,15 @@ export default function Player() {
                   setIsQueueOpen(!isQueueOpen);
                 }
               }}
-              className={`p-1.5 md:p-2 rounded-full hover:bg-surface-container transition-colors ${isQueueOpen ? "text-primary bg-surface-container" : "text-outline hover:text-white"
-                }`}
+              className={`p-1.5 md:p-2 rounded-full hover:bg-surface-container transition-colors ${
+                isQueueOpen ? "text-primary bg-surface-container" : "text-outline hover:text-white"
+              }`}
               title="Up Next Queue"
             >
               <span className="material-symbols-outlined text-[18px] md:text-[20px]">queue_music</span>
             </button>
 
-            {/* Settings / Track Options Menu Button (replaces miniscreen per user request) */}
+            {/* Settings / Track Options Menu Button */}
             {currentTrack && (
               <div className="hidden sm:flex items-center">
                 <SongOptionsMenu
@@ -921,17 +923,7 @@ export default function Player() {
               </div>
             </div>
 
-            {/* Card View Switch Button */}
-            <button
-              onClick={() => setPlayerMode("card")}
-              className="p-1.5 md:p-2 rounded-full hover:bg-surface-container text-outline hover:text-white transition-colors hidden md:flex"
-              title="Big Photo Card View"
-              aria-label="Big Photo Card View"
-            >
-              <span className="material-symbols-outlined text-[18px] md:text-[20px]">aspect_ratio</span>
-            </button>
-
-            {/* Minimize 'X' Button right at the edge of the right side (Image 1 fix) */}
+            {/* Minimize 'X' Button right at the edge of the right side (Image 5) */}
             <div className="pl-1 md:pl-2 border-l border-white/10">
               <button
                 onClick={() => {

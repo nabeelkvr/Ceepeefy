@@ -18,6 +18,7 @@ import { CURATED_GENRES, getGenreById, getGenreByName } from "../../data/genreDa
 import DownloadButton from "../../components/DownloadButton";
 import ArtistAvatar from "../../components/ArtistAvatar";
 import SongOptionsMenu from "../../components/SongOptionsMenu";
+import PlaylistCover from "../../components/PlaylistCover";
 import { formatPlaylistDuration } from "../../utils/playlistUtils";
 import { searchSpotify } from "../../services/spotifyClientService";
 import SpotifyArtistCard from "../../components/SpotifyArtistCard";
@@ -1142,23 +1143,23 @@ function SearchContent() {
         onClick={(e) => handlePlaylistClick(pl, e)}
         className="group flex flex-col gap-1.5 p-1.5 rounded-[4px] hover:bg-white/[0.04] transition-all duration-200 select-none cursor-pointer"
       >
-        {/* Cover Image */}
+        {/* Cover Image / Multi-artwork collage */}
         <div className="relative aspect-square w-full rounded-[4px] overflow-hidden bg-surface-container-highest shadow-md">
-          <img
-            src={pl.coverUrl || pl.image || pl.thumbnail || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"}
+          <PlaylistCover
+            tracks={pl.tracks || []}
+            fallbackUrl={pl.coverUrl || pl.image || pl.thumbnail}
             alt={pl.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 rounded-[4px]"
-            loading="lazy"
           />
           {/* Top-left Badge */}
-          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-[3px] bg-black/75 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1 shadow-md">
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-[3px] bg-black/75 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1 shadow-md z-10">
             <span className="material-symbols-outlined text-[12px]">queue_music</span>
             <span>{pl.isCustom ? "BY YOU" : "PLAYLIST"}</span>
           </div>
 
           {/* Hover / Playing Play Button */}
           <div
-            className={`absolute inset-0 bg-black/35 flex items-end justify-end p-2 transition-opacity duration-200 ${
+            className={`absolute inset-0 bg-black/35 flex items-end justify-end p-2 transition-opacity duration-200 z-20 ${
               isThisPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}
           >
@@ -1207,11 +1208,11 @@ function SearchContent() {
       >
         <div>
           <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-3">
-            <img
-              src={pl.coverUrl || pl.image || pl.thumbnail || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80"}
+            <PlaylistCover
+              tracks={pl.tracks || []}
+              fallbackUrl={pl.coverUrl || pl.image || pl.thumbnail}
               alt={pl.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              loading="lazy"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 rounded-xl"
             />
             {/* Top-Right Badge */}
             <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/80 backdrop-blur-md border border-white/15 flex items-center gap-1.5 shadow-md">
@@ -1670,12 +1671,9 @@ function SearchContent() {
                     </div>
                   ) : (
                     <div className="flex flex-col gap-8">
-                      {/* Mobile Responsive 'All' Layout: 0. Top Result -> 1. Songs List -> 2. Albums -> 3. Artists -> 4. Playlists */}
-                      <div className="flex flex-col gap-6 lg:hidden w-full">
-                        {/* 0. Top Result on Mobile */}
-                        {renderTopResultCard()}
-
-                        {/* 1. Songs List */}
+                      {/* Mobile Responsive 'All' Layout: 1. 8 Songs -> 2. Small Album Cards -> 3. 8 Songs & Small Artist Cards -> 4. 8 Songs & Small Playlist Cards */}
+                      <div className="flex flex-col gap-5 lg:hidden w-full">
+                        {/* 1. First 8 Songs List */}
                         <div className="flex flex-col gap-2.5">
                           <div className="flex items-center justify-between pb-0.5">
                             <div className="flex items-center gap-1.5">
@@ -1701,7 +1699,7 @@ function SearchContent() {
 
                           {liveTracks.length > 0 ? (
                             <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 border border-white/5">
-                              {liveTracks.slice(0, 15).map((track, idx) => renderSongRow(track, idx))}
+                              {liveTracks.slice(0, 8).map((track, idx) => renderSongRow(track, idx))}
                             </div>
                           ) : (
                             <div className="p-6 rounded-2xl bg-surface-container/40 border border-white/5 text-center text-outline text-xs">
@@ -1710,7 +1708,7 @@ function SearchContent() {
                           )}
                         </div>
 
-                        {/* 2. Albums (Image 4 small cards in 2-col grid) */}
+                        {/* 2. Album Cards in Small Cards */}
                         {allAlbums.length > 0 && (
                           <div className="flex flex-col gap-2.5">
                             <div className="flex items-center justify-between pb-0.5">
@@ -1730,13 +1728,30 @@ function SearchContent() {
                                 <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                               </button>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                              {allAlbums.slice(0, 6).map((album) => renderSmallAlbumCard(album))}
+                            <div className="grid grid-cols-2 gap-2.5">
+                              {allAlbums.slice(0, 4).map((album) => renderSmallAlbumCard(album))}
                             </div>
                           </div>
                         )}
 
-                        {/* 3. Artists (Spotify) */}
+                        {/* 3. Under Albums: Next 8 Songs (if available) */}
+                        {liveTracks.length > 8 && (
+                          <div className="flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between pb-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-primary text-[18px]">queue_music</span>
+                                <h2 className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+                                  More Songs
+                                </h2>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 border border-white/5">
+                              {liveTracks.slice(8, 16).map((track, idx) => renderSongRow(track, idx + 8))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 4. Artists in Small Cards */}
                         {(spotifyArtists.length > 0 || allArtists.length > 0) && (
                           <div className="flex flex-col gap-2.5">
                             <div className="flex items-center justify-between pb-0.5">
@@ -1765,17 +1780,34 @@ function SearchContent() {
                                 <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                               </button>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 gap-2.5">
                               {spotifyArtists.length > 0
-                                ? spotifyArtists.slice(0, 6).map((artist) => (
+                                ? spotifyArtists.slice(0, 4).map((artist) => (
                                     <SpotifyArtistCard key={artist.id} artist={artist} />
                                   ))
-                                : allArtists.slice(0, 6).map((artist) => renderSmallArtistCard(artist))}
+                                : allArtists.slice(0, 4).map((artist) => renderSmallArtistCard(artist))}
                             </div>
                           </div>
                         )}
 
-                        {/* 4. Playlists (JioSaavn) */}
+                        {/* 5. Under Artists: Next 8 Songs (if available) */}
+                        {liveTracks.length > 16 && (
+                          <div className="flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between pb-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-primary text-[18px]">music_note</span>
+                                <h2 className="text-xs font-mono uppercase tracking-wider text-outline font-bold">
+                                  Related Tracks
+                                </h2>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 border border-white/5">
+                              {liveTracks.slice(16, 24).map((track, idx) => renderSongRow(track, idx + 16))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 6. Playlists in Small Cards */}
                         {playlists.length > 0 && (
                           <div className="flex flex-col gap-2.5">
                             <div className="flex items-center justify-between pb-0.5">
@@ -1795,8 +1827,8 @@ function SearchContent() {
                                 <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                               </button>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                              {playlists.slice(0, 6).map((pl) => renderSmallPlaylistCard(pl))}
+                            <div className="grid grid-cols-2 gap-2.5">
+                              {playlists.slice(0, 4).map((pl) => renderSmallPlaylistCard(pl))}
                             </div>
                           </div>
                         )}
@@ -2673,11 +2705,11 @@ function SearchContent() {
                     >
                       {/* Cover image with hover play button */}
                       <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md">
-                        <img
-                          src={pl.coverUrl}
+                        <PlaylistCover
+                          tracks={tracks}
+                          fallbackUrl={pl.coverUrl}
                           alt={pl.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          loading="lazy"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 rounded-xl"
                         />
                         <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[9px] font-bold text-primary border border-primary/30 flex items-center gap-1">
                           <span className="material-symbols-outlined text-[12px]">person</span>

@@ -6,19 +6,26 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMusic } from "../context/MusicContext";
 import { usePWA } from "../context/PWAContext";
+import PlaylistCover from "./PlaylistCover";
 
 export default function Sidebar({ className = "", onClose }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentTrack, customPlaylists, createPlaylist, deleteCustomPlaylist, user, openAuthModal, isPlaylistPinned, lyricsMode, minimizeLyricsToCard } = useMusic();
+  const {
+    currentTrack,
+    customPlaylists,
+    createPlaylist,
+    deleteCustomPlaylist,
+    user,
+    openAuthModal,
+    isPlaylistPinned,
+    lyricsMode,
+    minimizeLyricsToCard,
+  } = useMusic();
   const { isInstalled, promptInstall } = usePWA();
 
-  const handleNavClick = () => {
-    if (lyricsMode === "full") {
-      minimizeLyricsToCard();
-    }
-    if (onClose) onClose();
-  };
+  const isMobile = Boolean(onClose);
+  const [isHovered, setIsHovered] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -28,13 +35,20 @@ export default function Sidebar({ className = "", onClose }) {
   const popoverRef = useRef(null);
   const inputRef = useRef(null);
 
+  // Expanded if mobile drawer or desktop hover
+  const isExpanded = isMobile || isHovered;
+
+  const handleNavClick = () => {
+    if (lyricsMode === "full") {
+      minimizeLyricsToCard();
+    }
+    if (onClose) onClose();
+  };
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       setIsDismissed(localStorage.getItem("ceepeefy_pwa_dismissed") === "true");
     }
-  }, []);
-
-  useEffect(() => {
     setMounted(true);
   }, []);
 
@@ -44,7 +58,6 @@ export default function Sidebar({ className = "", onClose }) {
       const popoverWidth = 260;
       const popoverHeight = 230;
 
-      // Position right to the side of the plus button
       let left = rect.right + 12;
       let top = rect.top - 12;
 
@@ -54,7 +67,6 @@ export default function Sidebar({ className = "", onClose }) {
         }
         if (top < 10) top = 10;
 
-        // In case of very narrow screens, flip to left or clamp
         if (left + popoverWidth > window.innerWidth - 10) {
           if (rect.left - popoverWidth - 12 > 10) {
             left = rect.left - popoverWidth - 12;
@@ -72,7 +84,11 @@ export default function Sidebar({ className = "", onClose }) {
     }
   };
 
-  const togglePopover = () => {
+  const togglePopover = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!user) {
       openAuthModal("login");
       return;
@@ -139,32 +155,56 @@ export default function Sidebar({ className = "", onClose }) {
     { label: "Music Player", href: "/music-player", icon: "music_note" },
   ];
 
-  return (
-    <aside
-      className={`w-64 bg-surface-container-lowest/95 backdrop-blur-2xl z-50 flex flex-col justify-between ${currentTrack ? "pb-28" : "pb-6"
-        } pt-5 border-r border-white/5 shadow-2xl flex-shrink-0 select-none transition-[padding] duration-300 ${className}`}
-    >
-      <div className="flex flex-col gap-5 overflow-hidden">
+  // Colors for playlist thumbnails fallback
+  const playlistGradients = [
+    "from-indigo-600/80 to-purple-800/80",
+    "from-teal-600/80 to-emerald-800/80",
+    "from-cyan-600/80 to-blue-800/80",
+    "from-amber-600/80 to-rose-800/80",
+    "from-violet-600/80 to-fuchsia-800/80",
+  ];
+
+  const sidebarContent = (
+    <div className="flex flex-col h-full justify-between overflow-hidden">
+      <div className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0">
         {/* Brand Header */}
-        <div className="px-6 flex items-center justify-between">
-          <Link href="/" onClick={handleNavClick} className="flex items-center gap-3 group">
-            <div className="w-9 h-9 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+        <div
+          className={`h-14 flex items-center ${
+            isExpanded ? "px-4 justify-between" : "justify-center w-full px-0"
+          } transition-all duration-200 flex-shrink-0`}
+        >
+          <Link
+            href="/"
+            onClick={handleNavClick}
+            className={`flex items-center group select-none ${
+              isExpanded ? "gap-3 min-w-0" : "justify-center w-11 h-11 mx-auto"
+            }`}
+            title="Ceepeefy"
+          >
+            {/* Logo Icon Container matching Image 2 & 3 */}
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary/20 via-primary/10 to-indigo-500/20 border border-primary/30 flex items-center justify-center flex-shrink-0 shadow-[0_0_15px_rgba(76,215,246,0.3)] group-hover:scale-105 group-hover:shadow-[0_0_20px_rgba(76,215,246,0.5)] transition-all mx-auto">
               <img
                 src="/logo.png"
                 alt="Ceepeefy"
-                className="w-full h-full object-contain filter drop-shadow-[0_0_10px_rgba(0,229,255,0.45)]"
+                className="w-6 h-6 object-contain filter drop-shadow-[0_0_8px_rgba(0,229,255,0.6)]"
               />
             </div>
-            <span className="font-headline-md text-[20px] font-extrabold tracking-tight text-white flex items-center gap-1.5">
-              Ceepeefy
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_#4cd7f6]" />
-            </span>
+
+            {/* Brand Text (shown when expanded) */}
+            {isExpanded && (
+              <div className="flex items-center gap-1.5 transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)]">
+                <span className="font-headline-md text-[20px] font-extrabold tracking-tight text-white whitespace-nowrap">
+                  Ceepeefy
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_#4cd7f6] flex-shrink-0" />
+              </div>
+            )}
           </Link>
 
           {onClose && (
             <button
               onClick={onClose}
-              className="md:hidden text-outline hover:text-white p-1 rounded-lg"
+              className="md:hidden text-outline hover:text-white p-1 rounded-lg transition-colors"
               title="Close menu"
             >
               <span className="material-symbols-outlined text-[20px]">close</span>
@@ -173,164 +213,206 @@ export default function Sidebar({ className = "", onClose }) {
         </div>
 
         {/* Navigation Items */}
-        <nav className="flex flex-col px-3 gap-1">
+        <nav
+          className={`flex flex-col gap-1.5 flex-shrink-0 transition-all duration-200 ${
+            isExpanded ? "px-3" : "px-2.5 items-center"
+          }`}
+        >
           {navItems.map((item) => {
             const isActive =
               item.href === "/"
                 ? pathname === "/"
                 : pathname === item.href ||
-                (item.href === "/playlists" && pathname.startsWith("/playlist") && !pathname.startsWith("/playlist-mix")) ||
-                (item.href === "/self-mix" &&
-                  (pathname.startsWith("/self-mix") || pathname.startsWith("/artists") || pathname.startsWith("/artist"))) ||
-                (item.href === "/music-player" && pathname.startsWith("/music-player"));
+                  (item.href === "/playlists" &&
+                    pathname.startsWith("/playlist") &&
+                    !pathname.startsWith("/playlist-mix")) ||
+                  (item.href === "/self-mix" &&
+                    (pathname.startsWith("/self-mix") ||
+                      pathname.startsWith("/artists") ||
+                      pathname.startsWith("/artist"))) ||
+                  (item.href === "/music-player" && pathname.startsWith("/music-player"));
+
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={handleNavClick}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all group font-medium text-sm ${isActive
-                  ? "bg-gradient-to-r from-primary/15 to-transparent text-primary font-bold border-l-[3px] border-primary shadow-[0_0_24px_-4px_rgba(6,182,212,0.25)]"
-                  : "text-on-surface-variant hover:bg-surface-container/70 hover:text-white"
-                  }`}
+                title={!isExpanded ? item.label : undefined}
+                className={`relative flex items-center rounded-2xl transition-all duration-200 group select-none ${
+                  isExpanded ? "w-full h-11 px-3.5 gap-3.5" : "w-11 h-11 justify-center"
+                } ${
+                  isActive
+                    ? "bg-[#1d233d] text-primary font-semibold border border-primary/30 shadow-[0_0_18px_rgba(76,215,246,0.22)]"
+                    : "text-on-surface-variant hover:text-white hover:bg-white/[0.06] hover:translate-x-0.5"
+                }`}
               >
+                {/* Active left indicator glow pill on expanded state */}
+                {isActive && isExpanded && (
+                  <span className="absolute -left-3 top-2.5 bottom-2.5 w-1 rounded-r-full bg-primary shadow-[0_0_10px_#4cd7f6]" />
+                )}
+
+                {/* Nav Icon */}
                 <span
-                  className={`material-symbols-outlined text-[21px] transition-colors ${isActive
-                    ? "text-primary"
-                    : "text-outline group-hover:text-primary"
-                    }`}
+                  className={`material-symbols-outlined text-[22px] flex-shrink-0 transition-all duration-200 ${
+                    isActive
+                      ? "text-primary drop-shadow-[0_0_6px_rgba(76,215,246,0.6)]"
+                      : "text-outline group-hover:text-white group-hover:scale-105"
+                  }`}
                 >
                   {item.icon}
                 </span>
-                <span className="truncate">{item.label}</span>
+
+                {/* Nav Label */}
+                <span
+                  className={`text-sm font-medium tracking-tight whitespace-nowrap transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    isExpanded
+                      ? "opacity-100 translate-x-0 block flex-1 truncate"
+                      : "opacity-0 -translate-x-2 hidden pointer-events-none w-0"
+                  } ${isActive ? "text-white font-semibold" : "text-neutral-300 group-hover:text-white"}`}
+                >
+                  {item.label}
+                </span>
               </Link>
             );
           })}
         </nav>
 
-        {/* Divider */}
-        <div className="px-6">
-          <div className="h-[1px] w-full bg-surface-container-high/80" />
+        {/* Subtle Divider */}
+        <div className={`transition-all duration-200 ${isExpanded ? "px-5" : "px-3"}`}>
+          <div className="h-[1px] w-full bg-white/[0.08]" />
         </div>
 
-        {/* Collections Section */}
-        <div className="flex flex-col px-3 gap-2 flex-1 min-h-0 overflow-y-auto pr-1">
-          <div className="flex items-center justify-between px-3 py-1.5 relative">
-            <div className="flex items-center gap-2 text-on-surface/90 font-semibold text-xs uppercase tracking-wider">
-              <span className="material-symbols-outlined text-outline text-[18px]">
-                library_music
+        {/* Collections / Playlists Section */}
+        <div
+          className={`flex flex-col flex-1 min-h-0 overflow-y-auto no-scrollbar transition-all duration-200 ${
+            isExpanded ? "px-3 gap-2" : "px-2.5 items-center gap-2"
+          }`}
+        >
+          {/* Section Header (Expanded) or Compact Divider (Collapsed) */}
+          {isExpanded ? (
+            <div className="flex items-center justify-between px-2 py-1 select-none flex-shrink-0">
+              <span className="text-[11px] font-bold text-outline uppercase tracking-wider">
+                Your playlists
               </span>
-              <span>Your Collections</span>
-            </div>
 
-            {/* Plus Button with Compact Popover positioned at the right side of plus icon */}
-            <div className="relative">
-              <button
-                ref={buttonRef}
-                type="button"
-                onClick={togglePopover}
-                className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${isPopoverOpen
-                  ? "bg-primary text-surface-container-lowest scale-110 shadow-[0_0_12px_rgba(76,215,246,0.6)]"
-                  : "hover:bg-surface-container text-outline hover:text-primary"
+              {/* Plus Button with Compact Popover */}
+              <div className="relative">
+                <button
+                  ref={buttonRef}
+                  type="button"
+                  onClick={togglePopover}
+                  className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${
+                    isPopoverOpen
+                      ? "bg-primary text-surface-container-lowest scale-110 shadow-[0_0_12px_rgba(76,215,246,0.6)]"
+                      : "hover:bg-white/10 text-outline hover:text-primary"
                   }`}
-                title={isPopoverOpen ? "Close popover" : "Create new playlist"}
-              >
-                <span className="material-symbols-outlined text-[17px]">
-                  {isPopoverOpen ? "close" : "add"}
-                </span>
-              </button>
-
-              {/* Compact Mini Popover right at the side of plus icon */}
-              {mounted && isPopoverOpen && typeof document !== "undefined" && createPortal(
-                <div
-                  ref={popoverRef}
-                  style={{
-                    position: "fixed",
-                    top: `${popoverCoords.top}px`,
-                    left: `${popoverCoords.left}px`,
-                  }}
-                  className="w-64 bg-[#0d172e]/98 backdrop-blur-2xl border border-primary/40 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-3.5 z-[100] animate-in fade-in zoom-in-95 duration-200 select-none"
-                  onClick={(e) => e.stopPropagation()}
+                  title={isPopoverOpen ? "Close popover" : "Create new playlist"}
                 >
-                  {/* Left notch arrow pointing directly left to the plus button */}
-                  <div
-                    className="absolute -left-1.5 w-3 h-3 bg-[#0d172e] border-b border-l border-primary/40 rotate-45 pointer-events-none"
-                    style={{ top: `${popoverCoords.arrowTop}px` }}
-                  />
+                  <span className="material-symbols-outlined text-[17px]">
+                    {isPopoverOpen ? "close" : "add"}
+                  </span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={togglePopover}
+              className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-primary/20 text-outline hover:text-primary border border-white/5 hover:border-primary/30 flex items-center justify-center transition-all flex-shrink-0 my-0.5"
+              title="Create new playlist"
+            >
+              <span className="material-symbols-outlined text-[16px]">add</span>
+            </button>
+          )}
 
-                  <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-2.5">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-primary text-[16px]">
-                        playlist_add
-                      </span>
-                      New Playlist
+          {/* Popover Portal */}
+          {mounted &&
+            isPopoverOpen &&
+            typeof document !== "undefined" &&
+            createPortal(
+              <div
+                ref={popoverRef}
+                style={{
+                  position: "fixed",
+                  top: `${popoverCoords.top}px`,
+                  left: `${popoverCoords.left}px`,
+                }}
+                className="w-64 bg-[#0d172e]/98 backdrop-blur-2xl border border-primary/40 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-3.5 z-[100] animate-in fade-in zoom-in-95 duration-200 select-none"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="absolute -left-1.5 w-3 h-3 bg-[#0d172e] border-b border-l border-primary/40 rotate-45 pointer-events-none"
+                  style={{ top: `${popoverCoords.arrowTop}px` }}
+                />
+
+                <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-2.5">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-primary text-[16px]">
+                      playlist_add
                     </span>
+                    New Playlist
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsPopoverOpen(false)}
+                    className="text-outline hover:text-white p-0.5 rounded transition-colors"
+                    title="Close"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">close</span>
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateSubmit} className="flex flex-col gap-2.5">
+                  <div>
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={newPlaylistTitle}
+                      onChange={(e) => setNewPlaylistTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setIsPopoverOpen(false);
+                      }}
+                      placeholder="e.g. Midnight Vibe"
+                      maxLength={35}
+                      className="w-full bg-surface-container-lowest border border-white/15 focus:border-primary focus:ring-1 focus:ring-primary/40 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder:text-outline/70 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-1">
+                    {["🌙 Night", "☕ Focus", "⚡ Vibes", "🎧 Chill"].map((vibe) => (
+                      <button
+                        key={vibe}
+                        type="button"
+                        onClick={() => setNewPlaylistTitle(vibe.replace(/^[^\s]+\s*/, "") + " Mix")}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 hover:bg-primary/20 text-on-surface-variant hover:text-primary border border-white/5 hover:border-primary/30 transition-all"
+                      >
+                        {vibe}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
                     <button
                       type="button"
                       onClick={() => setIsPopoverOpen(false)}
-                      className="text-outline hover:text-white p-0.5 rounded transition-colors"
-                      title="Close"
+                      className="px-2.5 py-1 rounded-lg text-xs text-outline hover:text-white transition-colors"
                     >
-                      <span className="material-symbols-outlined text-[15px]">close</span>
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-3 py-1 rounded-lg bg-primary text-surface-container-lowest text-xs font-bold shadow-[0_0_12px_rgba(76,215,246,0.4)] hover:brightness-110 active:scale-95 transition-all flex items-center gap-1"
+                    >
+                      <span>Create</span>
+                      <span className="material-symbols-outlined text-[14px]">check</span>
                     </button>
                   </div>
+                </form>
+              </div>,
+              document.body
+            )}
 
-                  {/* Creation Form */}
-                  <form onSubmit={handleCreateSubmit} className="flex flex-col gap-2.5">
-                    <div>
-                      <input
-                        ref={inputRef}
-                        type="text"
-                        value={newPlaylistTitle}
-                        onChange={(e) => setNewPlaylistTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") setIsPopoverOpen(false);
-                        }}
-                        placeholder="e.g. Midnight Vibe"
-                        maxLength={35}
-                        className="w-full bg-surface-container-lowest border border-white/15 focus:border-primary focus:ring-1 focus:ring-primary/40 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder:text-outline/70 outline-none transition-all"
-                      />
-                    </div>
-
-                    {/* Quick suggestion vibes */}
-                    <div className="flex flex-wrap gap-1">
-                      {["🌙 Night", "☕ Focus", "⚡ Vibes", "🎧 Chill"].map((vibe) => (
-                        <button
-                          key={vibe}
-                          type="button"
-                          onClick={() => setNewPlaylistTitle(vibe.replace(/^[^\s]+\s*/, "") + " Mix")}
-                          className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 hover:bg-primary/20 text-on-surface-variant hover:text-primary border border-white/5 hover:border-primary/30 transition-all"
-                        >
-                          {vibe}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Action buttons */}
-                    <div className="flex items-center justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setIsPopoverOpen(false)}
-                        className="px-2.5 py-1 rounded-lg text-xs text-outline hover:text-white transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-3 py-1 rounded-lg bg-primary text-surface-container-lowest text-xs font-bold shadow-[0_0_12px_rgba(76,215,246,0.4)] hover:brightness-110 active:scale-95 transition-all flex items-center gap-1"
-                      >
-                        <span>Create</span>
-                        <span className="material-symbols-outlined text-[14px]">check</span>
-                      </button>
-                    </div>
-                  </form>
-                </div>,
-                document.body
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            {/* Custom User-Created Playlists */}
+          {/* Playlists List */}
+          <div className="flex flex-col gap-1.5 w-full">
             {mounted && customPlaylists && customPlaylists.length > 0 ? (
               [...customPlaylists]
                 .sort((a, b) => {
@@ -340,121 +422,193 @@ export default function Sidebar({ className = "", onClose }) {
                   if (!aPinned && bPinned) return 1;
                   return 0;
                 })
-                .map((pl) => {
+                .map((pl, idx) => {
                   const isPinned = isPlaylistPinned ? isPlaylistPinned(pl.id) : false;
+                  const gradientClass = playlistGradients[idx % playlistGradients.length];
+
                   return (
                     <Link
                       key={pl.id}
                       href={`/playlist/${pl.id}`}
                       onClick={handleNavClick}
-                      className="flex items-center gap-3 px-2 py-1.5 rounded-md hover:bg-surface-container/70 transition-colors group cursor-pointer relative"
+                      title={!isExpanded ? pl.title : undefined}
+                      className={`flex items-center rounded-2xl hover:bg-white/[0.06] transition-all group cursor-pointer relative select-none ${
+                        isExpanded ? "p-2 gap-3" : "w-11 h-11 justify-center mx-auto"
+                      }`}
                     >
-                      <div className="w-9 h-9 rounded-[4px] bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden border border-primary/20 group-hover:border-primary/50 transition-colors shadow-sm relative">
-                        <img
+                      {/* Playlist Artwork / 2x2 collage matching Playlist page */}
+                      <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-primary/40 group-hover:scale-105 transition-all shadow-sm relative bg-surface-container-high">
+                        <PlaylistCover
+                          tracks={pl.tracks || []}
+                          fallbackUrl={pl.coverUrl}
                           alt={pl.title}
-                          src={pl.coverUrl}
-                          className="w-full h-full object-cover rounded-[4px] group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full object-cover rounded-xl"
                         />
-                        {isPinned ? (
-                          <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-primary rounded-bl-[2px] flex items-center justify-center shadow-sm">
-                            <span className="material-symbols-outlined text-[10px] text-surface-container-lowest rotate-45 font-bold">push_pin</span>
-                          </div>
-                        ) : (
-                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-tl-[2px] bg-primary" />
-                        )}
-                      </div>
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium text-white truncate group-hover:text-primary transition-colors">
-                            {pl.title}
-                          </span>
-                          {isPinned && (
-                            <span className="material-symbols-outlined text-primary text-[13px] rotate-45 flex-shrink-0" title="Pinned to Library">
+
+                        {isPinned && (
+                          <div className="absolute top-0 right-0 w-3 h-3 bg-primary rounded-bl-md flex items-center justify-center shadow-sm z-10">
+                            <span className="material-symbols-outlined text-[8px] text-surface-container-lowest rotate-45 font-bold">
                               push_pin
                             </span>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-primary font-medium truncate">
-                          {pl.tracks?.length || 0} songs • You
-                        </span>
+                          </div>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          deleteCustomPlaylist(pl.id);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-outline hover:text-red-400 hover:bg-white/10 rounded-md transition-all flex-shrink-0"
-                        title="Delete playlist"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">delete</span>
-                      </button>
+
+                      {/* Playlist Name & Track Count (shown when expanded) */}
+                      {isExpanded && (
+                        <div className="flex flex-col min-w-0 flex-1 transition-opacity duration-200">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs font-semibold text-white truncate group-hover:text-primary transition-colors">
+                              {pl.title}
+                            </span>
+                            {isPinned && (
+                              <span
+                                className="material-symbols-outlined text-primary text-[12px] rotate-45 flex-shrink-0"
+                                title="Pinned to Library"
+                              >
+                                push_pin
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-outline truncate mt-0.5">
+                            {pl.tracks?.length || 0} songs
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Delete Playlist Button (expanded hover) */}
+                      {isExpanded && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            deleteCustomPlaylist(pl.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-outline hover:text-red-400 hover:bg-white/10 rounded-lg transition-all flex-shrink-0"
+                          title="Delete playlist"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">delete</span>
+                        </button>
+                      )}
                     </Link>
                   );
                 })
-            ) : (
+            ) : isExpanded ? (
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (lyricsMode === "full") {
-                    minimizeLyricsToCard();
-                  }
+                  if (lyricsMode === "full") minimizeLyricsToCard();
                   updateCoords();
                   setIsPopoverOpen(true);
                   setTimeout(() => inputRef.current?.focus(), 150);
                 }}
-                className="flex flex-col items-center justify-center py-4 px-3 rounded-xl border border-dashed border-white/10 hover:border-primary/40 hover:bg-surface-container/30 transition-all text-center group cursor-pointer"
+                className="flex flex-col items-center justify-center py-3 px-2 rounded-2xl border border-dashed border-white/10 hover:border-primary/40 hover:bg-white/[0.03] transition-all text-center group cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-1.5">
-                  <span className="material-symbols-outlined text-[18px]">add</span>
+                <div className="w-7 h-7 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-1">
+                  <span className="material-symbols-outlined text-[16px]">add</span>
                 </div>
-                <span className="text-xs font-semibold text-white/90 group-hover:text-primary transition-colors">
+                <span className="text-[11px] font-semibold text-white/90 group-hover:text-primary transition-colors">
                   Create Playlist
                 </span>
-                <span className="text-[10px] text-outline mt-0.5">
-                  Tap here or click + above
-                </span>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
-
-        {/* Install Ceepeefy App Banner (Hidden when already installed or running in standalone PWA mode) */}
-        {!isInstalled && !isDismissed && (
-          <div className="relative p-3 mx-2 my-2 rounded-xl bg-gradient-to-r from-primary/10 to-cyan-500/5 border border-primary/20 flex items-center justify-between gap-2 group/install">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
-                <span className="material-symbols-outlined text-[19px]">install_mobile</span>
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-white truncate">Install App</p>
-                <p className="text-[10px] text-on-surface-variant truncate">Offline &amp; Fullscreen</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <button
-                onClick={promptInstall}
-                className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs transition-colors cursor-pointer shadow-sm"
-              >
-                Get
-              </button>
-              <button
-                onClick={() => {
-                  try {
-                    localStorage.setItem("ceepeefy_pwa_dismissed", "true");
-                  } catch (e) { }
-                  setIsDismissed(true);
-                }}
-                className="p-1 text-outline hover:text-white rounded-full transition-colors cursor-pointer"
-                title="Dismiss"
-              >
-                <span className="material-symbols-outlined text-[15px]">close</span>
-              </button>
-            </div>
-          </div>
-        )}
       </div>
-    </aside>
+
+      {/* Install Ceepeefy App Card / Icon matching Image 2 & 3 */}
+      {!isInstalled && !isDismissed && (
+        <div
+          className={`flex-shrink-0 transition-all duration-250 ${
+            isExpanded ? "p-3 mx-2 my-2" : "py-2 px-2.5 flex justify-center"
+          }`}
+        >
+          {isExpanded ? (
+            <div className="p-3 rounded-2xl bg-[#10172a]/90 backdrop-blur-xl border border-white/10 flex items-center justify-between gap-2 shadow-lg group/install select-none">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center text-primary flex-shrink-0">
+                  <span className="material-symbols-outlined text-[18px]">install_mobile</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white truncate">Install app</p>
+                  <p className="text-[10px] text-on-surface-variant truncate">Offline and fullscreen</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={promptInstall}
+                  className="px-3 py-1 rounded-xl bg-[#6f7bf7] hover:bg-[#818cf8] text-white font-bold text-xs transition-all shadow-[0_0_12px_rgba(111,123,247,0.4)] hover:brightness-110 active:scale-95 cursor-pointer"
+                >
+                  Get
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      localStorage.setItem("ceepeefy_pwa_dismissed", "true");
+                    } catch (e) {}
+                    setIsDismissed(true);
+                  }}
+                  className="p-1 text-outline hover:text-white rounded-full transition-colors cursor-pointer"
+                  title="Dismiss"
+                >
+                  <span className="material-symbols-outlined text-[14px]">close</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={promptInstall}
+              className="w-10 h-10 rounded-2xl bg-primary/10 hover:bg-primary/20 border border-primary/25 text-primary flex items-center justify-center transition-all shadow-sm hover:scale-105"
+              title="Install Ceepeefy App"
+            >
+              <span className="material-symbols-outlined text-[20px]">install_mobile</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // If rendered as mobile slide-over sidebar drawer
+  if (isMobile) {
+    return (
+      <aside
+        className={`w-72 bg-[#080d1a]/98 backdrop-blur-3xl z-50 flex flex-col justify-between ${
+          currentTrack ? "pb-28" : "pb-6"
+        } pt-4 border-r border-white/10 shadow-2xl flex-shrink-0 select-none ${className}`}
+      >
+        {sidebarContent}
+      </aside>
+    );
+  }
+
+  // Desktop Floating/Overlay Collapsible Sidebar
+  return (
+    <div
+      className={`hidden md:block w-[72px] flex-shrink-0 relative z-50 ${className}`}
+    >
+      <aside
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className={`absolute inset-y-0 left-0 z-50 flex flex-col justify-between ${
+          currentTrack ? "pb-28" : "pb-5"
+        } pt-4 bg-[#080d1a]/96 backdrop-blur-3xl border-r border-white/[0.08] select-none transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          isHovered
+            ? "w-[248px] shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-r-white/20"
+            : "w-[72px] shadow-lg"
+        }`}
+        style={{
+          fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
+        }}
+      >
+        {sidebarContent}
+      </aside>
+    </div>
   );
 }
+

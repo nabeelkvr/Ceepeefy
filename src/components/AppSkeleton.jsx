@@ -8,45 +8,33 @@ export default function AppSkeleton() {
       {/* Upper area: Sidebar + Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Desktop Sidebar Skeleton */}
-        <aside className="hidden md:flex w-64 flex-col bg-surface-container-lowest border-r border-white/5 p-4 gap-6 select-none shrink-0">
-          {/* Logo Skeleton */}
-          <div className="flex items-center gap-3 px-2 py-2">
-            <div className="w-8 h-8 rounded-xl bg-white/10 skeleton-shimmer shrink-0" />
-            <div className="h-5 w-28 rounded-md bg-white/10 skeleton-shimmer" />
-          </div>
+        <aside className="hidden md:flex w-[72px] flex-col bg-[#080d1a] border-r border-white/5 py-4 px-3 gap-5 select-none shrink-0 items-center justify-between">
+          <div className="flex flex-col gap-5 items-center w-full">
+            {/* Logo Skeleton */}
+            <div className="w-10 h-10 rounded-2xl bg-white/10 skeleton-shimmer shrink-0" />
 
-          {/* Main Navigation Skeleton */}
-          <div className="flex flex-col gap-2">
-            {[1, 2, 3, 4, 5].map((idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-3.5 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.02]"
-              >
-                <div className="w-5 h-5 rounded-md bg-white/10 skeleton-shimmer shrink-0" />
-                <div className="h-3.5 w-24 rounded-full bg-white/10 skeleton-shimmer" />
-              </div>
-            ))}
-          </div>
+            {/* Main Navigation Skeleton */}
+            <div className="flex flex-col gap-2 w-full items-center">
+              {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                <div
+                  key={idx}
+                  className="w-11 h-11 rounded-2xl bg-white/[0.04] flex items-center justify-center shrink-0"
+                >
+                  <div className="w-5 h-5 rounded-md bg-white/10 skeleton-shimmer" />
+                </div>
+              ))}
+            </div>
 
-          {/* Library Section Skeleton */}
-          <div className="flex flex-col gap-2 pt-2 border-t border-white/5">
-            <div className="h-3 w-16 rounded-full bg-white/10 skeleton-shimmer mx-2 mb-1" />
-            {[1, 2, 3].map((idx) => (
-              <div key={idx} className="flex items-center gap-3 px-3 py-2">
-                <div className="w-4 h-4 rounded bg-white/10 skeleton-shimmer shrink-0" />
-                <div className="h-3 w-28 rounded-full bg-white/10 skeleton-shimmer" />
-              </div>
-            ))}
-          </div>
-
-          {/* Bottom user card skeleton */}
-          <div className="mt-auto p-3 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-white/10 skeleton-shimmer shrink-0" />
-            <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-              <div className="h-3.5 w-20 rounded-full bg-white/10 skeleton-shimmer" />
-              <div className="h-2.5 w-28 rounded-full bg-white/5 skeleton-shimmer" />
+            {/* Library Section Skeleton */}
+            <div className="flex flex-col gap-2 pt-2 border-t border-white/5 w-full items-center">
+              {[1, 2, 3].map((idx) => (
+                <div key={idx} className="w-9 h-9 rounded-xl bg-white/10 skeleton-shimmer shrink-0" />
+              ))}
             </div>
           </div>
+
+          {/* Bottom install icon skeleton */}
+          <div className="w-10 h-10 rounded-2xl bg-white/[0.04] skeleton-shimmer shrink-0" />
         </aside>
 
         {/* Main Content Skeleton Area */}

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMusic } from "../../../context/MusicContext";
 import { NOCTURNE_PLAYLISTS, NOCTURNE_TRACKS, getPlaylistById } from "../../../data/nocturneData";
+import { SPOTIFY_STYLE_PLAYLISTS } from "../../../data/curatedDiscovery";
 import DownloadButton from "../../../components/DownloadButton";
 import SongOptionsMenu from "../../../components/SongOptionsMenu";
 import PlaylistCover from "../../../components/PlaylistCover";
@@ -93,6 +94,11 @@ export default function PlaylistPage() {
     customPlaylists?.find((p) => String(p.id) === String(playlistId)) ||
     selfMixes?.find((p) => String(p.id) === String(playlistId)) ||
     getPlaylistById(playlistId) ||
+    SPOTIFY_STYLE_PLAYLISTS.find(
+      (p) =>
+        p.id.toLowerCase() === String(playlistId).toLowerCase() ||
+        String(p.playlistId || "").toLowerCase() === String(playlistId).toLowerCase()
+    ) ||
     NOCTURNE_PLAYLISTS.find((p) => p.id.toLowerCase() === String(playlistId).toLowerCase());
 
   useEffect(() => {
@@ -110,10 +116,6 @@ export default function PlaylistPage() {
     }
   }, [playlistId, localMatch]);
 
-  if (isLoadingRemote && !localMatch && !remotePlaylist) {
-    return <PlaylistSkeleton />;
-  }
-
   const playlist = localMatch || remotePlaylist || NOCTURNE_PLAYLISTS[0];
 
   const isCustomPlaylist = Boolean(
@@ -127,7 +129,7 @@ export default function PlaylistPage() {
     selfMixes?.some((p) => p.id === playlistId)
   );
 
-  const tracks = playlist.tracks || (isCustomPlaylist ? [] : NOCTURNE_TRACKS);
+  const tracks = playlist?.tracks || (isCustomPlaylist ? [] : NOCTURNE_TRACKS);
 
   // Auto-play when opened with ?play=true query param
   useEffect(() => {
@@ -443,6 +445,10 @@ export default function PlaylistPage() {
 
   const totalDurationStr = formatPlaylistDuration(tracks);
 
+  if (isLoadingRemote && !localMatch && !remotePlaylist) {
+    return <PlaylistSkeleton />;
+  }
+
   return (
     <div className="w-full flex flex-col pb-12 select-none">
       {/* Dynamic Hero Banner */}
@@ -542,10 +548,6 @@ export default function PlaylistPage() {
                 </button>
               </div>
             )}
-
-            <p className="text-xs md:text-sm text-on-surface-variant line-clamp-2 max-w-2xl">
-              {playlist.description}
-            </p>
 
             <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3 text-xs text-outline pt-0.5 sm:pt-1">
               <div className="flex items-center gap-1.5 sm:gap-2">
