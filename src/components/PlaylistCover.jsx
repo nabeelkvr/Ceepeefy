@@ -68,7 +68,7 @@ export default function PlaylistCover({ tracks = [], fallbackUrl = "", className
   if (validCovers.length < 4) {
     return (
       <div className={`relative w-full h-full overflow-hidden flex bg-surface-container-highest ${className}`}>
-        <div className="w-1/2 h-full overflow-hidden border-r border-black/20 relative">
+        <div className="w-1/2 h-full overflow-hidden relative">
           {!loadedMap[0] && (
             <div className="absolute inset-0 w-full h-full skeleton-shimmer bg-white/10 z-0" />
           )}
@@ -104,7 +104,7 @@ export default function PlaylistCover({ tracks = [], fallbackUrl = "", className
   return (
     <div className={`relative w-full h-full overflow-hidden grid grid-cols-2 grid-rows-2 bg-surface-container-highest ${className}`}>
       {validCovers.slice(0, 4).map((cover, idx) => (
-        <div key={idx} className="relative w-full h-full overflow-hidden border border-black/10">
+        <div key={idx} className="relative w-full h-full overflow-hidden">
           {!loadedMap[idx] && (
             <div className="absolute inset-0 w-full h-full skeleton-shimmer bg-white/10 z-0" />
           )}

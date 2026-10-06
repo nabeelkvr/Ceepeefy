@@ -436,18 +436,18 @@ export default function Sidebar({ className = "", onClose }) {
                         isExpanded ? "p-2 gap-3" : "w-11 h-11 justify-center mx-auto"
                       }`}
                     >
-                      {/* Playlist Artwork / 2x2 collage matching Playlist page */}
-                      <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-primary/40 group-hover:scale-105 transition-all shadow-sm relative bg-surface-container-high">
+                      {/* Playlist Artwork / Square with border radius and no stroke (Image 1) */}
+                      <div className="w-10 h-10 aspect-square rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border-0 outline-none group-hover:scale-105 transition-all shadow-md relative bg-surface-container-high">
                         <PlaylistCover
                           tracks={pl.tracks || []}
-                          fallbackUrl={pl.coverUrl}
+                          fallbackUrl={pl.coverUrl || pl.image}
                           alt={pl.title}
                           className="w-full h-full object-cover rounded-xl"
                         />
 
                         {isPinned && (
-                          <div className="absolute top-0 right-0 w-3 h-3 bg-primary rounded-bl-md flex items-center justify-center shadow-sm z-10">
-                            <span className="material-symbols-outlined text-[8px] text-surface-container-lowest rotate-45 font-bold">
+                          <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-primary rounded-bl-md flex items-center justify-center shadow-sm z-10">
+                            <span className="material-symbols-outlined text-[9px] text-surface-container-lowest rotate-45 font-bold">
                               push_pin
                             </span>
                           </div>

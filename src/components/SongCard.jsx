@@ -24,6 +24,7 @@ export default function SongCard({
   onPlay,
   className = "",
   playlistId = null,
+  imageRounded = "rounded-[10px]",
 }) {
   const { currentTrack, isPlaying, playTrack, togglePlay } = useMusic();
 
@@ -74,9 +75,9 @@ export default function SongCard({
       onClick={handleCardClick}
       className={`w-[140px] sm:w-[155px] md:w-[170px] lg:w-[180px] flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1 ${className}`}
     >
-      {/* Rectangular Portrait Artwork (Aspect 4/5, Sharp 3px edge blend) */}
+      {/* Rectangular Portrait Artwork (Aspect 4/5) */}
       <div
-        className={`relative aspect-[4/5] w-full rounded-[3px] overflow-hidden bg-[#161922] shadow-lg transition-all duration-200 ${
+        className={`relative aspect-[4/5] w-full ${imageRounded} overflow-hidden bg-[#161922] shadow-lg transition-all duration-200 ${
           isCurrent
             ? "ring-2 ring-primary shadow-[0_0_18px_rgba(var(--color-primary-rgb),0.4)]"
             : "ring-1 ring-white/10 group-hover:ring-white/30"
@@ -91,7 +92,7 @@ export default function SongCard({
             e.currentTarget.src =
               "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
           }}
-          className="w-full h-full object-cover rounded-[3px] group-hover:scale-105 transition-transform duration-500"
+          className={`w-full h-full object-cover ${imageRounded} group-hover:scale-105 transition-transform duration-500`}
         />
 
         {/* Hover Circular Play Button Overlay */}
@@ -121,7 +122,7 @@ export default function SongCard({
 
         {/* Playing Animated Equalizer Bar in top-left */}
         {isCurrentPlaying && (
-          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-[2px] bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-0.5">
+          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-0.5">
             <span className="w-0.5 h-2.5 bg-primary rounded-full animate-pulse" />
             <span className="w-0.5 h-3.5 bg-primary rounded-full animate-pulse delay-75" />
             <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse delay-150" />

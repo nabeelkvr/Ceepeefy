@@ -79,11 +79,43 @@ export function formatPlaylistDuration(tracks = []) {
 }
 
 /**
- * Formats tracks count label.
- * @param {number} count 
- * @returns {string} e.g. "0 tracks", "1 track", "5 tracks"
+ * Formats tracks count and duration into uppercase string matching the design requirement.
+ * Sample output: "1 TRACK , 2 MINUTES" or "5 TRACKS , 16 MINUTES"
+ * @param {Array} tracks 
+ * @param {string} fallbackDuration
+ * @returns {string} e.g. "1 TRACK , 2 MINUTES", "5 TRACKS , 16 MINUTES"
  */
-export function formatTrackCount(count = 0) {
-  const num = Number(count) || 0;
-  return `${num} ${num === 1 ? "track" : "tracks"}`;
+export function formatPlaylistTracksAndDurationUppercase(tracks = [], fallbackDuration = "") {
+  const count = Array.isArray(tracks) ? tracks.length : 0;
+  const trackLabel = count === 1 ? "1 TRACK" : `${count} TRACKS`;
+
+  let totalSeconds = 0;
+  if (Array.isArray(tracks) && tracks.length > 0) {
+    totalSeconds = tracks.reduce((acc, track) => {
+      const dur = parseDurationToSeconds(track?.duration);
+      return acc + (dur > 0 ? dur : 210);
+    }, 0);
+  } else if (fallbackDuration) {
+    totalSeconds = parseDurationToSeconds(fallbackDuration);
+  }
+
+  if (totalSeconds <= 0 && count === 0) {
+    return `${trackLabel} , 0 MINUTES`;
+  }
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.ceil((totalSeconds % 3600) / 60);
+
+  let durationLabel = "";
+  if (hours > 0) {
+    const hrWord = hours === 1 ? "1 HOUR" : `${hours} HOURS`;
+    const minWord = minutes === 1 ? "1 MINUTE" : `${minutes} MINUTES`;
+    durationLabel = minutes > 0 ? `${hrWord} ${minWord}` : hrWord;
+  } else {
+    const minCount = Math.max(1, minutes);
+    durationLabel = minCount === 1 ? "1 MINUTE" : `${minCount} MINUTES`;
+  }
+
+  return `${trackLabel} , ${durationLabel}`;
 }
+

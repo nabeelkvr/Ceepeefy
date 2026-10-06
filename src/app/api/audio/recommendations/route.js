@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import CryptoJS from "crypto-js";
-import { NOCTURNE_TRACKS } from "../../../../data/nocturneData";
-import { CURATED_GENRES } from "../../../../data/genreData";
+import {
+  MALAYALAM_HITS,
+  TAMIL_HITS,
+  HINDI_BESTS_TRACKS,
+  ENGLISH_VIBES_TRACKS,
+  BEAST_PHONKS_TRACKS,
+  MADE_FOR_YOU_TRACKS,
+  CHILL_RELAX_TRACKS,
+} from "../../../../data/curatedDiscovery";
 import { generateRecommendedQueue, classifySongMood } from "../../../../utils/recommendationEngine";
 
 // In-memory cache for recommendation queries
@@ -187,33 +194,7 @@ export async function GET(request) {
     );
   }
 
-  // Handle mock Nocturne tracks
-  if (songId && songId.startsWith("track-")) {
-    const foundNocturne = NOCTURNE_TRACKS.find((t) => t.id === songId);
-    const seed = foundNocturne || { id: songId, title, artist, album, genre: "Ambient" };
-    const candidates = NOCTURNE_TRACKS.filter((t) => t.id !== songId && !excludeIdSet.has(String(t.id)));
-
-    // Also include curated genres tracks
-    for (const g of CURATED_GENRES) {
-      if (Array.isArray(g.tracks)) {
-        for (const tr of g.tracks) {
-          if (tr.id !== songId && !excludeIdSet.has(String(tr.id))) {
-            candidates.push(tr);
-          }
-        }
-      }
-    }
-
-    const queue = generateRecommendedQueue(seed, candidates, { excludeIds: excludeIdSet });
-    return NextResponse.json({
-      success: true,
-      source: "curated_nocturne_reco",
-      seedTrack: seed,
-      tracks: queue.slice(0, 15),
-    });
-  }
-
-  const cacheKey = `reco_v4_iq:::${songId}:::${album_id}:::${artist}:::${language}:::${movieName}:::${excludeIdsParam}`;
+  const cacheKey = `reco_v5_iq:::${songId}:::${album_id}:::${artist}:::${language}:::${movieName}:::${excludeIdsParam}`;
   if (recoCache.has(cacheKey)) {
     return NextResponse.json(recoCache.get(cacheKey));
   }
@@ -506,33 +487,26 @@ export async function GET(request) {
   }
 
   // -------------------------------------------------------------
-  // 5. Merge Curated Nocturne & Genre Catalog Candidates
+  // 5. Merge Curated Discovery Catalog Candidates (High-res, verified real tracks)
   // -------------------------------------------------------------
-  for (const track of NOCTURNE_TRACKS) {
+  const allCuratedPool = [
+    ...MALAYALAM_HITS,
+    ...TAMIL_HITS,
+    ...HINDI_BESTS_TRACKS,
+    ...ENGLISH_VIBES_TRACKS,
+    ...BEAST_PHONKS_TRACKS,
+    ...MADE_FOR_YOU_TRACKS,
+    ...CHILL_RELAX_TRACKS,
+  ];
+
+  for (const track of allCuratedPool) {
     if (track && track.id && String(track.id) !== String(songId) && !excludeIdSet.has(String(track.id))) {
       if (!rawCandidateMap.has(String(track.id))) {
         rawCandidateMap.set(String(track.id), {
           ...track,
-          primary_artist: track.artist,
-          primaryArtist: track.artist,
+          primary_artist: track.artist || track.primaryArtist,
+          primaryArtist: track.artist || track.primaryArtist,
         });
-      }
-    }
-  }
-
-  for (const genre of CURATED_GENRES) {
-    if (Array.isArray(genre.tracks)) {
-      for (const track of genre.tracks) {
-        if (track && track.id && String(track.id) !== String(songId) && !excludeIdSet.has(String(track.id))) {
-          if (!rawCandidateMap.has(String(track.id))) {
-            rawCandidateMap.set(String(track.id), {
-              ...track,
-              genre: genre.name,
-              primary_artist: track.artist,
-              primaryArtist: track.artist,
-            });
-          }
-        }
       }
     }
   }

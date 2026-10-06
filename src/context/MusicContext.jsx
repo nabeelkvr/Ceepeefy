@@ -1311,6 +1311,7 @@ export const MusicProvider = ({ children }) => {
   // Centralized Playback History (tracks played prior to current song)
   const [playbackHistory, setPlaybackHistory] = useState([]);
   const playbackHistoryRef = useRef([]);
+  const prevSongQueueRef = useRef([]);
   useEffect(() => { playbackHistoryRef.current = playbackHistory; }, [playbackHistory]);
 
   // Derived queue availability for Next/Previous button states across all devices
@@ -1948,17 +1949,18 @@ export const MusicProvider = ({ children }) => {
 
       // Select top 12-16 ranked tracks for initial queue, or 8 tracks for append
       const countToTake = mode === "initial" ? 15 : 8;
-      const topRankedTracks = tracksToUse.slice(0, countToTake);
+      let topRankedTracks = tracksToUse.slice(0, countToTake);
 
       if (topRankedTracks.length > 0) {
         if (mode === "initial") {
           console.log(
             `[Autoplay] Initializing intelligent queue with ${topRankedTracks.length} tracks for "${seedMeta.title}":`,
-            topRankedTracks.map((t) => `[Tier ${t.tier}: ${t.tierReason}] ${t.title}`).join(", ")
+            topRankedTracks.map((t) => `[Tier ${t.tier || 1}: ${t.tierReason || "Recommended"}] ${t.title}`).join(", ")
           );
-          // Set automatic queue, strictly preserving any manual queue items
+          // Set automatic queue with high-affinity ranked tracks in strict order
           setAutoQueue(topRankedTracks);
           setCurrentTracklist([...topRankedTracks]);
+          prevSongQueueRef.current = topRankedTracks;
         } else if (mode === "append") {
           console.log(
             `[Autoplay] Silently appending ${topRankedTracks.length} ranked candidate tracks to the active queue:`,
@@ -2216,6 +2218,17 @@ export const MusicProvider = ({ children }) => {
     setDuration(track.duration || 210);
     setIsBuffering(true);
 
+    // If playing a new song from search or standalone (not consuming from existing queue),
+    // preserve current active queue into prevSongQueueRef so the queue algorithm can pick a random matching track
+    if (!options?.fromQueue && !options?.fromHistory) {
+      const existingQueue = autoQueueRef.current || [];
+      if (existingQueue.length > 0) {
+        prevSongQueueRef.current = [...existingQueue];
+      } else if (currentTracklistRef.current && currentTracklistRef.current.length > 0) {
+        prevSongQueueRef.current = [...currentTracklistRef.current];
+      }
+    }
+
     if (tracklist && tracklist.length > 0 && options?.context !== "search" && !options?.generatePriorityQueue) {
       originalPlaylistTracksRef.current = tracklist;
       setCurrentTracklist(tracklist);
@@ -2234,7 +2247,7 @@ export const MusicProvider = ({ children }) => {
         setAutoQueue(remaining);
       }
     } else if (options?.fromQueue) {
-      if (isAutoplayEnabledRef.current && autoQueueRef.current.length <= 2) {
+      if (isAutoplayEnabledRef.current && autoQueueRef.current.length <= 4) {
         fetchAndInjectAutoplayQueue(track, { mode: "append" });
       }
     } else {
@@ -2433,6 +2446,9 @@ export const MusicProvider = ({ children }) => {
       const remainingAuto = aQ.slice(1);
       autoQueueRef.current = remainingAuto;
       setAutoQueue(remainingAuto);
+      if (isAutoplayEnabledRef.current && remainingAuto.length <= 4) {
+        fetchAndInjectAutoplayQueue(next, { mode: "append" });
+      }
       playTrack(next, null, { fromQueue: true, wasManual: false });
       return;
     }

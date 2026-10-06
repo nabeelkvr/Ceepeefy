@@ -68,13 +68,13 @@ export default function RecommendationCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`group flex items-center gap-2 sm:gap-2.5 p-1 sm:p-1.5 rounded-[4px] transition-all duration-200 cursor-pointer select-none bg-transparent hover:bg-white/[0.06] active:bg-white/[0.09] min-w-0 ${
+      className={`group flex items-center gap-2 sm:gap-2.5 p-1.5 sm:p-2 rounded-xl transition-all duration-200 cursor-pointer select-none bg-transparent hover:bg-white/[0.06] active:bg-white/[0.09] min-w-0 ${
         isCurrent ? "bg-white/[0.04]" : ""
       } ${className}`}
       title={`Play ${track.title} by ${artistName}`}
     >
-      {/* 1. Left: Compact Square Cover Art with Very Sharp Edges (rounded-[3px]) */}
-      <div className="relative w-11 h-11 sm:w-12 sm:h-12 md:w-12.5 md:h-12.5 rounded-[3px] overflow-hidden bg-[#161922] flex-shrink-0 shadow-sm border border-white/5">
+      {/* 1. Left: Compact Square Cover Art with Smooth Rounded Edges (rounded-xl) */}
+      <div className="relative w-11 h-11 sm:w-12 sm:h-12 md:w-12.5 md:h-12.5 rounded-xl overflow-hidden bg-[#161922] flex-shrink-0 shadow-sm border border-white/5">
         <img
           src={coverUrl}
           alt={track.title}
@@ -84,7 +84,7 @@ export default function RecommendationCard({
             e.currentTarget.src =
               "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80";
           }}
-          className="w-full h-full object-cover rounded-[3px] group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
         />
 
         {/* Hover / Playing Overlay Button */}

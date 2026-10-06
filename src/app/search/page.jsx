@@ -23,6 +23,10 @@ import { formatPlaylistDuration } from "../../utils/playlistUtils";
 import { searchSpotify } from "../../services/spotifyClientService";
 import SpotifyArtistCard from "../../components/SpotifyArtistCard";
 import SpotifyBadge, { SpotifyIcon } from "../../components/SpotifyBadge";
+import RecommendationCard from "../../components/RecommendationCard";
+import SongCard from "../../components/SongCard";
+import { getPersonalizedRecommendations } from "../../utils/personalizedRecommendations";
+import { SPOTIFY_STYLE_PLAYLISTS, MADE_FOR_YOU_TRACKS } from "../../data/curatedDiscovery";
 
 function SearchContent() {
   const {
@@ -43,7 +47,22 @@ function SearchContent() {
     addToQueue,
     customPlaylists,
     selfMixes,
+    recentlyPlayedTracks,
   } = useMusic();
+
+  const [recommendationSeed, setRecommendationSeed] = useState(0);
+
+  const recommendedTracks = useMemo(() => {
+    return getPersonalizedRecommendations(recentlyPlayedTracks, {
+      limit: 6,
+      refreshSeed: recommendationSeed,
+    });
+  }, [recentlyPlayedTracks, recommendationSeed]);
+
+  const trendingSongs = useMemo(() => {
+    const spotPl = SPOTIFY_STYLE_PLAYLISTS.find((p) => p.id === "trending-today");
+    return spotPl?.tracks?.length ? spotPl.tracks : MADE_FOR_YOU_TRACKS;
+  }, []);
 
   const searchInputRef = useRef(null);
   const artistsCarouselRef = useRef(null);
@@ -2597,7 +2616,7 @@ function SearchContent() {
                     router.replace(`/search?genre=${genre.id}`, { scroll: false });
                   }}
                   style={{ background: genre.bgStyle }}
-                  className="group relative h-36 sm:h-44 p-3.5 sm:p-5 rounded-[4px] border border-white/15 hover:border-white/40 overflow-hidden cursor-pointer shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1.5 active:scale-[0.98] select-none flex flex-col justify-between"
+                  className="group relative h-36 sm:h-44 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-white/15 hover:border-white/40 overflow-hidden cursor-pointer shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1.5 active:scale-[0.98] select-none flex flex-col justify-between"
                 >
                   {/* Subtle top ambient specular shine */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-white/10 pointer-events-none" />
@@ -2670,9 +2689,67 @@ function SearchContent() {
             })}
           </div>
 
+          {/* Section: Recommended for You (Directly from Home page) */}
+          <section className="flex flex-col gap-3.5 md:gap-4.5 pt-4 border-t border-white/5">
+            <div className="flex items-center justify-between">
+              <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+                Recommended for You
+              </h2>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRecommendationSeed((prev) => prev + 1)}
+                  className="flex items-center gap-1 text-xs font-semibold text-outline hover:text-white hover:border-white/20 transition-all px-2.5 py-1 rounded-lg bg-surface-container/60 hover:bg-surface-container border border-white/5 cursor-pointer active:scale-95"
+                  title="Refresh recommendations"
+                >
+                  <span className="material-symbols-outlined text-[15px]">refresh</span>
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Responsive Grid: 3 cards per row on Desktop, 2 on Tablet, 2 on Mobile */}
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 lg:gap-3.5">
+              {recommendedTracks.map((track) => (
+                <RecommendationCard
+                  key={track.id}
+                  track={track}
+                  trackList={recommendedTracks}
+                  onPlay={() => {
+                    if (currentTrack?.id === track.id) {
+                      togglePlay();
+                    } else {
+                      playTrack(track, recommendedTracks);
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          </section>
+
+          {/* Section: Trending Songs (Under Recommended for You) */}
+          <section className="flex flex-col gap-3.5 md:gap-4.5 pt-4 border-t border-white/5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
+                  Trending Songs
+                </h2>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30 font-semibold flex-shrink-0">
+                  Hot & Trending
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
+              {trendingSongs.map((track) => (
+                <SongCard key={track.id} track={track} trackList={trendingSongs} />
+              ))}
+            </div>
+          </section>
+
           {/* Section: Playlists under Browse all (Only shown if user has created playlists) */}
           {allPlaylists && allPlaylists.length > 0 && (
-            <div className="flex flex-col gap-4 pt-6 border-t border-white/5">
+            <div className="flex flex-col gap-4 pt-4 border-t border-white/5">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">

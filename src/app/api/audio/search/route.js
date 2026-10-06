@@ -109,6 +109,8 @@ function rankAndDeduplicateSongs(songs, rawQuery, topArtistHint = "") {
   const isExplicitAcoustic = /\b(acoustic|unplugged)\b/i.test(q);
   const isExplicitCover = /\b(cover|tribute|piano|karaoke|instrumental)\b/i.test(q);
   const isExplicitLive = /\b(live|concert|tour)\b/i.test(q);
+  const isMovieSearch = /\bmovie\b/i.test(rawQuery);
+  const movieTarget = cleanStr((rawQuery || "").replace(/\bmovie\b/gi, "").trim());
 
   // 1. Deduplicate identical tracks (retaining the version with audioUrl and highest play count)
   // Note: Legitimate remixes and alternate versions are preserved as distinct entries
@@ -136,6 +138,8 @@ function rankAndDeduplicateSongs(songs, rawQuery, topArtistHint = "") {
         playCount: higherPlays,
         ctr: higherPlays,
         ctrFormatted: formatPlayCount(higherPlays),
+        isMovieTrack: Boolean(s.isMovieTrack || existing.isMovieTrack),
+        movieName: s.movieName || existing.movieName || winner.movieName,
       });
     }
   }
@@ -150,6 +154,20 @@ function rankAndDeduplicateSongs(songs, rawQuery, topArtistHint = "") {
     const titleClean = cleanStr(title);
     const artist = (s.artist || "").toLowerCase();
     const artistClean = cleanStr(artist);
+    const albumClean = cleanStr(s.album);
+    const movieClean = cleanStr(s.movieName);
+
+    // Movie search priority: If user searched "<movie> movie" or "movie <movie>", give top boost to that movie's songs
+    if (isMovieSearch && movieTarget) {
+      if (
+        s.isMovieTrack ||
+        (albumClean && (albumClean.includes(movieTarget) || movieTarget.includes(albumClean))) ||
+        (movieClean && movieClean.includes(movieTarget)) ||
+        (titleClean && (titleClean.includes(movieTarget) || movieTarget.includes(titleClean)))
+      ) {
+        score += 2000;
+      }
+    }
 
     // Exact title match: highest priority
     if (titleClean === qClean || titleNorm === qNorm) {
@@ -266,6 +284,9 @@ export async function GET(request) {
     }
 
     try {
+      const isMovieQuery = /\bmovie\b/i.test(query);
+      const movieCleanQuery = query.replace(/\bmovie\b/gi, "").trim();
+
       const autocompleteUrl = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&query=${encodeURIComponent(query)}`;
       const searchResultsUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&q=${encodeURIComponent(query)}&p=${page}&n=40`;
       const playlistResultsUrl = `https://www.jiosaavn.com/api.php?__call=search.getPlaylistResults&_format=json&q=${encodeURIComponent(query)}&p=1&n=30`;
@@ -274,13 +295,26 @@ export async function GET(request) {
 
       const headers = JIOSAAVN_HEADERS;
 
-      const [resAutocomplete, resResults, resPlaylists, resAlbums, resArtists] = await Promise.all([
+      const fetchPromises = [
         page === 1 ? fetch(autocompleteUrl, { headers, next: { revalidate: 300 } }).catch(() => null) : Promise.resolve(null),
         fetch(searchResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null),
         page === 1 ? fetch(playlistResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null) : Promise.resolve(null),
         page === 1 ? fetch(albumResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null) : Promise.resolve(null),
         page === 1 ? fetch(artistResultsUrl, { headers, next: { revalidate: 300 } }).catch(() => null) : Promise.resolve(null),
-      ]);
+      ];
+
+      if (isMovieQuery && movieCleanQuery && page === 1) {
+        const movieAlbumUrl = `https://www.jiosaavn.com/api.php?__call=search.getAlbumResults&_format=json&q=${encodeURIComponent(movieCleanQuery)}&p=1&n=20`;
+        const movieSearchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&q=${encodeURIComponent(movieCleanQuery)}&p=1&n=30`;
+        const movieAutoUrl = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&query=${encodeURIComponent(movieCleanQuery)}`;
+        fetchPromises.push(
+          fetch(movieAlbumUrl, { headers, next: { revalidate: 300 } }).catch(() => null),
+          fetch(movieSearchUrl, { headers, next: { revalidate: 300 } }).catch(() => null),
+          fetch(movieAutoUrl, { headers, next: { revalidate: 300 } }).catch(() => null)
+        );
+      }
+
+      const [resAutocomplete, resResults, resPlaylists, resAlbums, resArtists, resMovieAlbums, resMovieSearch, resMovieAuto] = await Promise.all(fetchPromises);
 
       let data = {};
       if (resAutocomplete && resAutocomplete.ok) {
@@ -297,8 +331,76 @@ export async function GET(request) {
         } catch (_) {}
       }
 
+      // If movie search, merge movieCleanQuery search data
+      let movieAlbumResults = [];
+      if (resMovieAlbums && resMovieAlbums.ok) {
+        try {
+          const mAlbJson = await resMovieAlbums.json();
+          movieAlbumResults = mAlbJson.results || [];
+        } catch (_) {}
+      }
+      if (resMovieSearch && resMovieSearch.ok) {
+        try {
+          const mSearchJson = await resMovieSearch.json();
+          if (Array.isArray(mSearchJson.results)) {
+            searchDataResults = [...mSearchJson.results, ...searchDataResults];
+          }
+        } catch (_) {}
+      }
+      if (resMovieAuto && resMovieAuto.ok) {
+        try {
+          const mAutoJson = await resMovieAuto.json();
+          if (mAutoJson.albums?.data && (!data.albums?.data || data.albums.data.length === 0)) {
+            data.albums = mAutoJson.albums;
+          }
+          if (mAutoJson.songs?.data && (!data.songs?.data || data.songs.data.length === 0)) {
+            data.songs = mAutoJson.songs;
+          }
+        } catch (_) {}
+      }
+
+      // If movie query, fetch the full album details of the matching movie album
+      let movieFullSongs = [];
+      let primaryMovieAlbum = null;
+      if (isMovieQuery && movieCleanQuery) {
+        const candidateMovieAlbums = [
+          ...(movieAlbumResults || []),
+          ...(data.albums?.data || []),
+        ];
+        const matched = candidateMovieAlbums.find((alb) => {
+          const title = cleanStr(alb.title || alb.name || "");
+          const target = cleanStr(movieCleanQuery);
+          return title === target || title.includes(target) || target.includes(title);
+        }) || candidateMovieAlbums[0];
+
+        if (matched) {
+          const mAlbumId = String(matched.id || matched.albumid || "");
+          primaryMovieAlbum = {
+            id: mAlbumId,
+            title: cleanHtmlText(matched.title || matched.name || movieCleanQuery),
+            artist: cleanHtmlText(matched.music || matched.primary_artists || matched.artist || "Soundtrack"),
+            year: matched.year || matched.more_info?.year || null,
+            image: matched.image,
+            isMovie: true,
+          };
+          if (mAlbumId && /^\d+$/.test(mAlbumId)) {
+            try {
+              const albumDetailsUrl = `https://www.jiosaavn.com/api.php?__call=content.getAlbumDetails&_format=json&albumid=${encodeURIComponent(mAlbumId)}`;
+              const albRes = await fetch(albumDetailsUrl, { headers, next: { revalidate: 3600 } });
+              if (albRes.ok) {
+                const albDetails = await albRes.json();
+                if (albDetails && Array.isArray(albDetails.songs)) {
+                  movieFullSongs = albDetails.songs;
+                  if (albDetails.title) primaryMovieAlbum.title = cleanHtmlText(albDetails.title);
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
       // If external calls produced nothing, trigger graceful fallback
-      if (!data.songs?.data?.length && !searchDataResults.length && !data.artists?.data?.length && !data.albums?.data?.length) {
+      if (!data.songs?.data?.length && !searchDataResults.length && !data.artists?.data?.length && !data.albums?.data?.length && !movieFullSongs.length) {
         throw new Error("JioSaavn external search endpoints returned no results");
       }
 
@@ -348,6 +450,53 @@ export async function GET(request) {
               badgeType: gt.badgeType,
             });
           }
+        }
+      }
+
+      // Insert movie full songs if movie query
+      if (Array.isArray(movieFullSongs) && movieFullSongs.length > 0) {
+        for (const [idx, s] of movieFullSongs.entries()) {
+          if (!s.id || seenRawIds.has(s.id)) continue;
+          seenRawIds.add(s.id);
+          const cleanTitle = cleanHtmlText(s.song || s.title);
+          const primaryArtists = cleanHtmlText(s.more_info?.primary_artists || s.singers || primaryMovieAlbum?.artist || "Soundtrack");
+          const albumTitle = cleanHtmlText(primaryMovieAlbum?.title || s.album || movieCleanQuery);
+          const rawYear = s.year || s.more_info?.year || primaryMovieAlbum?.year || null;
+          const rawPlays = s.play_count || s.more_info?.play_count || s.ctr || 0;
+          const playCount = parsePlayCount(rawPlays);
+          const durationSec = parseInt(s.duration || s.more_info?.duration || "210", 10);
+          const encUrl = s.more_info?.encrypted_media_url || s.encrypted_media_url;
+          let directAudioUrl = null;
+          if (encUrl) {
+            const rawDecrypted = decryptMediaUrl(encUrl);
+            if (rawDecrypted && rawDecrypted.startsWith("http")) {
+              directAudioUrl = rawDecrypted.replace(/_96\.mp4/, "_320.mp4");
+            }
+          }
+          if (!directAudioUrl && searchMediaMap.has(String(s.id))) {
+            directAudioUrl = searchMediaMap.get(String(s.id));
+          }
+          rawCandidateSongs.push({
+            id: s.id,
+            title: cleanTitle,
+            artist: primaryArtists,
+            album: albumTitle,
+            image: formatImage(s.image || primaryMovieAlbum?.image),
+            thumbnail: formatImage(s.image || primaryMovieAlbum?.image),
+            coverUrl: formatImage(s.image || primaryMovieAlbum?.image),
+            year: rawYear ? String(rawYear) : null,
+            duration: durationSec,
+            durationFormatted: formatDuration(durationSec),
+            ctr: playCount,
+            ctrFormatted: formatPlayCount(playCount),
+            playCount: playCount,
+            playCountFormatted: formatPlayCount(playCount),
+            bitrate: "320kbps",
+            type: "song",
+            audioUrl: directAudioUrl,
+            isMovieTrack: true,
+            movieName: movieCleanQuery,
+          });
         }
       }
 
@@ -508,6 +657,23 @@ export async function GET(request) {
       const seenAlbumIds = new Set();
       const albums = [];
 
+      if (primaryMovieAlbum && primaryMovieAlbum.id) {
+        seenAlbumIds.add(String(primaryMovieAlbum.id));
+        albums.push({
+          id: String(primaryMovieAlbum.id),
+          title: primaryMovieAlbum.title,
+          artist: primaryMovieAlbum.artist,
+          music: primaryMovieAlbum.artist,
+          year: primaryMovieAlbum.year ? String(primaryMovieAlbum.year) : null,
+          image: formatImage(primaryMovieAlbum.image),
+          thumbnail: formatImage(primaryMovieAlbum.image),
+          coverUrl: formatImage(primaryMovieAlbum.image),
+          isMovie: true,
+          ctr: 1000000,
+          type: "album",
+        });
+      }
+
       for (const alb of (data.albums?.data || [])) {
         const id = String(alb.id || alb.albumid || "");
         if (!id || seenAlbumIds.has(id)) continue;
@@ -515,7 +681,7 @@ export async function GET(request) {
         const title = cleanHtmlText(alb.title);
         const artist = cleanHtmlText(alb.music || alb.more_info?.primary_artists || alb.description?.split("·")?.pop()?.trim() || "Soundtrack");
         const rawYear = alb.more_info?.year || (alb.description?.match(/\b(19\d\d|20\d\d)\b/)?.[1]) || null;
-        const isMovie = alb.more_info?.is_movie === "1" || (alb.description || "").toLowerCase().includes("film");
+        const isMovie = alb.more_info?.is_movie === "1" || (alb.description || "").toLowerCase().includes("film") || (isMovieQuery && cleanStr(title).includes(cleanStr(movieCleanQuery)));
         albums.push({
           id: id,
           title: title,
@@ -542,7 +708,7 @@ export async function GET(request) {
             const title = cleanHtmlText(alb.title);
             const artist = cleanHtmlText(alb.primary_artists || alb.music || (typeof alb.artist === "string" ? alb.artist : "") || "Soundtrack");
             const rawYear = alb.year || null;
-            const isMovie = alb.is_movie === "1" || (alb.query || "").toLowerCase().includes("movie");
+            const isMovie = alb.is_movie === "1" || (alb.query || "").toLowerCase().includes("movie") || (isMovieQuery && cleanStr(title).includes(cleanStr(movieCleanQuery)));
             albums.push({
               id: id,
               title: title,
@@ -646,7 +812,21 @@ export async function GET(request) {
         rawTop.type === "album"
       );
 
-      if (isArtistSearch && matchedArtist) {
+      if (isMovieQuery && primaryMovieAlbum) {
+        topMatch = {
+          id: primaryMovieAlbum.id,
+          name: primaryMovieAlbum.title,
+          title: primaryMovieAlbum.title,
+          type: "album",
+          image: formatImage(primaryMovieAlbum.image),
+          thumbnail: formatImage(primaryMovieAlbum.image),
+          coverUrl: formatImage(primaryMovieAlbum.image),
+          subtitle: `${primaryMovieAlbum.artist}${primaryMovieAlbum.year ? ` • ${primaryMovieAlbum.year}` : ""}`,
+          artist: primaryMovieAlbum.artist,
+          year: primaryMovieAlbum.year,
+          isMovie: true,
+        };
+      } else if (isArtistSearch && matchedArtist) {
         topMatch = {
           id: matchedArtist.id,
           name: cleanHtmlText(matchedArtist.name || matchedArtist.title),

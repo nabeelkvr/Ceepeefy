@@ -277,6 +277,30 @@ export const RELATED_LANGUAGES = {
   spanish: [],
 };
 
+const MALAYALAM_INDICATORS = [
+  "sushin shyam", "hesham abdul wahab", "vidyasagar", "deepak dev", "jassie gift",
+  "vineeth sreenivasan", "harisankar", "job kurian", "rex vijayan", "bijibal",
+  "shaan rahman", "gopi sundar", "premalu", "manjummel", "avesham", "romancham",
+  "bheeshma", "hridayam", "minnal murali", "lucifer", "rdx", "armadham", "illuminati"
+];
+
+const TAMIL_INDICATORS = [
+  "anirudh", "a.r. rahman", "ar rahman", "yuvan", "harris jayaraj", "santhosh narayanan",
+  "d. imman", "gv prakash", "g.v. prakash", "dhanush", "vijay", "leo", "jailer",
+  "vikram", "master", "kaithi", "beast", "varisu", "goat", "vada chennai"
+];
+
+const HINDI_INDICATORS = [
+  "arijit singh", "pritam", "sachin-jigar", "sachin jigar", "vishal mishra",
+  "atif aslam", "kk", "shreya ghoshal", "badshah", "diljit", "darshan raval",
+  "jawan", "brahmastra", "animal", "kabir singh", "aashiqui", "kesariya", "chaleya"
+];
+
+const PHONK_INDICATORS = [
+  "kordhell", "interworld", "moondeity", "dxrk", "dvrst", "playamane", "hensonn",
+  "s3bzs", "bibi babydoll", "kslv", "phonk", "drift phonk", "brazilian phonk", "pr funk"
+];
+
 export function extractLanguage(track) {
   if (!track) return "";
   const raw =
@@ -286,7 +310,31 @@ export function extractLanguage(track) {
       ? track.subtitle.split("•")[0]
       : "") ||
     "";
-  return cleanStr(raw);
+  
+  const clean = cleanStr(raw);
+  if (clean && clean !== "unknown" && clean !== "popular") {
+    return clean;
+  }
+
+  const allText = [
+    track.artist,
+    track.primary_artist,
+    track.title,
+    track.song,
+    track.album,
+    track.movieName,
+    track.genre,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (PHONK_INDICATORS.some((k) => allText.includes(k))) return "phonk";
+  if (MALAYALAM_INDICATORS.some((k) => allText.includes(k))) return "malayalam";
+  if (TAMIL_INDICATORS.some((k) => allText.includes(k))) return "tamil";
+  if (HINDI_INDICATORS.some((k) => allText.includes(k))) return "hindi";
+
+  return clean || "english";
 }
 
 export function isLanguageMatch(trackA, trackB) {
@@ -301,7 +349,6 @@ export function getLanguageMatchScore(candidate, seedTrack) {
   const langCand = extractLanguage(candidate);
 
   if (!langSeed || !langCand) {
-    // If either language is unknown, default to neutral related score
     return 40;
   }
 
@@ -322,6 +369,7 @@ export function getLanguageMatchScore(candidate, seedTrack) {
  * 2. SAME SONG TYPE / MOOD — VERY HIGH PRIORITY (Score: 100, 80, 50, 10 | Weight: 30)
  * --------------------------------------------------------------------------
  * Core categories supported:
+ * - phonk (Drift Phonk, Brazilian Phonk, Heavy Bass)
  * - bgm (BGM, Instrumental, movie background themes, cinematic instrumentals)
  * - feel_good (Feel-good, happy, light, positive-energy)
  * - sad (Sad, emotional, melancholic, heartbreak)
@@ -354,7 +402,12 @@ export function classifySongMood(track) {
   const titleLower = (track.title || track.song || "").toLowerCase();
   const hasLyricsExplicit = track.has_lyrics === "false" || track.has_lyrics === false || track.has_lyrics === 0;
 
-  // 1. BGM / Instrumental Detection
+  // 1. Phonk Detection
+  if (PHONK_INDICATORS.some((k) => textToScan.includes(k))) {
+    return { primary: "phonk", secondary: ["energetic", "bass"], isBgm: false };
+  }
+
+  // 2. BGM / Instrumental Detection
   const bgmRegex = /\b(bgm|theme|instrumental|score|ost|soundtrack|cinematic|interlude|original score|flute|piano|violin|orchestral)\b/i;
   const isBgm =
     bgmRegex.test(titleLower) ||
@@ -366,34 +419,34 @@ export function classifySongMood(track) {
     return { primary: "bgm", secondary: ["instrumental", "chill"], isBgm: true };
   }
 
-  // 2. Romantic / Love
-  if (
-    /\b(romantic|romance|love|kadhal|premam|dil|pyar|ishq|heart|duet|soulful|affection|couple|mohabbat|pranayam|anbe|kanmani|humsafar|saathiya|deewani|sanam)\b/i.test(
-      textToScan
-    )
-  ) {
-    return { primary: "romantic", secondary: ["chill", "melody"], isBgm: false };
-  }
-
   // 3. Sad / Emotional
   if (
-    /\b(sad|pain|broken|tears|lonely|alone|dardi|emotional|crying|separation|judaai|maranam|viraham|heartbreak|sorrow|depress|melanchol|dard|alvida)\b/i.test(
+    /\b(sad|pain|broken|tears|lonely|alone|dardi|emotional|crying|separation|judaai|maranam|viraham|heartbreak|sorrow|depress|melanchol|dard|alvida|channa mereya|khairiyat)\b/i.test(
       textToScan
     )
   ) {
     return { primary: "sad", secondary: ["chill", "slow"], isBgm: false };
   }
 
-  // 4. Energetic / Dance / Mass / Workout
+  // 4. Romantic / Love
   if (
-    /\b(energy|energetic|dance|party|club|edm|mass|dappan|kuthu|workout|gym|beat|bass|drop|remix|fast|drill|trap|hip[\s-]?hop|rap|anthem|festival|dhol)\b/i.test(
+    /\b(romantic|romance|love|kadhal|premam|dil|pyar|ishq|heart|duet|soulful|affection|couple|mohabbat|pranayam|anbe|kanmani|humsafar|saathiya|deewani|sanam|kesariya|apna bana le)\b/i.test(
+      textToScan
+    )
+  ) {
+    return { primary: "romantic", secondary: ["chill", "melody"], isBgm: false };
+  }
+
+  // 5. Energetic / Dance / Mass / Workout
+  if (
+    /\b(energy|energetic|dance|party|club|edm|mass|dappan|kuthu|workout|gym|beat|bass|drop|remix|fast|drill|trap|hip[\s-]?hop|rap|anthem|festival|dhol|illuminati|armadham|chaleya|badtameez)\b/i.test(
       textToScan
     )
   ) {
     return { primary: "energetic", secondary: ["dance", "feel_good"], isBgm: false };
   }
 
-  // 5. Chill / Relaxing / Lo-Fi
+  // 6. Chill / Relaxing / Lo-Fi
   if (
     /\b(chill|relax|lo[\s-]?fi|lofi|calm|soothing|slow|ambient|sleep|acoustic|coffee|peace|peaceful|serene|meditat|unplugged)\b/i.test(
       textToScan
@@ -402,7 +455,7 @@ export function classifySongMood(track) {
     return { primary: "chill", secondary: ["feel_good", "acoustic"], isBgm: false };
   }
 
-  // 6. Feel-Good / Happy / Positive (Default energetic positive)
+  // 7. Feel-Good / Happy / Positive (Default)
   return { primary: "feel_good", secondary: ["pop", "upbeat"], isBgm: false };
 }
 
@@ -798,9 +851,9 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     // Sort eligible by totalScore descending
     eligible.sort((a, b) => b.totalScore - a.totalScore);
 
-    // Controlled Randomness:
-    // Take the top tier slice (e.g. top 4-5 candidates) and randomly pick one
-    const sliceSize = Math.min(5, eligible.length);
+    // Controlled Randomness & Variety:
+    // Take a wide top-scoring slice (top 6-8 candidates) and dynamically sample
+    const sliceSize = Math.min(8, eligible.length);
     const topSlice = eligible.slice(0, sliceSize);
     const selectedItem = topSlice[Math.floor(Math.random() * topSlice.length)];
 

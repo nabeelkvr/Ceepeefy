@@ -4,7 +4,24 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMusic } from "../../../context/MusicContext";
 import { NOCTURNE_PLAYLISTS, NOCTURNE_TRACKS, getPlaylistById } from "../../../data/nocturneData";
-import { SPOTIFY_STYLE_PLAYLISTS } from "../../../data/curatedDiscovery";
+import {
+  SPOTIFY_STYLE_PLAYLISTS,
+  MALAYALAM_HITS,
+  TAMIL_HITS,
+  HINDI_BESTS_TRACKS,
+  ENGLISH_VIBES_TRACKS,
+  BEAST_PHONKS_TRACKS,
+  MADE_FOR_YOU_TRACKS,
+} from "../../../data/curatedDiscovery";
+
+const POPULAR_RECOMMENDED_POOL = [
+  ...MALAYALAM_HITS,
+  ...TAMIL_HITS,
+  ...HINDI_BESTS_TRACKS,
+  ...ENGLISH_VIBES_TRACKS,
+  ...BEAST_PHONKS_TRACKS,
+  ...MADE_FOR_YOU_TRACKS,
+];
 import DownloadButton from "../../../components/DownloadButton";
 import SongOptionsMenu from "../../../components/SongOptionsMenu";
 import PlaylistCover from "../../../components/PlaylistCover";
@@ -384,9 +401,9 @@ export default function PlaylistPage() {
     let isMounted = true;
     setIsSearchingAdd(true);
 
-    // Instant local matches from Nocturne tracks
+    // Instant local matches from verified popular curated tracks
     const lower = q.toLowerCase();
-    const localFiltered = NOCTURNE_TRACKS.filter((nt) => {
+    const localFiltered = POPULAR_RECOMMENDED_POOL.filter((nt) => {
       return (
         nt.title?.toLowerCase().includes(lower) ||
         nt.artist?.toLowerCase().includes(lower) ||
@@ -453,8 +470,29 @@ export default function PlaylistPage() {
     <div className="w-full flex flex-col pb-12 select-none">
       {/* Dynamic Hero Banner */}
       <div className="relative w-full p-4 sm:p-6 md:p-8 bg-gradient-to-b from-surface-container-high/60 via-surface-container-low/40 to-transparent border-b border-white/5">
+        {/* Upper Right Edge: Pin to Library Button */}
+        <div className="absolute top-3.5 right-3.5 sm:top-5 sm:right-5 md:top-6 md:right-6 z-20">
+          <button
+            type="button"
+            onClick={() => togglePinPlaylist(playlist.id, playlist)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full border text-xs font-semibold backdrop-blur-md transition-all cursor-pointer shadow-lg active:scale-95 ${
+              isPlaylistPinned(playlist.id)
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_16px_rgba(245,158,11,0.35)]"
+                : "bg-surface-container-high/80 text-outline hover:text-amber-300 hover:bg-surface-container-highest border-white/10 hover:border-amber-500/40"
+            }`}
+            title={isPlaylistPinned(playlist.id) ? "Unpin playlist from library" : "Pin playlist to top of library"}
+          >
+            <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${isPlaylistPinned(playlist.id) ? "rotate-45 text-amber-300" : ""}`}>
+              push_pin
+            </span>
+            <span className="hidden sm:inline">
+              {isPlaylistPinned(playlist.id) ? "Pinned" : "Pin"}
+            </span>
+          </button>
+        </div>
+
         <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 max-w-6xl">
-          {/* Cover Art */}
+          {/* Cover Art with Love button on upper right edge */}
           <div className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group mx-auto md:mx-0">
             <PlaylistCover
               tracks={tracks}
@@ -463,6 +501,26 @@ export default function PlaylistPage() {
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
             <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+
+            {/* Love / Like Button in right side upper edge of playlist image */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleLike(playlist);
+              }}
+              className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full backdrop-blur-md border flex items-center justify-center transition-all duration-200 z-10 cursor-pointer shadow-lg active:scale-90 ${
+                isLiked(playlist.id)
+                  ? "bg-rose-500/30 text-rose-400 border-rose-500/60 shadow-[0_0_12px_rgba(244,63,94,0.4)]"
+                  : "bg-black/60 text-white/80 border-white/15 hover:text-rose-400 hover:bg-black/80 hover:scale-105"
+              }`}
+              title={isLiked(playlist.id) ? "Liked playlist" : "Add playlist to favorites"}
+              aria-label={isLiked(playlist.id) ? "Liked playlist" : "Add playlist to favorites"}
+            >
+              <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${isLiked(playlist.id) ? "fill-current" : ""}`}>
+                {isLiked(playlist.id) ? "favorite" : "favorite_border"}
+              </span>
+            </button>
           </div>
 
           {/* Metadata info */}
@@ -570,189 +628,155 @@ export default function PlaylistPage() {
           </div>
         </div>
 
-        {/* Action Controls Bar - Premium Glassmorphic Studio Dock */}
-        <div className="flex flex-row items-center gap-2 sm:gap-3 mt-4 sm:mt-6 w-full max-w-full overflow-x-auto no-scrollbar py-2">
-          <div className="flex items-center gap-2 sm:gap-2.5 p-1.5 sm:p-2 rounded-2xl sm:rounded-full bg-surface-container-high/60 backdrop-blur-2xl border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.6)]">
-            {/* Master Play Button - Glowing Gradient Orb */}
-            <button
-              onClick={handleMasterPlay}
-              disabled={tracks.length === 0}
-              className="w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-gradient-to-tr from-cyan-500 via-primary to-blue-400 text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.65)] hover:shadow-[0_0_32px_rgba(76,215,246,0.9)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
-              title={isCurrentPlaylistPlaying ? "Pause playlist" : "Play playlist"}
-            >
-              <span className="material-symbols-outlined text-[24px] sm:text-[30px]">
-                {isCurrentPlaylistPlaying ? "pause" : "play_arrow"}
-              </span>
-            </button>
+        {/* Action Controls Bar - Clean Unboxed Standard Layout */}
+        <div className="flex flex-row items-center gap-2.5 sm:gap-3.5 mt-4 sm:mt-6 w-full max-w-full overflow-x-auto no-scrollbar py-1">
+          {/* Master Play Button - Glowing Gradient Orb */}
+          <button
+            onClick={handleMasterPlay}
+            disabled={tracks.length === 0}
+            className="w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-gradient-to-tr from-cyan-500 via-primary to-blue-400 text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.65)] hover:shadow-[0_0_32px_rgba(76,215,246,0.9)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
+            title={isCurrentPlaylistPlaying ? "Pause playlist" : "Play playlist"}
+          >
+            <span className="material-symbols-outlined text-[24px] sm:text-[30px]">
+              {isCurrentPlaylistPlaying ? "pause" : "play_arrow"}
+            </span>
+          </button>
 
-            {/* Shuffle Button - Click to Play in Random Order */}
-            <button
-              type="button"
-              onClick={handleShufflePlay}
-              disabled={tracks.length === 0}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-40 ${
-                isShuffle
-                  ? "bg-primary/25 text-primary border-primary/50 shadow-[0_0_16px_rgba(76,215,246,0.4)]"
-                  : "bg-white/5 text-outline hover:text-primary hover:bg-primary/10 border-white/10 hover:border-primary/40 hover:shadow-[0_0_12px_rgba(76,215,246,0.2)]"
-              }`}
-              title="Shuffle and play random track"
-            >
-              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">shuffle</span>
-            </button>
+          {/* Shuffle Button - Click to Play in Random Order */}
+          <button
+            type="button"
+            onClick={handleShufflePlay}
+            disabled={tracks.length === 0}
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-40 ${
+              isShuffle
+                ? "bg-primary/25 text-primary border-primary/50 shadow-[0_0_16px_rgba(76,215,246,0.4)]"
+                : "bg-surface-container-high/60 text-outline hover:text-primary hover:bg-surface-container border-white/10 hover:border-primary/40 hover:shadow-[0_0_12px_rgba(76,215,246,0.2)]"
+            }`}
+            title="Shuffle and play random track"
+          >
+            <span className="material-symbols-outlined text-[18px] sm:text-[20px]">shuffle</span>
+          </button>
 
-            {/* Add Songs Button */}
-            <button
-              type="button"
-              onClick={handleOpenAddSongs}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 ${
-                isAddSongsOpen
-                  ? "bg-primary text-surface-container-lowest border-primary shadow-[0_0_18px_rgba(76,215,246,0.5)]"
-                  : "bg-white/5 text-outline hover:text-white hover:bg-white/10 border-white/10 hover:border-white/20"
-              }`}
-              title="Search and add songs to this playlist"
-            >
-              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
-                {isAddSongsOpen ? "search" : "add"}
-              </span>
-            </button>
+          {/* Add Songs Button */}
+          <button
+            type="button"
+            onClick={handleOpenAddSongs}
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 ${
+              isAddSongsOpen
+                ? "bg-primary text-surface-container-lowest border-primary shadow-[0_0_18px_rgba(76,215,246,0.5)]"
+                : "bg-surface-container-high/60 text-outline hover:text-white hover:bg-surface-container border-white/10 hover:border-white/20"
+            }`}
+            title="Search and add songs to this playlist"
+          >
+            <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
+              {isAddSongsOpen ? "search" : "add"}
+            </span>
+          </button>
 
-            {/* Pin to Library Button */}
-            <button
-              type="button"
-              onClick={() => togglePinPlaylist(playlist.id, playlist)}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 ${
-                isPlaylistPinned(playlist.id)
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_16px_rgba(245,158,11,0.35)]"
-                  : "bg-white/5 text-outline hover:text-amber-300 hover:bg-amber-500/10 border-white/10 hover:border-amber-500/30"
-              }`}
-              title={isPlaylistPinned(playlist.id) ? "Unpin from library" : "Pin to top of playlists"}
-            >
-              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isPlaylistPinned(playlist.id) ? "rotate-45" : ""}`}>
-                push_pin
-              </span>
-            </button>
-
-            {/* Offline Download Control */}
-            <div className="relative flex-shrink-0">
-              {isDownloadingOffline ? (
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/20 text-primary border border-primary/40 flex items-center justify-center shadow-[0_0_15px_rgba(76,215,246,0.35)] animate-pulse select-none" title="Downloading songs offline...">
-                  <span className="material-symbols-outlined text-[17px] animate-spin">
-                    progress_activity
-                  </span>
-                </div>
-              ) : isPlaylistFullyOffline ? (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setIsOfflineMenuOpen((prev) => !prev)}
-                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/30 shadow-[0_0_16px_rgba(16,185,129,0.3)] active:scale-90 transition-all flex items-center justify-center cursor-pointer"
-                    title="Downloaded for offline listening (click for options)"
-                  >
-                    <span className="material-symbols-outlined text-emerald-400 text-[18px] sm:text-[20px]">
-                      check_circle
-                    </span>
-                  </button>
-
-                  {isOfflineMenuOpen && (
-                    <div className="absolute top-full left-0 mt-2 w-52 bg-[#0d172e]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
-                      <div className="px-3 py-1.5 text-[11px] text-outline border-b border-white/10 mb-1">
-                        {downloadedTrackCount} of {totalTrackCount} songs offline
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleDownloadPlaylist}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[17px] text-primary">
-                          refresh
-                        </span>
-                        <span>Update / Re-download</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleRemoveOffline}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[17px]">
-                          delete
-                        </span>
-                        <span>Remove from offline</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
+          {/* Offline Download Control */}
+          <div className="relative flex-shrink-0">
+            {isDownloadingOffline ? (
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/20 text-primary border border-primary/40 flex items-center justify-center shadow-[0_0_15px_rgba(76,215,246,0.35)] animate-pulse select-none" title="Downloading songs offline...">
+                <span className="material-symbols-outlined text-[17px] animate-spin">
+                  progress_activity
+                </span>
+              </div>
+            ) : isPlaylistFullyOffline ? (
+              <div className="relative">
                 <button
                   type="button"
-                  onClick={handleDownloadPlaylist}
-                  disabled={totalTrackCount === 0}
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center bg-white/5 text-outline hover:text-emerald-300 hover:bg-emerald-500/10 border-white/10 hover:border-emerald-500/30 transition-all cursor-pointer active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-                  title="Download all songs in playlist for offline playback"
+                  onClick={() => setIsOfflineMenuOpen((prev) => !prev)}
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/30 shadow-[0_0_16px_rgba(16,185,129,0.3)] active:scale-90 transition-all flex items-center justify-center cursor-pointer"
+                  title="Downloaded for offline listening (click for options)"
                 >
-                  <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
-                    download_for_offline
+                  <span className="material-symbols-outlined text-emerald-400 text-[18px] sm:text-[20px]">
+                    check_circle
                   </span>
                 </button>
-              )}
-            </div>
 
-            {/* Like Playlist */}
-            <button
-              type="button"
-              onClick={() => toggleLike(playlist)}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 ${
-                isLiked(playlist.id)
-                  ? "bg-rose-500/20 text-rose-400 border-rose-500/50 shadow-[0_0_16px_rgba(244,63,94,0.35)]"
-                  : "bg-white/5 text-outline hover:text-rose-400 hover:bg-rose-500/10 border-white/10 hover:border-rose-500/30"
-              }`}
-              title={isLiked(playlist.id) ? "Liked" : "Add to favorites"}
-            >
-              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isLiked(playlist.id) ? "fill-current" : ""}`}>
-                {isLiked(playlist.id) ? "favorite" : "favorite_border"}
-              </span>
-            </button>
-
-            {/* Upload Tracks Button (Only for Self Mix) */}
-            {isSelfMix && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus"
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files) {
-                      handleFilesSelected(e.target.files);
-                    }
-                  }}
-                />
-                <button
-                  disabled={isUploading}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-primary/15 text-primary hover:bg-primary hover:text-surface-container-lowest border border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.25)] hover:shadow-[0_0_18px_rgba(76,215,246,0.5)] transition-all active:scale-90 cursor-pointer disabled:opacity-50 flex-shrink-0"
-                  title="Upload audio tracks to cloud storage"
-                >
-                  <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
-                    {isUploading ? "progress_activity" : "upload_file"}
-                  </span>
-                </button>
-              </>
-            )}
-
-            {/* Delete Playlist Button */}
-            {isCustomPlaylist && (
+                {isOfflineMenuOpen && (
+                  <div className="absolute top-full left-0 mt-2 w-52 bg-[#0d172e]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 text-[11px] text-outline border-b border-white/10 mb-1">
+                      {downloadedTrackCount} of {totalTrackCount} songs offline
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDownloadPlaylist}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[17px] text-primary">
+                        refresh
+                      </span>
+                      <span>Update / Re-download</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveOffline}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[17px]">
+                        delete
+                      </span>
+                      <span>Remove from offline</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
               <button
                 type="button"
-                onClick={() => setIsDeleteModalOpen(true)}
-                aria-label={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
-                title={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 hover:border-red-500/50 shadow-sm hover:shadow-[0_0_15px_rgba(239,68,68,0.35)] transition-all active:scale-90 cursor-pointer flex-shrink-0"
+                onClick={handleDownloadPlaylist}
+                disabled={totalTrackCount === 0}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center bg-surface-container-high/60 text-outline hover:text-emerald-300 hover:bg-emerald-500/10 border-white/10 hover:border-emerald-500/30 transition-all cursor-pointer active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                title="Download all songs in playlist for offline playback"
               >
-                <span className="material-symbols-outlined text-[18px] sm:text-[20px]">delete</span>
+                <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
+                  download_for_offline
+                </span>
               </button>
             )}
           </div>
+
+          {/* Upload Tracks Button (Only for Self Mix) */}
+          {isSelfMix && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files) {
+                    handleFilesSelected(e.target.files);
+                  }
+                }}
+              />
+              <button
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-primary/15 text-primary hover:bg-primary hover:text-surface-container-lowest border border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.25)] hover:shadow-[0_0_18px_rgba(76,215,246,0.5)] transition-all active:scale-90 cursor-pointer disabled:opacity-50 flex-shrink-0"
+                title="Upload audio tracks to cloud storage"
+              >
+                <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
+                  {isUploading ? "progress_activity" : "upload_file"}
+                </span>
+              </button>
+            </>
+          )}
+
+          {/* Delete Playlist Button */}
+          {isCustomPlaylist && (
+            <button
+              type="button"
+              onClick={() => setIsDeleteModalOpen(true)}
+              aria-label={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
+              title={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 hover:border-red-500/50 shadow-sm hover:shadow-[0_0_15px_rgba(239,68,68,0.35)] transition-all active:scale-90 cursor-pointer flex-shrink-0"
+            >
+              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">delete</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1263,8 +1287,8 @@ export default function PlaylistPage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    {NOCTURNE_TRACKS.filter((nt) => !tracks.some((t) => String(t.id) === String(nt.id)) && !justAddedIds.has(String(nt.id)))
-                      .slice(0, 8)
+                    {POPULAR_RECOMMENDED_POOL.filter((nt) => !tracks.some((t) => String(t.id) === String(nt.id)) && !justAddedIds.has(String(nt.id)))
+                      .slice(0, 10)
                       .map((track) => (
                         <div
                           key={track.id}

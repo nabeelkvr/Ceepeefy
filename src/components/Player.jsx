@@ -541,9 +541,9 @@ export default function Player() {
             </div>
           </div>
 
-          {/* Right Side: Play/Pause button + Next Track button (Image 5 elements, NO expand button!) */}
+          {/* Right Side: Play/Pause button + Next Track button + 3-Dots Button */}
           <div
-            className="flex items-center gap-2 flex-shrink-0"
+            className="flex items-center gap-1 sm:gap-2 flex-shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -567,15 +567,22 @@ export default function Player() {
                 e.stopPropagation();
                 handleNextTrack();
               }}
-              className={`p-2 transition-all active:scale-90 rounded-full cursor-pointer ${hasNextTrack
+              className={`p-1.5 sm:p-2 transition-all active:scale-90 rounded-full cursor-pointer ${hasNextTrack
                   ? "text-white hover:text-primary"
                   : "opacity-30 text-white/40 cursor-not-allowed"
                 }`}
               title={hasNextTrack ? "Next track" : "No next track"}
               aria-label="Next track"
             >
-              <span className="material-symbols-outlined text-[26px]">skip_next</span>
+              <span className="material-symbols-outlined text-[24px] sm:text-[26px]">skip_next</span>
             </button>
+
+            {/* 3-Dots Menu Button */}
+            <SongOptionsMenu
+              track={currentTrack}
+              buttonClassName="p-1.5 rounded-full text-white/75 hover:text-white hover:bg-white/10 active:scale-90 transition-all cursor-pointer"
+              iconClassName="text-[22px]"
+            />
           </div>
         </aside>
       )}

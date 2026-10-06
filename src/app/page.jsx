@@ -24,6 +24,7 @@ import { formatPlaylistDuration } from "../utils/playlistUtils";
 import { fetchSpotifyDiscovery } from "../services/spotifyClientService";
 import SpotifyArtistCard from "../components/SpotifyArtistCard";
 import SpotifyBadge, { SpotifyIcon } from "../components/SpotifyBadge";
+import Footer from "../components/Footer";
 import RecommendationCard from "../components/RecommendationCard";
 import { getPersonalizedRecommendations } from "../utils/personalizedRecommendations";
 import {
@@ -34,6 +35,7 @@ import {
   HINDI_BESTS_TRACKS,
   TAMIL_HITS,
   ENGLISH_VIBES_TRACKS,
+  BEAST_PHONKS_TRACKS,
 } from "../data/curatedDiscovery";
 
 const FEATURED_PLAYLIST_COLLECTION = [
@@ -425,6 +427,7 @@ export default function HomePage() {
                 key={track.id}
                 track={track}
                 trackList={displayRecentlyPlayed}
+                imageRounded="rounded-md"
                 onPlay={() => handleTrackClick(track)}
               />
             ))}
@@ -462,8 +465,8 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* 4 Cards in 1 Row (Responsive: 1 col on mobile, 2 col on tablet, 4 col on desktop) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 md:gap-4.5">
+        {/* 4 Cards (Responsive: 2 cols on mobile, 2 cols on tablet, 4 cols on desktop - totally 4 in 2 rows on mobile) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-4.5">
           {FEATURED_PLAYLIST_COLLECTION.map((card) => {
             const spotPl = SPOTIFY_STYLE_PLAYLISTS.find(
               (p) => p.id === card.playlistId || p.playlistId === card.playlistId
@@ -494,7 +497,7 @@ export default function HomePage() {
               <div
                 key={card.id}
                 onClick={handleCardClick}
-                className={`relative h-44 sm:h-48 lg:h-52 rounded-2xl overflow-hidden bg-gradient-to-br ${card.cardGradient} border ${card.cardBorder} transition-all duration-300 hover:scale-[1.02] shadow-xl group cursor-pointer flex flex-col justify-between p-4 sm:p-5 select-none`}
+                className={`relative h-32 sm:h-48 lg:h-52 rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br ${card.cardGradient} border ${card.cardBorder} transition-all duration-300 hover:scale-[1.02] shadow-md sm:shadow-xl group cursor-pointer flex flex-col justify-between p-2.5 sm:p-5 select-none`}
               >
                 {/* Background Image with Ambient Smooth Mask */}
                 <div
@@ -515,31 +518,31 @@ export default function HomePage() {
                 {/* Top Badge */}
                 <div className="z-10 flex items-center">
                   <div
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold backdrop-blur-md border ${card.badgeClass}`}
+                    className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[9px] sm:text-xs font-semibold backdrop-blur-md border ${card.badgeClass}`}
                   >
-                    <span className="material-symbols-outlined text-[14px] leading-none">
+                    <span className="material-symbols-outlined text-[12px] sm:text-[14px] leading-none">
                       {card.badgeIcon}
                     </span>
-                    <span>{card.badgeLabel}</span>
+                    <span className="truncate">{card.badgeLabel}</span>
                   </div>
                 </div>
 
                 {/* Bottom Content: Title, Subtitle, Play Button */}
-                <div className="z-10 flex flex-col mt-auto pt-2">
-                  <h3 className="text-base sm:text-lg lg:text-xl font-bold text-white tracking-tight leading-tight drop-shadow-md">
+                <div className="z-10 flex flex-col mt-auto pt-1 sm:pt-2">
+                  <h3 className="text-xs sm:text-lg lg:text-xl font-bold text-white tracking-tight leading-tight drop-shadow-md truncate">
                     {card.title}
                   </h3>
-                  <p className="text-[11px] sm:text-xs font-normal text-white/75 mt-0.5 drop-shadow-sm truncate max-w-[85%]">
+                  <p className="text-[9.5px] sm:text-xs font-normal text-white/75 mt-0.5 drop-shadow-sm truncate max-w-full hidden sm:block">
                     {card.subtitle}
                   </p>
 
-                  <div className="mt-3">
+                  <div className="mt-1.5 sm:mt-3">
                     <button
                       type="button"
                       onClick={handlePlayClick}
-                      className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r ${card.buttonBg} text-white text-xs sm:text-sm font-bold shadow-lg hover:scale-105 active:scale-95 transition-all w-fit cursor-pointer`}
+                      className={`inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full bg-gradient-to-r ${card.buttonBg} text-white text-[10px] sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all w-fit cursor-pointer`}
                     >
-                      <span className="material-symbols-outlined text-[16px] leading-none">
+                      <span className="material-symbols-outlined text-[13px] sm:text-[16px] leading-none">
                         {isCardPlaying ? "pause" : "play_arrow"}
                       </span>
                       <span>{isCardPlaying ? "Pause" : "Play Now"}</span>
@@ -560,14 +563,19 @@ export default function HomePage() {
           <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
         </div>
 
-        {/* Under the 4 Big Cards: Spotify-Style Curated Playlist Row (Image 1) */}
+        {/* Under the 4 Big Cards: Spotify-Style Curated Playlist Row (Excluding the 4 featured cards above) */}
         <div className="flex flex-col gap-2 pt-1 sm:pt-2">
           <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
             Trending Playlists
           </h3>
 
           <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4 pb-2 pt-1 -mx-2 px-2">
-            {SPOTIFY_STYLE_PLAYLISTS.map((pl) => (
+            {SPOTIFY_STYLE_PLAYLISTS.filter(
+              (pl) =>
+                !FEATURED_PLAYLIST_COLLECTION.some(
+                  (f) => f.playlistId === pl.id || f.playlistId === pl.playlistId
+                )
+            ).map((pl) => (
               <PlaylistCard key={pl.id} playlist={pl} />
             ))}
           </div>
@@ -602,21 +610,25 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Responsive Grid: EXACTLY 3 cards per row on Desktop, 2 on Tablet, EXACTLY 2 on Mobile */}
+        {/* Responsive Grid: 4 rows on mobile (8 items, 2 cols), 4 rows on desktop (12 items, 3 cols) */}
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 lg:gap-3.5">
-          {recommendedTracks.map((track) => (
-            <RecommendationCard
+          {recommendedTracks.map((track, index) => (
+            <div
               key={track.id}
-              track={track}
-              trackList={recommendedTracks}
-              onPlay={() => {
-                if (currentTrack?.id === track.id) {
-                  togglePlay();
-                } else {
-                  playTrack(track, recommendedTracks);
-                }
-              }}
-            />
+              className={index >= 8 ? "hidden lg:block min-w-0" : "block min-w-0"}
+            >
+              <RecommendationCard
+                track={track}
+                trackList={recommendedTracks}
+                onPlay={() => {
+                  if (currentTrack?.id === track.id) {
+                    togglePlay();
+                  } else {
+                    playTrack(track, recommendedTracks);
+                  }
+                }}
+              />
+            </div>
           ))}
         </div>
       </section>
@@ -875,12 +887,35 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Massive Aesthetic Brand Typography Watermark (Matching Image 3) */}
-      <footer className="w-full flex items-center justify-center pt-8 pb-14 sm:pb-20 select-none pointer-events-none overflow-hidden border-t border-white/[0.03] mt-8">
-        <span className="font-black text-4xl sm:text-7xl md:text-8xl lg:text-[9.5rem] tracking-tighter text-white/[0.06] uppercase leading-none text-center">
-          Ceepeefy.com
-        </span>
-      </footer>
+      {/* Section 9: Beast Phonks */}
+      <section className="flex flex-col gap-3.5 md:gap-4.5 pb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight flex items-center gap-1.5">
+              <span>Beast Phonks</span>
+              <span className="material-symbols-outlined text-rose-500 text-[20px] sm:text-[24px]">local_fire_department</span>
+            </h2>
+          </div>
+          <Link
+            href="/search?genre=phonk"
+            className="flex items-center gap-1 text-on-surface-variant hover:text-rose-400 transition-colors text-xs font-semibold uppercase tracking-wider group"
+          >
+            <span>Explore All</span>
+            <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+              arrow_forward
+            </span>
+          </Link>
+        </div>
+
+        <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2">
+          {BEAST_PHONKS_TRACKS.map((track) => (
+            <SongCard key={track.id} track={track} trackList={BEAST_PHONKS_TRACKS} />
+          ))}
+        </div>
+      </section>
+
+      {/* Modern Footer matching Image 2 */}
+      <Footer />
     </div>
   );
 }

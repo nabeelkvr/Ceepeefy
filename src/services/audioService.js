@@ -281,7 +281,7 @@ export function deduplicateTracks(songs) {
  * Tier 3: Song title contains the search query.
  * Tier 4: Search query matches the primary artist or movie/album name.
  */
-export function assignTrackTier(track, cleanQuery, activeEntity, specificMovieTitles) {
+export function assignTrackTier(track, cleanQuery, activeEntity, specificMovieTitles, isMovieSearch = false, movieTarget = "") {
   if (!track) return 5;
   const rawTitle = track.title || "";
   const titleClean = cleanStr(rawTitle);
@@ -299,6 +299,16 @@ export function assignTrackTier(track, cleanQuery, activeEntity, specificMovieTi
     ? cleanStr(activeEntity?.data?.title || activeEntity?.title || "")
     : "";
 
+  // Check if track is from searched movie query
+  const isTrackFromMovieQuery = Boolean(
+    isMovieSearch && movieTarget && (
+      track.isMovieTrack ||
+      (albumClean && (albumClean.includes(movieTarget) || movieTarget.includes(albumClean))) ||
+      (track.movieName && cleanStr(track.movieName).includes(movieTarget)) ||
+      (titleClean && (titleClean.includes(movieTarget) || movieTarget.includes(titleClean)))
+    )
+  );
+
   // Verify track is from THAT SPECIFIC MOVIE:
   const isTrackFromSpecificMovie = Boolean(
     isMovieHighlight && (
@@ -310,7 +320,7 @@ export function assignTrackTier(track, cleanQuery, activeEntity, specificMovieTi
 
   // Tier 1: Exact song title match OR track from that specific movie
   const isExactTitle = Boolean(cleanQuery && (titleClean === cleanQuery || normTitleClean === cleanQuery));
-  if (isExactTitle || isTrackFromSpecificMovie) {
+  if (isExactTitle || isTrackFromSpecificMovie || isTrackFromMovieQuery) {
     return 1;
   }
 
@@ -354,6 +364,8 @@ export function rankSearchResults(songs, rawQuery, activeEntity) {
   const isExplicitAcoustic = /\b(acoustic|unplugged)\b/i.test(q);
   const isExplicitCover = /\b(cover|tribute|piano|karaoke|instrumental)\b/i.test(q);
   const isExplicitLive = /\b(live|concert|tour)\b/i.test(q);
+  const isMovieSearch = /\bmovie\b/i.test(rawQuery);
+  const movieTarget = cleanStr((rawQuery || "").replace(/\bmovie\b/gi, "").trim());
 
   // 1. Clean-up: filter out spam uploads, karaoke tracks, instrumental covers, low-bitrate rips
   // (isSpamOrRip preserves them if user explicitly queried for them)
@@ -391,8 +403,21 @@ export function rankSearchResults(songs, rawQuery, activeEntity) {
     const titleNorm = normalizeSongTitle(rawTitle);
     const rawArtist = track.artist || track.singers || track.primary_artists || "";
     const artistClean = cleanStr(rawArtist);
+    const albumClean = cleanStr(track.album || "");
 
     let score = 0;
+
+    // Movie search priority: If user searched "<movie> movie" or "movie <movie>", give top boost to that movie's songs
+    if (isMovieSearch && movieTarget) {
+      if (
+        track.isMovieTrack ||
+        (albumClean && (albumClean.includes(movieTarget) || movieTarget.includes(albumClean))) ||
+        (track.movieName && cleanStr(track.movieName).includes(movieTarget)) ||
+        (titleClean && (titleClean.includes(movieTarget) || movieTarget.includes(titleClean)))
+      ) {
+        score += 2000;
+      }
+    }
 
     // Exact song title match
     if (titleClean === cleanQ || titleNorm === normQ) {
@@ -461,7 +486,7 @@ export function rankSearchResults(songs, rawQuery, activeEntity) {
     const rawYear = track.year || (track.releaseDate ? track.releaseDate.slice(0, 4) : 0);
     const year = parseInt(rawYear, 10) || 0;
 
-    const tier = assignTrackTier(track, cleanQ, activeEntity, specificMovieTitles);
+    const tier = assignTrackTier(track, cleanQ, activeEntity, specificMovieTitles, isMovieSearch, movieTarget);
 
     return {
       ...track,
