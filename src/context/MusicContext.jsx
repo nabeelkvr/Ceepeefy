@@ -53,7 +53,7 @@ import {
   deleteSelfMixFromCloud,
   fetchSelfMixesFromCloud,
 } from "../services/supabaseClient";
-import { generateRecommendedQueue } from "../utils/recommendationEngine";
+import { generateRecommendedQueue, extractLanguage, classifySongMood } from "../utils/recommendationEngine";
 
 export const DEFAULT_MOCK_TRACK_IDS = new Set([
   "track-midnight-pulse",
@@ -1831,14 +1831,18 @@ export const MusicProvider = ({ children }) => {
       return null;
     }
 
+    const detectedLang = seedTrack.language || seedTrack.more_info?.language || extractLanguage(seedTrack) || "";
+    const moodObj = classifySongMood(seedTrack);
+
     return {
       id: String(seedTrack.id || ""),
+      cleanId: String(seedTrack.id || "").replace(/^track-/, "").trim(),
       album_id: String(seedTrack.album_id || seedTrack.albumId || seedTrack.more_info?.album_id || ""),
       album: String(seedTrack.album || seedTrack.albumName || seedTrack.more_info?.album || ""),
       primary_artist: String(seedTrack.primary_artist || seedTrack.primaryArtist || seedTrack.artist || seedTrack.singers || ""),
       genre: String(seedTrack.genre || seedTrack.more_info?.genre || ""),
-      mood: String(seedTrack.mood || seedTrack.more_info?.mood || ""),
-      language: String(seedTrack.language || seedTrack.more_info?.language || ""),
+      mood: String(seedTrack.mood || seedTrack.more_info?.mood || moodObj.primary || ""),
+      language: detectedLang,
       year: String(seedTrack.year || seedTrack.releaseDate?.slice(0, 4) || ""),
       title: String(seedTrack.title || seedTrack.song || ""),
       artist: String(seedTrack.artist || ""),
@@ -1846,12 +1850,11 @@ export const MusicProvider = ({ children }) => {
   };
 
   /**
-   * Spotify-Inspired 6-Tier Intelligent Queue Manager:
+   * Spotify-Inspired Intelligent Queue Manager:
    * 1. Extracts seed metadata (id, album_id, album, primary_artist, genre, mood, language, year, title).
-   * 2. Fetches candidate tracks ranked by the strict 6-tier recommendation engine.
-   * 3. Mode "initial": User played a song from Search. Populates upcoming queue with highest-priority recommendations,
-   *    preserving any manual queue items.
-   * 4. Mode "append": Queue is running low (<= 2 tracks). Seamlessly fetches and appends next recommendations if Autoplay is ON.
+   * 2. Fetches candidate tracks ranked by the strict recommendation engine (Same Language + Same Mood + Popular Hits).
+   * 3. Mode "initial": User played a song. Populates upcoming queue with highest-priority recommendations.
+   * 4. Mode "append": Queue is running low (<= 5 tracks). Seamlessly fetches and appends next recommendations if Autoplay is ON.
    * 5. Mode "transition": Current queue depleted and Autoplay is ON; transitions to next recommendation with zero downtime.
    */
   const fetchAndInjectAutoplayQueue = async (seedTrack, options = {}) => {
@@ -1864,12 +1867,12 @@ export const MusicProvider = ({ children }) => {
       mode = options.mode;
     }
 
-    // If Autoplay is OFF, allow initial queue generation from Search, but skip append/transition
+    // If Autoplay is OFF, allow initial queue generation, but skip append/transition
     if (mode !== "initial" && !isAutoplayEnabledRef.current) return;
     if (isFetchingAutoplayRef.current) return;
 
     const seedMeta = extractSeedMetadata(seedTrack);
-    if (!seedMeta || !seedMeta.id) return;
+    if (!seedMeta || (!seedMeta.id && !seedMeta.cleanId)) return;
 
     isFetchingAutoplayRef.current = true;
     setIsAutoplayLoading(true);
@@ -1888,8 +1891,8 @@ export const MusicProvider = ({ children }) => {
         prefetchedRecommendationsRef.current = null;
       } else {
         const params = new URLSearchParams();
-        params.set("songId", seedMeta.id);
-        params.set("id", seedMeta.id);
+        params.set("songId", seedMeta.cleanId || seedMeta.id);
+        params.set("id", seedMeta.cleanId || seedMeta.id);
         if (seedMeta.album_id) params.set("album_id", seedMeta.album_id);
         if (seedMeta.album) params.set("album", seedMeta.album);
         if (seedMeta.primary_artist) params.set("primary_artist", seedMeta.primary_artist);
@@ -1905,7 +1908,7 @@ export const MusicProvider = ({ children }) => {
         if (excludeList) params.set("excludeIds", excludeList);
 
         console.log(
-          `[Autoplay] Querying intelligent recommendations for seed: "${seedMeta.title}" (${seedMeta.id}) | Mode: ${mode} | Album: ${seedMeta.album_id || "N/A"} | Artist: ${seedMeta.primary_artist} | Lang: ${seedMeta.language || "N/A"}`
+          `[Autoplay] Querying intelligent recommendations for seed: "${seedMeta.title}" (${seedMeta.cleanId || seedMeta.id}) | Mode: ${mode} | Album: ${seedMeta.album_id || "N/A"} | Artist: ${seedMeta.primary_artist} | Lang: ${seedMeta.language || "N/A"}`
         );
         const res = await fetch(`/api/audio/recommendations?${params.toString()}`);
 
@@ -1923,13 +1926,14 @@ export const MusicProvider = ({ children }) => {
       const currentQueueIds = new Set((queueRef.current || []).map((t) => String(t.id)));
       const curId = String(currentTrackRef.current?.id || "");
       const seedId = String(seedMeta.id);
+      const cleanSeedId = String(seedMeta.cleanId || "");
 
       let candidateTracks = rawTracks
         .map(normalizeTrack)
         .filter((t) => {
           if (!t || !t.id) return false;
           const tid = String(t.id);
-          if (tid === seedId || tid === curId) return false;
+          if (tid === seedId || tid === cleanSeedId || tid === curId) return false;
           if (mode !== "initial" && currentQueueIds.has(tid)) return false;
           return true;
         });
@@ -1947,8 +1951,8 @@ export const MusicProvider = ({ children }) => {
       // Fallback if session history exhausted candidates: use candidateTracks so queue never halts
       const tracksToUse = freshTracks.length > 0 ? freshTracks : candidateTracks;
 
-      // Select top 12-16 ranked tracks for initial queue, or 8 tracks for append
-      const countToTake = mode === "initial" ? 15 : 8;
+      // Select top 20 ranked tracks for initial queue, or 10 tracks for append
+      const countToTake = mode === "initial" ? 20 : 10;
       let topRankedTracks = tracksToUse.slice(0, countToTake);
 
       if (topRankedTracks.length > 0) {
@@ -2229,7 +2233,13 @@ export const MusicProvider = ({ children }) => {
       }
     }
 
-    if (tracklist && tracklist.length > 0 && options?.context !== "search" && !options?.generatePriorityQueue) {
+    const isExplicitSequentialPlaylist = Boolean(
+      options?.context === "playlist" ||
+      options?.isSequentialPlaylist ||
+      (options?.context === "album" && options?.isAlbumPlay)
+    );
+
+    if (tracklist && tracklist.length > 0 && isExplicitSequentialPlaylist) {
       originalPlaylistTracksRef.current = tracklist;
       setCurrentTracklist(tracklist);
       const trackIdStr = String(track.id);
@@ -2247,22 +2257,23 @@ export const MusicProvider = ({ children }) => {
         setAutoQueue(remaining);
       }
     } else if (options?.fromQueue) {
-      if (isAutoplayEnabledRef.current && autoQueueRef.current.length <= 4) {
+      if (options?.refreshQueueForTrack) {
+        // User clicked a song directly inside the queue drawer: regenerate queue for this new song!
+        fetchAndInjectAutoplayQueue(track, { mode: "initial" });
+      } else if (isAutoplayEnabledRef.current && autoQueueRef.current.length <= 5) {
         fetchAndInjectAutoplayQueue(track, { mode: "append" });
       }
     } else {
-      // Standalone track or played from Search page:
-      // When a song is played, automatically queue upcoming songs using the 6-tier priority algorithm:
-      // 1. Same Movie -> 2. Same Album -> 3. Same Artist -> 4. Same Language -> 5. Related Songs -> 6. Autoplay
+      // Individual track played (Search, Home page, SongCard, RecommendationCard, etc.):
+      // Immediately queue upcoming songs using the Intelligent Queue Algorithm:
+      // Same Language + Same Mood/Type + Popular/Trending Hits
       if (tracklist && tracklist.length > 0) {
-        // Immediate local priority ranking for 0ms instantaneous queue population
         const immediateRanked = generateRecommendedQueue(track, tracklist, { maxResults: 15 });
         if (immediateRanked.length > 0) {
           setAutoQueue(immediateRanked);
           setCurrentTracklist(immediateRanked);
         }
       }
-      // Fetch full enriched priority queue (same movie, album, artist, language, related, autoplay)
       fetchAndInjectAutoplayQueue(track, { mode: "initial" });
     }
 
@@ -2446,7 +2457,7 @@ export const MusicProvider = ({ children }) => {
       const remainingAuto = aQ.slice(1);
       autoQueueRef.current = remainingAuto;
       setAutoQueue(remainingAuto);
-      if (isAutoplayEnabledRef.current && remainingAuto.length <= 4) {
+      if (isAutoplayEnabledRef.current && remainingAuto.length <= 5) {
         fetchAndInjectAutoplayQueue(next, { mode: "append" });
       }
       playTrack(next, null, { fromQueue: true, wasManual: false });
@@ -2456,7 +2467,7 @@ export const MusicProvider = ({ children }) => {
     const cur = currentTrackRef.current;
     const tracklist = currentTracklistRef.current;
     if (!cur) {
-      if (tracklist.length > 0) {
+      if (tracklist && tracklist.length > 0) {
         playTrack(tracklist[0]);
       }
       return;
@@ -2505,14 +2516,13 @@ export const MusicProvider = ({ children }) => {
 
     const aIdx = aQ.findIndex((t) => String(t.id) === tid);
     if (aIdx !== -1) {
-      // User clicked into Automatic Queue: preceding manual queue was consumed/skipped
+      // User clicked into Automatic Queue: play selected track, and immediately regenerate upcoming queue matching this clicked song!
       setManualQueue([]);
-      setAutoQueue((prev) => prev.slice(aIdx + 1));
-      playTrack(track, null, { fromQueue: true, wasManual: false });
+      playTrack(track, null, { fromQueue: true, wasManual: false, refreshQueueForTrack: true });
       return;
     }
 
-    playTrack(track, null, { fromQueue: true });
+    playTrack(track, null, { fromQueue: true, refreshQueueForTrack: true });
   };
 
   // Clear upcoming queue without stopping current playback

@@ -187,14 +187,16 @@ export async function GET(request) {
   );
   if (songId) excludeIdSet.add(String(songId));
 
-  if (!songId && !artist && !title) {
+  const cleanSongId = String(songId || "").replace(/^track-/, "").trim();
+
+  if (!cleanSongId && !artist && !title) {
     return NextResponse.json(
       { success: false, error: "Missing songId, id, artist, or title parameter" },
       { status: 400 }
     );
   }
 
-  const cacheKey = `reco_v5_iq:::${songId}:::${album_id}:::${artist}:::${language}:::${movieName}:::${excludeIdsParam}`;
+  const cacheKey = `reco_v8_iq:::${cleanSongId || songId}:::${title}:::${album_id}:::${artist}:::${language}:::${mood}:::${movieName}:::${excludeIdsParam}`;
   if (recoCache.has(cacheKey)) {
     return NextResponse.json(recoCache.get(cacheKey));
   }
@@ -208,6 +210,7 @@ export async function GET(request) {
   // Seed Metadata Enrichment: If album_id, primary_artist, language, or year are missing, fetch song.getDetails
   let seedDetails = {
     id: songId,
+    cleanId: cleanSongId,
     title: title || "",
     artist: artist || "",
     primary_artist: artist || "",
@@ -220,22 +223,25 @@ export async function GET(request) {
     year: year || "",
   };
 
-  if (songId && (!album_id || !artist || !language || !year)) {
+  if (cleanSongId && (!album_id || !artist || !language || !year)) {
     try {
       const detailsUrl = `https://www.jiosaavn.com/api.php?__call=song.getDetails&pids=${encodeURIComponent(
-        songId
+        cleanSongId
       )}&_format=json`;
       const detRes = await fetch(detailsUrl, { headers, next: { revalidate: 3600 } });
       if (detRes.ok) {
         const detData = await detRes.json();
-        const songObj = detData[songId] || Object.values(detData)[0];
-        if (songObj) {
+        const songObj = detData[cleanSongId] || detData[songId] || (typeof detData === "object" && detData ? Object.values(detData)[0] : null);
+        if (songObj && typeof songObj === "object") {
           if (!seedDetails.title) seedDetails.title = cleanHtmlText(songObj.song || songObj.title || "");
           if (!seedDetails.album) seedDetails.album = cleanHtmlText(songObj.more_info?.album || songObj.album || "");
           if (!seedDetails.album_id) seedDetails.album_id = String(songObj.more_info?.album_id || songObj.albumid || "");
           if (!seedDetails.language) seedDetails.language = cleanHtmlText(songObj.language || songObj.more_info?.language || "");
           if (!seedDetails.genre && (songObj.genre || songObj.more_info?.genre)) {
             seedDetails.genre = cleanHtmlText(songObj.genre || songObj.more_info?.genre);
+          }
+          if (!seedDetails.mood && (songObj.mood || songObj.more_info?.mood)) {
+            seedDetails.mood = cleanHtmlText(songObj.mood || songObj.more_info?.mood);
           }
           if (!seedDetails.year) {
             const yr = parseInt(
@@ -260,107 +266,54 @@ export async function GET(request) {
     }
   }
 
+  // Detect and normalize seed language & mood
+  const seedMoodObj = classifySongMood(seedDetails);
+  const detectedMood = seedMoodObj.primary;
+  let seedLang = (seedDetails.language || "").toLowerCase().trim();
+  if (!seedLang) {
+    const fallbackText = `${seedDetails.title} ${seedDetails.artist} ${seedDetails.album}`.toLowerCase();
+    if (MALAYALAM_HITS.some((t) => t.title?.toLowerCase() === seedDetails.title?.toLowerCase()) || /malayalam/i.test(fallbackText)) {
+      seedLang = "malayalam";
+    } else if (TAMIL_HITS.some((t) => t.title?.toLowerCase() === seedDetails.title?.toLowerCase()) || /tamil/i.test(fallbackText)) {
+      seedLang = "tamil";
+    } else if (HINDI_BESTS_TRACKS.some((t) => t.title?.toLowerCase() === seedDetails.title?.toLowerCase()) || /hindi/i.test(fallbackText)) {
+      seedLang = "hindi";
+    } else {
+      seedLang = "malayalam"; // default baseline for regional Indian hits catalog
+    }
+    seedDetails.language = seedLang;
+  }
+
   const rawCandidateMap = new Map();
 
-  // -------------------------------------------------------------
-  // 1. Movie Soundtrack & Album Extraction (Exact Movie / Album Companion Tracks)
-  // -------------------------------------------------------------
-  if (seedDetails.album_id) {
-    try {
-      const albumUrl = `https://www.jiosaavn.com/api.php?__call=content.getAlbumDetails&_format=json&albumid=${encodeURIComponent(
-        seedDetails.album_id
-      )}`;
-      const albumRes = await fetch(albumUrl, { headers, next: { revalidate: 3600 } });
-      if (albumRes.ok) {
-        const albumData = await albumRes.json();
-        const albumSongs = albumData.list || albumData.songs || [];
-        const isAlbumMovie = Boolean(albumData.is_movie === "1" || albumData.is_movie === true || albumData.album_type === "movie" || seedDetails.movieName);
-        if (Array.isArray(albumSongs)) {
-          for (const s of albumSongs) {
-            if (s && s.id && String(s.id) !== String(songId) && !excludeIdSet.has(String(s.id))) {
-              const formatted = formatSongItem(s);
-              if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
-                formatted.isSameAlbum = true;
-                if (isAlbumMovie || seedDetails.movieName) {
-                  formatted.isMovieTrack = true;
-                  formatted.movieName = seedDetails.movieName || seedDetails.album;
-                }
-                rawCandidateMap.set(String(formatted.id), formatted);
-              }
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("[Recommendations] Album companion tracks fetch failed:", err);
-    }
-  }
+  // Helper to add candidate track with deduplication
+  const addCandidate = (item) => {
+    if (!item || !item.id) return;
+    const sId = String(item.id);
+    if (sId === String(songId) || sId === cleanSongId || excludeIdSet.has(sId)) return;
+    if (rawCandidateMap.has(sId)) return;
 
-  // Explicit Movie search if seed has movieName (e.g. from title "Song (From "Movie")")
-  if (seedDetails.movieName) {
-    try {
-      const movieUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=20&q=${encodeURIComponent(
-        `${seedDetails.movieName} songs`
-      )}`;
-      const movRes = await fetch(movieUrl, { headers, next: { revalidate: 3600 } });
-      if (movRes.ok) {
-        const movData = await movRes.json();
-        const movList = movData.results || [];
-        for (const s of movList) {
-          if (s && s.id && String(s.id) !== String(songId) && !excludeIdSet.has(String(s.id))) {
-            const formatted = formatSongItem(s);
-            if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
-              formatted.isMovieTrack = true;
-              formatted.movieName = seedDetails.movieName;
-              rawCandidateMap.set(String(formatted.id), formatted);
-            }
-          }
-        }
+    const formatted = formatSongItem(item);
+    if (formatted && formatted.title) {
+      // Discard obscure tracks with fewer than 1,000 streams when play_count is known
+      if (formatted.play_count > 0 && formatted.play_count < 1000) return;
+
+      // Validate language: strictly match seed language
+      const candLang = (formatted.language || "").toLowerCase().trim();
+      if (!candLang && seedLang) {
+        formatted.language = seedLang; // Inherit seed language for contextual query hits
       }
-    } catch (err) {
-      console.warn("[Recommendations] Movie tracks query failed:", err);
+      rawCandidateMap.set(sId, formatted);
     }
-  }
+  };
 
   // -------------------------------------------------------------
+  // 1. WebRadio Station & Reco Endpoints (JioSaavn Radio Recommendations)
   // -------------------------------------------------------------
-  // 2. Artist Track Catalog: Pull small subset (max 4-5) for puzzle / surprise factor
-  // DO NOT flood candidate pool with the same artist!
-  // -------------------------------------------------------------
-  if (seedDetails.primary_artist || seedDetails.artist) {
-    const artistToQuery = seedDetails.primary_artist || seedDetails.artist;
-    try {
-      const artistUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=6&q=${encodeURIComponent(
-        artistToQuery
-      )}`;
-      const artRes = await fetch(artistUrl, { headers, next: { revalidate: 1800 } });
-      if (artRes.ok) {
-        const artData = await artRes.json();
-        const artList = artData.results || [];
-        let addedArtistCount = 0;
-        for (const s of artList) {
-          if (s && s.id && String(s.id) !== String(songId) && !excludeIdSet.has(String(s.id))) {
-            const formatted = formatSongItem(s);
-            if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
-              rawCandidateMap.set(String(formatted.id), formatted);
-              addedArtistCount++;
-              if (addedArtistCount >= 4) break;
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("[Recommendations] Artist tracks query failed:", err);
-    }
-  }
-
-  // -------------------------------------------------------------
-  // 3. WebRadio Station & Reco Endpoints (JioSaavn Radio Recommendations)
-  // -------------------------------------------------------------
-  if (songId) {
+  if (cleanSongId) {
     try {
       const stationUrl = `https://www.jiosaavn.com/api.php?__call=webradio.createEntityStation&_format=json&api_version=4&_marker=0&ctx=android&entity_id=[%22${encodeURIComponent(
-        songId
+        cleanSongId
       )}%22]&entity_type=queue`;
 
       const stationRes = await fetch(stationUrl, { headers, next: { revalidate: 1800 } });
@@ -369,7 +322,7 @@ export async function GET(request) {
         if (stationData?.stationid) {
           const songUrl = `https://www.jiosaavn.com/api.php?__call=webradio.getSong&_format=json&api_version=4&_marker=0&ctx=android&stationid=${encodeURIComponent(
             stationData.stationid
-          )}&k=30&next=1`;
+          )}&k=25&next=1`;
 
           const radioRes = await fetch(songUrl, { headers, next: { revalidate: 1800 } });
           if (radioRes.ok) {
@@ -377,17 +330,7 @@ export async function GET(request) {
             const numericKeys = Object.keys(radioData).filter((k) => !isNaN(parseInt(k, 10)));
             for (const key of numericKeys) {
               const rawItem = radioData[key]?.song || radioData[key];
-              if (
-                rawItem &&
-                rawItem.id &&
-                String(rawItem.id) !== String(songId) &&
-                !excludeIdSet.has(String(rawItem.id))
-              ) {
-                const formatted = formatSongItem(rawItem);
-                if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
-                  rawCandidateMap.set(String(formatted.id), formatted);
-                }
-              }
+              addCandidate(rawItem);
             }
           }
         }
@@ -398,7 +341,7 @@ export async function GET(request) {
 
     try {
       const recoUrl = `https://www.jiosaavn.com/api.php?__call=reco.getreco&_format=json&api_version=4&_marker=0&ctx=android&pid=${encodeURIComponent(
-        songId
+        cleanSongId
       )}`;
 
       const recoRes = await fetch(recoUrl, { headers, next: { revalidate: 1800 } });
@@ -406,16 +349,11 @@ export async function GET(request) {
         const recoData = await recoRes.json();
         const rawList = Array.isArray(recoData)
           ? recoData
-          : recoData[songId] || Object.values(recoData)[0] || [];
+          : recoData[cleanSongId] || recoData[songId] || Object.values(recoData)[0] || [];
 
         if (Array.isArray(rawList)) {
           for (const item of rawList) {
-            if (item && item.id && String(item.id) !== String(songId) && !excludeIdSet.has(String(item.id))) {
-              const formatted = formatSongItem(item);
-              if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
-                rawCandidateMap.set(String(formatted.id), formatted);
-              }
-            }
+            addCandidate(item);
           }
         }
       }
@@ -425,45 +363,48 @@ export async function GET(request) {
   }
 
   // -------------------------------------------------------------
-  // 4. Targeted Language & Mood Queries (Guarantees Language & Mood Consistency)
+  // 2. Targeted Language & Mood Queries (Guarantees Language, Mood & Trending Consistency)
   // -------------------------------------------------------------
-  const seedMoodObj = classifySongMood(seedDetails);
-  const detectedMood = seedMoodObj.primary;
-  const seedLang = seedDetails.language ? seedDetails.language.toLowerCase().trim() : "";
-
   const queries = [];
   if (seedLang) {
     if (detectedMood === "bgm" || seedMoodObj.isBgm) {
+      queries.push(`${seedLang} theme`);
+      queries.push(`${seedLang} original score`);
       queries.push(`${seedLang} bgm`);
-      queries.push(`${seedLang} instrumental score`);
-      queries.push(`${seedLang} movie theme`);
-    } else if (detectedMood === "romantic") {
-      queries.push(`${seedLang} romantic love songs`);
-      queries.push(`${seedLang} romantic hits`);
+      queries.push(`${seedLang} mass theme`);
     } else if (detectedMood === "sad") {
-      queries.push(`${seedLang} sad emotional songs`);
-      queries.push(`${seedLang} sad melody`);
+      queries.push(`${seedLang} sad songs`);
+      queries.push(`${seedLang} sad hits`);
+      queries.push(`${seedLang} emotional melody`);
+      queries.push(`${seedLang} heartbreak songs`);
+    } else if (detectedMood === "feeling" || detectedMood === "romantic") {
+      queries.push(`${seedLang} romantic hits`);
+      queries.push(`${seedLang} love melodies`);
+      queries.push(`${seedLang} feeling songs`);
+      queries.push(`${seedLang} melody hits`);
+    } else if (detectedMood === "energetic") {
+      queries.push(`${seedLang} mass songs`);
+      queries.push(`${seedLang} dance party hits`);
+      queries.push(`${seedLang} mass hits`);
+      queries.push(`${seedLang} trending fast beat songs`);
     } else if (detectedMood === "chill") {
       queries.push(`${seedLang} chill melody songs`);
-      queries.push(`${seedLang} acoustic songs`);
-    } else if (detectedMood === "energetic") {
-      queries.push(`${seedLang} dance energy party`);
-      queries.push(`${seedLang} mass songs`);
+      queries.push(`${seedLang} acoustic relaxing songs`);
+      queries.push(`${seedLang} lofi chill`);
     } else {
-      queries.push(`${seedLang} feel good songs`);
-      queries.push(`${seedLang} hit songs`);
+      queries.push(`${seedLang} top hits`);
       queries.push(`${seedLang} trending songs`);
+      queries.push(`${seedLang} popular songs`);
     }
-  }
 
-  if (seedDetails.album && !seedMoodObj.isBgm) {
-    queries.push(`${seedDetails.album} songs`);
+    // Always append top trending hits query for current popular tracks
+    queries.push(`${seedLang} top hits`);
   }
 
   for (const q of queries) {
-    if (rawCandidateMap.size >= 55) break;
+    if (rawCandidateMap.size >= 65) break;
     try {
-      const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=15&q=${encodeURIComponent(
+      const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=18&q=${encodeURIComponent(
         q
       )}`;
 
@@ -472,13 +413,8 @@ export async function GET(request) {
         const sData = await sRes.json();
         const results = sData.results || [];
         for (const item of results) {
-          if (item && item.id && String(item.id) !== String(songId) && !excludeIdSet.has(String(item.id))) {
-            const formatted = formatSongItem(item);
-            if (formatted && formatted.title && !rawCandidateMap.has(String(formatted.id))) {
-              rawCandidateMap.set(String(formatted.id), formatted);
-            }
-          }
-          if (rawCandidateMap.size >= 55) break;
+          addCandidate(item);
+          if (rawCandidateMap.size >= 65) break;
         }
       }
     } catch (err) {
@@ -487,22 +423,54 @@ export async function GET(request) {
   }
 
   // -------------------------------------------------------------
-  // 5. Merge Curated Discovery Catalog Candidates (High-res, verified real tracks)
+  // 3. Occasional Artist & Movie companion tracks (LIMITED to at most 2 tracks)
+  // "Same artist and same movie not consider, but you can place that in song perhaps"
   // -------------------------------------------------------------
-  const allCuratedPool = [
-    ...MALAYALAM_HITS,
-    ...TAMIL_HITS,
-    ...HINDI_BESTS_TRACKS,
-    ...ENGLISH_VIBES_TRACKS,
-    ...BEAST_PHONKS_TRACKS,
-    ...MADE_FOR_YOU_TRACKS,
-    ...CHILL_RELAX_TRACKS,
-  ];
+  if (seedDetails.primary_artist || seedDetails.artist) {
+    const artistToQuery = seedDetails.primary_artist || seedDetails.artist;
+    try {
+      const artistUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=4&q=${encodeURIComponent(
+        artistToQuery
+      )}`;
+      const artRes = await fetch(artistUrl, { headers, next: { revalidate: 1800 } });
+      if (artRes.ok) {
+        const artData = await artRes.json();
+        const artList = artData.results || [];
+        let addedCount = 0;
+        for (const s of artList) {
+          if (s && s.id && !rawCandidateMap.has(String(s.id))) {
+            addCandidate(s);
+            addedCount++;
+            if (addedCount >= 2) break; // max 2 tracks
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[Recommendations] Artist tracks query failed:", err);
+    }
+  }
 
-  for (const track of allCuratedPool) {
-    if (track && track.id && String(track.id) !== String(songId) && !excludeIdSet.has(String(track.id))) {
-      if (!rawCandidateMap.has(String(track.id))) {
-        rawCandidateMap.set(String(track.id), {
+  // -------------------------------------------------------------
+  // 4. Merge Curated Catalog Candidates (Strictly filtered by seed language)
+  // -------------------------------------------------------------
+  let langCurated = [];
+  if (seedLang === "malayalam") {
+    langCurated = MALAYALAM_HITS.map((t) => ({ ...t, language: "malayalam" }));
+  } else if (seedLang === "tamil") {
+    langCurated = TAMIL_HITS.map((t) => ({ ...t, language: "tamil" }));
+  } else if (seedLang === "hindi") {
+    langCurated = HINDI_BESTS_TRACKS.map((t) => ({ ...t, language: "hindi" }));
+  } else if (seedLang === "english") {
+    langCurated = ENGLISH_VIBES_TRACKS.map((t) => ({ ...t, language: "english" }));
+  } else if (seedLang === "phonk") {
+    langCurated = BEAST_PHONKS_TRACKS.map((t) => ({ ...t, language: "phonk" }));
+  }
+
+  for (const track of langCurated) {
+    if (track && track.id && String(track.id) !== String(songId) && String(track.id) !== cleanSongId && !excludeIdSet.has(String(track.id))) {
+      const tid = String(track.id);
+      if (!rawCandidateMap.has(tid)) {
+        rawCandidateMap.set(tid, {
           ...track,
           primary_artist: track.artist || track.primaryArtist,
           primaryArtist: track.artist || track.primaryArtist,
@@ -513,10 +481,10 @@ export async function GET(request) {
 
   const candidatePool = Array.from(rawCandidateMap.values());
 
-  // Apply deterministic 6-Tier Recommendation Hierarchy
+  // Apply deterministic Queue Algorithm & Ranking
   const rankedQueue = generateRecommendedQueue(seedDetails, candidatePool, {
     excludeIds: excludeIdSet,
-    maxResults: 25,
+    maxResults: 20,
   });
 
   const responseData = {

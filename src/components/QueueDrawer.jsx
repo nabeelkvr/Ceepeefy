@@ -36,26 +36,34 @@ export default function QueueDrawer() {
 
   if (!isQueueOpen) return null;
 
-  const getTierBadge = (tier, reason) => {
-    switch (tier) {
-      case 1:
-        return { label: "Same Movie", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
-      case 2:
-        return { label: "Same Album", color: "bg-teal-500/15 text-teal-300 border-teal-500/30" };
-      case 3:
-        return { label: "Same Artist", color: "bg-purple-500/15 text-purple-300 border-purple-500/30" };
-      case 4:
-        return { label: "Same Language", color: "bg-amber-500/15 text-amber-300 border-amber-500/30" };
-      case 5:
-        return { label: "Related", color: "bg-pink-500/15 text-pink-300 border-pink-500/30" };
-      case 6:
-      default:
-        return { label: "Autoplay", color: "bg-sky-500/15 text-sky-300 border-sky-500/30" };
+  const getTierBadge = (track) => {
+    const reason = track?.tierReason || "";
+    if (reason.startsWith("Sad")) {
+      return { label: reason, color: "bg-blue-500/15 text-blue-300 border-blue-500/30" };
     }
+    if (reason.startsWith("Feeling") || reason.startsWith("Romantic")) {
+      return { label: reason, color: "bg-rose-500/15 text-rose-300 border-rose-500/30" };
+    }
+    if (reason.startsWith("BGM")) {
+      return { label: reason, color: "bg-amber-500/15 text-amber-300 border-amber-500/30" };
+    }
+    if (reason.startsWith("Mass") || reason.startsWith("Energetic")) {
+      return { label: reason, color: "bg-orange-500/15 text-orange-300 border-orange-500/30" };
+    }
+    if (reason.startsWith("Chill")) {
+      return { label: reason, color: "bg-teal-500/15 text-teal-300 border-teal-500/30" };
+    }
+    if (reason.startsWith("Artist")) {
+      return { label: reason, color: "bg-purple-500/15 text-purple-300 border-purple-500/30" };
+    }
+    if (reason) {
+      return { label: reason, color: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" };
+    }
+    return { label: "Trending Hit", color: "bg-sky-500/15 text-sky-300 border-sky-500/30" };
   };
 
   const renderTrackItem = (track, displayIndex, isManual = false) => {
-    const badge = !track.isManual ? getTierBadge(track.tier, track.tierReason) : null;
+    const badge = !track.isManual ? getTierBadge(track) : null;
 
     return (
       <div
