@@ -419,12 +419,12 @@ export const MusicProvider = ({ children }) => {
     customBackgroundUrl: null,
     customPalette: null,
     intensityPreset: "cinematic", // "chill" | "cinematic" | "immersive" | "custom"
-    bgOpacity: 55,
-    overlayOpacity: 48,
-    ambientGlowIntensity: 45,
-    bgBlur: 5,
+    bgOpacity: 90,
+    overlayOpacity: 25,
+    ambientGlowIntensity: 55,
+    bgBlur: 0,
     accentMode: "auto", // "auto" | "manual"
-    manualAccentColor: "#a78bfa",
+    manualAccentColor: "#4cd7f6",
   };
 
   const [settings, setSettings] = useState({
@@ -1904,7 +1904,12 @@ export const MusicProvider = ({ children }) => {
         if (seedMeta.artist) params.set("artist", seedMeta.artist);
 
         // Session history exclusion to avoid repetitive recommendations
-        const excludeList = Array.from(sessionPlayedTrackIdsRef.current).join(",");
+        const excludeSet = new Set(sessionPlayedTrackIdsRef.current);
+        if (seedMeta.id) excludeSet.add(String(seedMeta.id));
+        if (seedMeta.cleanId) excludeSet.add(String(seedMeta.cleanId));
+        if (currentTrackRef.current?.id) excludeSet.add(String(currentTrackRef.current.id));
+
+        const excludeList = Array.from(excludeSet).slice(-40).join(",");
         if (excludeList) params.set("excludeIds", excludeList);
 
         console.log(
@@ -1965,6 +1970,10 @@ export const MusicProvider = ({ children }) => {
           setAutoQueue(topRankedTracks);
           setCurrentTracklist([...topRankedTracks]);
           prevSongQueueRef.current = topRankedTracks;
+          // Record into session history so next clicked song gets fresh new recommendations
+          topRankedTracks.forEach((t) => {
+            if (t.id) sessionPlayedTrackIdsRef.current.add(String(t.id));
+          });
         } else if (mode === "append") {
           console.log(
             `[Autoplay] Silently appending ${topRankedTracks.length} ranked candidate tracks to the active queue:`,
@@ -2259,21 +2268,14 @@ export const MusicProvider = ({ children }) => {
     } else if (options?.fromQueue) {
       if (options?.refreshQueueForTrack) {
         // User clicked a song directly inside the queue drawer: regenerate queue for this new song!
+        setAutoQueue([]);
         fetchAndInjectAutoplayQueue(track, { mode: "initial" });
       } else if (isAutoplayEnabledRef.current && autoQueueRef.current.length <= 5) {
         fetchAndInjectAutoplayQueue(track, { mode: "append" });
       }
     } else {
       // Individual track played (Search, Home page, SongCard, RecommendationCard, etc.):
-      // Immediately queue upcoming songs using the Intelligent Queue Algorithm:
-      // Same Language + Same Mood/Type + Popular/Trending Hits
-      if (tracklist && tracklist.length > 0) {
-        const immediateRanked = generateRecommendedQueue(track, tracklist, { maxResults: 15 });
-        if (immediateRanked.length > 0) {
-          setAutoQueue(immediateRanked);
-          setCurrentTracklist(immediateRanked);
-        }
-      }
+      setAutoQueue([]);
       fetchAndInjectAutoplayQueue(track, { mode: "initial" });
     }
 

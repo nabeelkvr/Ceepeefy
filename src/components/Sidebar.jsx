@@ -438,12 +438,20 @@ export default function Sidebar({ className = "", onClose }) {
                     >
                       {/* Playlist Artwork / Square with border radius and no stroke (Image 1) */}
                       <div className="w-10 h-10 aspect-square rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border-0 outline-none group-hover:scale-105 transition-all shadow-md relative bg-surface-container-high">
-                        <PlaylistCover
-                          tracks={pl.tracks || []}
-                          fallbackUrl={pl.coverUrl || pl.image}
-                          alt={pl.title}
-                          className="w-full h-full object-cover rounded-xl"
-                        />
+                        {pl.isCustom || !pl.coverUrl ? (
+                          <PlaylistCover
+                            tracks={pl.tracks || []}
+                            fallbackUrl={pl.coverUrl || pl.image}
+                            alt={pl.title}
+                            className="w-full h-full object-cover rounded-xl"
+                          />
+                        ) : (
+                          <img
+                            src={pl.coverUrl || pl.image}
+                            alt={pl.title}
+                            className="w-full h-full object-cover rounded-xl"
+                          />
+                        )}
 
                         {isPinned && (
                           <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-primary rounded-bl-md flex items-center justify-center shadow-sm z-10">

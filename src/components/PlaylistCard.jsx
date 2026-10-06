@@ -89,7 +89,7 @@ export default function PlaylistCard({
             : "ring-1 ring-white/10 group-hover:ring-white/25"
         }`}
       >
-        {tracks.length > 0 && !playlist.coverUrl ? (
+        {playlist.isCustom || !playlist.coverUrl ? (
           <PlaylistCover
             tracks={tracks}
             fallbackUrl={coverUrl}

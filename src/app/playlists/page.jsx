@@ -245,7 +245,7 @@ export default function PlaylistsPage() {
                       : "ring-1 ring-white/10 group-hover:ring-white/25"
                   }`}
                 >
-                  {tracks.length > 0 && !pl.coverUrl ? (
+                  {pl.isCustom || !pl.coverUrl ? (
                     <PlaylistCover
                       tracks={tracks}
                       fallbackUrl={coverUrl}

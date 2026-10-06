@@ -36,35 +36,7 @@ export default function QueueDrawer() {
 
   if (!isQueueOpen) return null;
 
-  const getTierBadge = (track) => {
-    const reason = track?.tierReason || "";
-    if (reason.startsWith("Sad")) {
-      return { label: reason, color: "bg-blue-500/15 text-blue-300 border-blue-500/30" };
-    }
-    if (reason.startsWith("Feeling") || reason.startsWith("Romantic")) {
-      return { label: reason, color: "bg-rose-500/15 text-rose-300 border-rose-500/30" };
-    }
-    if (reason.startsWith("BGM")) {
-      return { label: reason, color: "bg-amber-500/15 text-amber-300 border-amber-500/30" };
-    }
-    if (reason.startsWith("Mass") || reason.startsWith("Energetic")) {
-      return { label: reason, color: "bg-orange-500/15 text-orange-300 border-orange-500/30" };
-    }
-    if (reason.startsWith("Chill")) {
-      return { label: reason, color: "bg-teal-500/15 text-teal-300 border-teal-500/30" };
-    }
-    if (reason.startsWith("Artist")) {
-      return { label: reason, color: "bg-purple-500/15 text-purple-300 border-purple-500/30" };
-    }
-    if (reason) {
-      return { label: reason, color: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" };
-    }
-    return { label: "Trending Hit", color: "bg-sky-500/15 text-sky-300 border-sky-500/30" };
-  };
-
   const renderTrackItem = (track, displayIndex, isManual = false) => {
-    const badge = !track.isManual ? getTierBadge(track) : null;
-
     return (
       <div
         key={`${track.id}-${displayIndex}-${isManual ? "m" : "a"}`}
@@ -96,21 +68,14 @@ export default function QueueDrawer() {
           </span>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {track.isManual ? (
+          {track.isManual && (
             <span
               className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 select-none"
               title="Manually added to queue"
             >
               Manual
             </span>
-          ) : badge ? (
-            <span
-              className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border select-none ${badge.color}`}
-              title={track.tierReason || badge.label}
-            >
-              {badge.label}
-            </span>
-          ) : null}
+          )}
           <span className="text-[11px] font-mono text-outline">
             {track.durationFormatted || formatTime(track.duration)}
           </span>

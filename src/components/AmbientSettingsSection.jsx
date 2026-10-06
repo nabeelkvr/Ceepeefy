@@ -140,11 +140,10 @@ export default function AmbientSettingsSection() {
                   key={preset.id}
                   type="button"
                   onClick={() => handleIntensityChange(preset.id)}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    isSelected
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${isSelected
                       ? "bg-primary/15 border-primary shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.25)] ring-1 ring-primary/40"
                       : "bg-surface-container/50 border-white/5 hover:bg-surface-container hover:border-white/15"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white">{preset.label}</span>
@@ -188,11 +187,10 @@ export default function AmbientSettingsSection() {
               <div
                 key={preset.id}
                 onClick={() => handleSelectPreset(preset)}
-                className={`group relative rounded-2xl overflow-hidden border cursor-pointer transition-all duration-300 flex flex-col ${
-                  isSelected
+                className={`group relative rounded-2xl overflow-hidden border cursor-pointer transition-all duration-300 flex flex-col ${isSelected
                     ? "border-primary shadow-[0_0_20px_rgba(var(--color-primary-rgb),0.35)] ring-2 ring-primary/40 scale-[1.02]"
                     : "border-white/10 hover:border-white/30 hover:scale-[1.01]"
-                }`}
+                  }`}
               >
                 {/* Visual Thumbnail Image */}
                 <div className="relative aspect-[16/10] w-full bg-[#0a0f1d] overflow-hidden">
@@ -356,22 +354,20 @@ export default function AmbientSettingsSection() {
             <button
               type="button"
               onClick={() => updateSetting("accentMode", "auto")}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                accentMode === "auto"
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${accentMode === "auto"
                   ? "bg-primary text-surface-container-lowest font-bold shadow-[0_0_12px_rgba(var(--color-primary-rgb),0.35)]"
                   : "text-outline hover:text-white"
-              }`}
+                }`}
             >
               Adaptive (Auto)
             </button>
             <button
               type="button"
               onClick={() => updateSetting("accentMode", "manual")}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                accentMode === "manual"
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${accentMode === "manual"
                   ? "bg-primary text-surface-container-lowest font-bold shadow-[0_0_12px_rgba(var(--color-primary-rgb),0.35)]"
                   : "text-outline hover:text-white"
-              }`}
+                }`}
             >
               Manual Accent
             </button>
@@ -431,11 +427,10 @@ export default function AmbientSettingsSection() {
                         themeAccent: pal.id,
                       });
                     }}
-                    className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer ${
-                      isSelected
+                    className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer ${isSelected
                         ? "bg-white/10 border-primary shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.3)] ring-1 ring-primary/40"
                         : "bg-surface-container/50 border-white/5 hover:border-white/20"
-                    }`}
+                      }`}
                   >
                     <span
                       className="w-5 h-5 rounded-full flex-shrink-0 shadow-md border border-white/20"
@@ -618,14 +613,12 @@ export default function AmbientSettingsSection() {
           <button
             type="button"
             onClick={() => updateSetting("ambientGlow", !settings.ambientGlow)}
-            className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
-              settings.ambientGlow ? "bg-primary" : "bg-surface-container-high"
-            }`}
+            className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${settings.ambientGlow ? "bg-primary" : "bg-surface-container-high"
+              }`}
           >
             <span
-              className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                settings.ambientGlow ? "left-6" : "left-1"
-              }`}
+              className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${settings.ambientGlow ? "left-6" : "left-1"
+                }`}
             />
           </button>
         </div>
@@ -646,14 +639,12 @@ export default function AmbientSettingsSection() {
           <button
             type="button"
             onClick={() => updateSetting("showLiveLyrics", !settings.showLiveLyrics)}
-            className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
-              settings.showLiveLyrics ? "bg-primary" : "bg-surface-container-high"
-            }`}
+            className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${settings.showLiveLyrics ? "bg-primary" : "bg-surface-container-high"
+              }`}
           >
             <span
-              className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                settings.showLiveLyrics ? "left-6" : "left-1"
-              }`}
+              className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${settings.showLiveLyrics ? "left-6" : "left-1"
+                }`}
             />
           </button>
         </div>

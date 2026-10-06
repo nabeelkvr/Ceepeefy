@@ -33,5 +33,9 @@
       "type": "image/png"
     }
   ],
-  "categories": ["music", "entertainment", "audio"]
+  "categories": [
+    "music",
+    "entertainment",
+    "audio"
+  ]
 }

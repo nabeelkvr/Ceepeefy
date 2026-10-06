@@ -275,28 +275,136 @@ export const RELATED_LANGUAGES = {
   arabic: [],
   english: [],
   spanish: [],
+  korean: [],
+  japanese: [],
 };
 
-const MALAYALAM_INDICATORS = [
-  "sushin shyam", "hesham abdul wahab", "vidyasagar", "deepak dev", "jassie gift",
-  "vineeth sreenivasan", "harisankar", "job kurian", "rex vijayan", "bijibal",
-  "shaan rahman", "gopi sundar", "premalu", "manjummel", "avesham", "romancham",
-  "bheeshma", "hridayam", "minnal murali", "lucifer", "rdx", "armadham", "illuminati"
+// Helper for accurate keyword matching with token boundaries to prevent substring collisions
+export function matchesKeyword(text, keyword) {
+  if (!text || !keyword) return false;
+  const kw = cleanStr(keyword);
+  const target = cleanStr(text);
+  if (!kw || !target) return false;
+
+  if (kw.includes(" ") || kw.length > 5) {
+    return target.includes(kw);
+  }
+  const escaped = kw.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+  const regex = new RegExp(`(?:^|\\s)${escaped}(?:$|\\s)`, "i");
+  return regex.test(target);
+}
+
+export const MALAYALAM_INDICATORS = [
+  // Iconic Songs & Hits
+  "lajjavathiye", "lajjawathiye", "annakkili", "ninte mizhimuna", "ente kanneril", "4 the people", "four the people",
+  "4 students", "aluvapuzha", "aluvapuzhayude", "malare", "kalippu", "chembarathi", "aaromale", "appangalembadum",
+  "jimikki kammal", "kudukku", "darshana", "manickya malaraya", "entammede jimikki", "pala palli", "neela nilave",
+  "jaada", "illuminati", "armadham", "mathara", "thallumaala", "kichu kichu", "manjummel", "kanave",
+  "mizhiyariyathe", "pinneyum pinneyum", "punchiri thanjum", "enthellam", "kannaadi koodum", "pathirapullunarnnu",
+  "thamarappoovil", "karale nin", "devadoothar", "kuthanthram", "thaazhvaram", "pavizha mazha", "neeyilla neram",
+  "uyiril thodum", "athiran", "kaathodu kaathorath", "unnam marannu", "aaradhike", "cherathukal", "ennuyire",
+  "puthu mazha", "sarvam maya", "chiri thottu", "venmathi", "thumba poove", "oru kari mukilinu", "rathipushpam",
+
+  // Iconic Artists & Composers
+  "jassie gift", "jassey gift", "sushin shyam", "hesham abdul wahab", "vidyasagar", "deepak dev",
+  "vineeth sreenivasan", "harisankar", "k.s. harisankar", "ks harisankar", "job kurian",
+  "rex vijayan", "bijibal", "shaan rahman", "gopi sundar", "m.g. sreekumar", "mg sreekumar",
+  "rajalakshmy", "vinayak sasikumar", "jakes bejoy", "k.j. yesudas", "kj yesudas", "yesudas",
+  "sujatha mohan", "madhu balakrishnan", "vijay yesudas", "najim arshad", "sithara krishnakumar", "sithara",
+  "vaikom vijayalakshmi", "jyotsna", "unni menon", "p. jayachandran", "p jayachandran", "jayachandran",
+  "ouseppachan", "m. jayachandran", "m jayachandran", "raveendran", "johnson master", "johnson", "berny ignatius",
+  "girish puthenchery", "kaithapram", "rafeeq ahammed", "alphons joseph", "mohanlal",
+  "mammootty", "fahadh faasil", "nivin pauly", "tovino thomas", "prithviraj", "dulquer salmaan",
+  "basil joseph", "asif ali", "soubin shahir", "sreenath bhasi", "dabzee", "baby jean",
+  "hanumankind", "thirumali", "fejo", "vedan", "neha s nair", "neha s. nair", "anne amie",
+  "sachin warrier", "arun alat", "sooraj santhosh", "niranj suresh", "gowry lekshmi",
+  "sayanora philip", "mridula warrier", "rimi tomy", "manjari", "swetha mohan", "shweta mohan",
+  "afsal", "stephen devassy", "prashant pillai", "rahul raj", "kailas menon", "justin varghese",
+  "christo xavier", "4 musics",
+
+  // Movies & Pop culture
+  "thudarum", "kondattam", "premalu", "manjummel boys", "manjummel", "avesham", "aavesham",
+  "romancham", "bheeshma", "hridayam", "minnal murali", "lucifer", "rdx", "varshangalkku shesham",
+  "turbo", "bramayugam", "malaikottai vaaliban", "neru", "kannur squad", "king of kotha", "kurup",
+  "malik", "kumbalangi nights", "kumbalangi", "bangalore days", "charlie", "usthad hotel", "premam",
+  "jacobinte swargarajyam", "thattathin marayathu", "classmates", "devasuram", "spadikam", "kilukkam",
+  "chithram", "manichitrathazhu", "drishyam", "pulimurugan", "empuraan", "barroz", "bougainvillea",
+  "kishkindha kaandam", "marco", "ajayante randam moshanam", "arm", "vaazha",
+  "guruvayoor ambalanadayil", "adujeevitham", "the goat life", "garudan", "falimy", "mukundan unni",
+  "jaya jaya jaya jaya hey", "jan e man", "android kunjappan", "helen", "varane avashyamund",
+  "ennu ninte moideen", "anuraga karikkin vellam", "guppy", "sudani from nigeria", "jallikattu",
+  "churuli", "nanpakal nerathu mayakkam", "kaduva", "kaapa", "chatha mazha", "malayalam", "mollywood", "kerala"
 ];
 
-const TAMIL_INDICATORS = [
-  "anirudh", "a.r. rahman", "ar rahman", "yuvan", "harris jayaraj", "santhosh narayanan",
-  "d. imman", "gv prakash", "g.v. prakash", "dhanush", "vijay", "leo", "jailer",
-  "vikram", "master", "kaithi", "beast", "varisu", "goat", "vada chennai"
+export const TAMIL_INDICATORS = [
+  // Composers & Artists
+  "anirudh", "anirudh ravichander", "yuvan", "yuvan shankar raja",
+  "harris jayaraj", "santhosh narayanan", "d. imman", "d imman", "gv prakash", "g.v. prakash",
+  "ilaiyaraaja", "ilayaraja", "sean roldan", "sam c.s.", "sam cs", "hiphop tamizha",
+  "dhanush", "thalapathy vijay", "ajith kumar", "ajith", "rajinikanth",
+  "kamal haasan", "suriya", "karthi", "sivakarthikeyan", "silambarasan tr", "simbu",
+  "vijay sethupathi", "andrea jeremiah",
+  "dhee", "anthony daasan", "yogi b", "arivu", "asal kolaar",
+  "pradeep kumar", "dhibu ninan thomas", "nivas k. prasanna",
+
+  // Movies & Tracks
+  "leo", "jailer", "vikram", "master", "kaithi", "beast", "varisu", "the greatest of all time",
+  "vada chennai", "ponniyin selvan", "ps1", "ps2", "maaveeran", "captain miller", "ayalaan", "indian 2",
+  "raayan", "kanguva", "vettaiyan", "viduthalai", "thuppakki", "mankatha", "mersal", "sarkar",
+  "bigil", "petta", "vaathi", "don", "doctor", "theri", "viswasam", "veeram",
+  "hukum", "kaavaalaa", "arabic kuthu", "rowdy baby", "vaathi coming", "enjoy enjaami",
+  "katchi sera", "thaensudare", "badass", "naa ready", "dippam dappam",
+  "tamil", "kollywood", "tamizha"
 ];
 
-const HINDI_INDICATORS = [
-  "arijit singh", "pritam", "sachin-jigar", "sachin jigar", "vishal mishra",
-  "atif aslam", "kk", "shreya ghoshal", "badshah", "diljit", "darshan raval",
-  "jawan", "brahmastra", "animal", "kabir singh", "aashiqui", "kesariya", "chaleya"
+export const TELUGU_INDICATORS = [
+  "devi sri prasad", "dsp", "s. thaman", "thaman s", "thaman", "m.m. keeravaani", "keeravani",
+  "mickey j. meyer", "mickey j meyer", "vivek sagar", "chaitan bharadwaj", "anurag kulkarni",
+  "ram miriyala", "mangli", "rahul sipligunj", "kaala bhairava", "sunitha",
+  "geetha madhuri", "lipsika", "prabhas", "allu arjun", "mahesh babu", "jr ntr", "ram charan",
+  "pawan kalyan", "chiranjeevi", "nani", "vijay deverakonda", "pushpa", "pushpa 2", "rrr",
+  "devara", "kalki 2898 ad", "salaar", "guntur kaaram", "hanuman", "bahubali", "baahubali",
+  "ala vaikunthapurramuloo", "sarileru neekevvaru", "geetha govindam", "rangasthalam",
+  "oo antava", "srivalli", "naatu naatu", "dosti", "komuram bheemudo", "fear song", "chuttamalle",
+  "telugu", "tollywood"
 ];
 
-const PHONK_INDICATORS = [
+export const HINDI_INDICATORS = [
+  "arijit singh", "pritam", "sachin-jigar", "sachin jigar", "vishal-shekhar", "vishal shekhar",
+  "vishal mishra", "mithoon", "amit trivedi", "shankar-ehsaan-loy", "tanishk bagchi", "b praak",
+  "jasleen royal", "badshah", "yo yo honey singh", "honey singh", "raftaar", "mc stan",
+  "divine", "king", "atif aslam", "kk", "mohit chauhan", "sonu nigam", "shaan", "javed ali",
+  "jubin nautiyal", "darshan raval", "stebin ben", "sunidhi chauhan",
+  "neha kakkar", "tulsi kumar", "palak muchhal", "monali thakur", "shilpa rao", "neeti mohan",
+  "alka yagnik", "kumar sanu", "udit narayan", "kishore kumar", "mohammed rafi", "lata mangeshkar",
+  "asha bhosle", "jawan", "brahmastra", "animal", "kabir singh", "aashiqui", "kesariya",
+  "chaleya", "dunki", "pathaan", "tiger 3", "fighter", "stree 2", "shaitaan", "bhool bhulaiyaa",
+  "rocky aur rani", "gadar 2", "channa mereya", "tum hi ho", "apna bana le", "o maahi", "tauba tauba",
+  "hindi", "bollywood"
+];
+
+export const KANNADA_INDICATORS = [
+  "ravi basrur", "b. ajaneesh loknath", "ajaneesh loknath", "charan raj", "arjun janya",
+  "v. harikrishna", "sanjith hegde", "raghu dixit", "rishab shetty", "rakshit shetty",
+  "shiva rajkumar", "puneeth rajkumar", "sudeep", "kgf", "kgf chapter 2", "kantara",
+  "vikrant rona", "777 charlie", "sapta sagaradaache ello", "singara siriye", "kannada", "sandalwood"
+];
+
+export const PUNJABI_INDICATORS = [
+  "diljit dosanjh", "diljit", "karan aujla", "sidhu moose wala", "sidhu moosewala", "ap dhillon",
+  "gurinder gill", "shubh", "amrit maan", "garry sandhu", "jassie gill", "harrdy sandhu",
+  "guru randhawa", "amrinder gill", "babbu maan", "parmish verma", "punjabi", "pollywood"
+];
+
+export const ENGLISH_INDICATORS = [
+  "the weeknd", "taylor swift", "drake", "dua lipa", "ed sheeran", "harry styles",
+  "billie eilish", "justin bieber", "post malone", "ariana grande", "bruno mars",
+  "coldplay", "imagine dragons", "maroon 5", "eminem", "rihanna", "katy perry",
+  "adele", "shawn mendes", "charlie puth", "olivia rodrigo", "duncan laurence",
+  "arcade", "as it was", "levitating", "starboy", "stay", "harleys in hawaii", "cruel summer"
+];
+
+export const PHONK_INDICATORS = [
   "kordhell", "interworld", "moondeity", "dxrk", "dvrst", "playamane", "hensonn",
   "s3bzs", "bibi babydoll", "kslv", "phonk", "drift phonk", "brazilian phonk", "pr funk"
 ];
@@ -312,29 +420,60 @@ export function extractLanguage(track) {
     "";
   
   const clean = cleanStr(raw);
-  if (clean && clean !== "unknown" && clean !== "popular") {
-    return clean;
-  }
+
+  const titleText = [track.title, track.song, track.album, track.movieName, track.movie]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 
   const allText = [
-    track.artist,
-    track.primary_artist,
     track.title,
     track.song,
+    track.artist,
+    track.primary_artist,
+    track.primaryArtist,
+    track.singers,
+    track.music,
+    track.composer,
     track.album,
     track.movieName,
+    track.movie,
     track.genre,
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
 
-  if (PHONK_INDICATORS.some((k) => allText.includes(k))) return "phonk";
-  if (MALAYALAM_INDICATORS.some((k) => allText.includes(k))) return "malayalam";
-  if (TAMIL_INDICATORS.some((k) => allText.includes(k))) return "tamil";
-  if (HINDI_INDICATORS.some((k) => allText.includes(k))) return "hindi";
+  // 1. Phonk & explicit title indicators
+  if (PHONK_INDICATORS.some((k) => matchesKeyword(allText, k))) return "phonk";
+  if (MALAYALAM_INDICATORS.some((k) => matchesKeyword(titleText, k))) return "malayalam";
+  if (TELUGU_INDICATORS.some((k) => matchesKeyword(titleText, k))) return "telugu";
+  if (KANNADA_INDICATORS.some((k) => matchesKeyword(titleText, k))) return "kannada";
+  if (PUNJABI_INDICATORS.some((k) => matchesKeyword(titleText, k))) return "punjabi";
+  if (TAMIL_INDICATORS.some((k) => matchesKeyword(titleText, k))) return "tamil";
+  if (HINDI_INDICATORS.some((k) => matchesKeyword(titleText, k))) return "hindi";
 
-  return clean || "english";
+  // 2. If valid raw language metadata was explicitly provided, use it
+  if (
+    clean &&
+    clean !== "unknown" &&
+    clean !== "popular" &&
+    clean !== "undefined" &&
+    clean !== "null"
+  ) {
+    return clean;
+  }
+
+  // 3. Fallback to allText indicator matching
+  if (MALAYALAM_INDICATORS.some((k) => matchesKeyword(allText, k))) return "malayalam";
+  if (TELUGU_INDICATORS.some((k) => matchesKeyword(allText, k))) return "telugu";
+  if (KANNADA_INDICATORS.some((k) => matchesKeyword(allText, k))) return "kannada";
+  if (PUNJABI_INDICATORS.some((k) => matchesKeyword(allText, k))) return "punjabi";
+  if (TAMIL_INDICATORS.some((k) => matchesKeyword(allText, k))) return "tamil";
+  if (HINDI_INDICATORS.some((k) => matchesKeyword(allText, k))) return "hindi";
+  if (ENGLISH_INDICATORS.some((k) => matchesKeyword(allText, k))) return "english";
+
+  return clean || "";
 }
 
 export function isLanguageMatch(trackA, trackB) {
@@ -440,13 +579,13 @@ export function classifySongMood(track) {
   }
 
   // 4. Feeling / Romantic / Love / Soulful Melody
-  const feelingRegex = /\b(romantic|romance|love|feeling|feelings|kadhal|kaadhal|premam|pranayam|sneham|dil|pyar|pyaar|ishq|heart|duet|soulful|affection|couple|mohabbat|anbe|kanmani|humsafar|saathiya|deewani|sanam|kesariya|apna bana le|darshana|tum hi ho|uyire|azhage|muthumani|vaseegara|zaalima|raataan lambiyan|pehli nazar|hawayein|madhu pole|mundiri paadam|paathira pullunarnnu|pinneyum pinneyum|punchiri thanjum|kannaadi koodum|ente ellaam|innum konjam|naan un|vennilave|aaruyire|kanden kanden|tum tum|mallipoo|chustu chustune|samaja varagamana|melody|melodies)\b/i;
+  const feelingRegex = /\b(romantic|romance|love|feeling|feelings|kadhal|kaadhal|premam|pranayam|sneham|dil|pyar|pyaar|ishq|heart|duet|soulful|affection|couple|mohabbat|anbe|kanmani|humsafar|saathiya|deewani|sanam|kesariya|apna bana le|darshana|tum hi ho|uyire|azhage|muthumani|vaseegara|zaalima|raataan lambiyan|pehli nazar|hawayein|madhu pole|mundiri paadam|paathira pullunarnnu|pinneyum pinneyum|punchiri thanjum|kannaadi koodum|ente ellaam|innum konjam|naan un|vennilave|aaruyire|kanden kanden|tum tum|mallipoo|chustu chustune|samaja varagamana|melody|melodies|lajjavathiye|lajjawathiye|ninte mizhimuna|annakkili|malare|mathara|cherathukal|neela nilave|thaazhvaram|pavizha mazha|neeyilla neram|uyiril thodum|aaradhike|kaathodu kaathorath|unnam marannu)\b/i;
   if (feelingRegex.test(textToScan)) {
     return { primary: "feeling", secondary: ["romantic", "chill", "melody"], isBgm: false, label: "Feeling Melody" };
   }
 
   // 5. Energetic / Dance / Mass / Party / Fast beat
-  const energeticRegex = /\b(energy|energetic|dance|party|club|edm|mass|dappan|kuthu|workout|gym|beat|bass|drop|remix|fast|drill|trap|hip[\s-]?hop|rap|anthem|festival|dhol|illuminati|armadham|chaleya|badtameez|hukum|alappara|thallumaala|naatu|arabic kuthu|jimikki kammal|dholak|celebration)\b/i;
+  const energeticRegex = /\b(energy|energetic|dance|party|club|edm|mass|dappan|kuthu|workout|gym|beat|bass|drop|remix|fast|drill|trap|hip[\s-]?hop|rap|anthem|festival|dhol|armadham|chaleya|badtameez|hukum|alappara|thallumaala|naatu|arabic kuthu|jimikki kammal|dholak|celebration|kuthanthram|pala palli)\b/i;
   if (energeticRegex.test(textToScan)) {
     return { primary: "energetic", secondary: ["dance", "mass", "feel_good"], isBgm: false, label: "Mass Beat" };
   }
@@ -528,7 +667,7 @@ export function isRelatedMatch(candidate, seedTrack) {
  * --------------------------------------------------------------------------
  * 3. TRENDING / POPULARITY — HIGH PRIORITY (Score: 0 to 100)
  * --------------------------------------------------------------------------
- * Combines play count metrics with release recency to favor famous, trending hits.
+ * Combines play count metrics with release recency to strongly favor famous, trending hits.
  */
 export function calculatePopularityScore(track) {
   if (!track) return 0;
@@ -547,30 +686,28 @@ export function calculatePopularityScore(track) {
   if (playCount >= 50000000) {
     playScore = 80;
   } else if (playCount >= 10000000) {
-    playScore = 70 + Math.min(10, Math.floor(((playCount - 10000000) / 40000000) * 10));
+    playScore = 75 + Math.min(5, Math.floor(((playCount - 10000000) / 40000000) * 5));
   } else if (playCount >= 2000000) {
-    playScore = 55 + Math.min(15, Math.floor(((playCount - 2000000) / 8000000) * 15));
+    playScore = 65 + Math.min(10, Math.floor(((playCount - 2000000) / 8000000) * 10));
   } else if (playCount >= 500000) {
-    playScore = 40 + Math.min(15, Math.floor(((playCount - 500000) / 1500000) * 15));
+    playScore = 50 + Math.min(15, Math.floor(((playCount - 500000) / 1500000) * 15));
   } else if (playCount >= 100000) {
-    playScore = 25 + Math.min(15, Math.floor(((playCount - 100000) / 400000) * 15));
+    playScore = 35 + Math.min(15, Math.floor(((playCount - 100000) / 400000) * 15));
   } else if (playCount >= 20000) {
-    playScore = 15;
+    playScore = 20;
   } else if (playCount >= 5000) {
-    playScore = 8;
-  } else if (playCount >= 1000) {
-    playScore = 4;
+    playScore = 10;
   } else {
-    // Under 1000 plays: obscure/low-popularity track
+    // Under 5000 plays
     playScore = 0;
   }
 
   // Curated / Master badge track bonus if play count was unlisted
-  if (playScore === 0 && (track.badge === "Master" || track.badge === "DIAMOND" || track.badge === "BILLBOARD #1" || track.badge === "Lossless")) {
-    playScore = 50;
+  if (playScore === 0 && (track.badge || track.fidelity || track.source === "curated" || track.isTrending || track.isHit)) {
+    playScore = 65;
   }
 
-  // Recency / Trending score (0 to 20 points) - Awarded to known tracks
+  // Recency / Trending score (0 to 20 points) - Awarded to popular tracks
   let recencyScore = 0;
   if (playScore > 0) {
     const rawYear = track.year || track.more_info?.year || track.release_date?.slice(0, 4);
@@ -578,11 +715,13 @@ export function calculatePopularityScore(track) {
     if (year >= 2024) {
       recencyScore = 20; // Currently trending / hot release
     } else if (year >= 2022) {
-      recencyScore = 15; // Recent hit
+      recencyScore = 16; // Recent hit
     } else if (year >= 2020) {
-      recencyScore = 10;
+      recencyScore = 12;
     } else if (year >= 2016) {
-      recencyScore = 5;
+      recencyScore = 8;
+    } else {
+      recencyScore = 4;
     }
   }
 
@@ -641,11 +780,11 @@ export function calculateArtistDiversityScore(candidate, seedTrack, artistCounts
  * QUEUE SCORING FORMULA
  * --------------------------------------------------------------------------
  * Queue Score =
- *     Language Match       × 40
- *   + Mood/Type Match      × 35
- *   + Trending/Popularity  × 20
- *   + Artist Diversity     × 5
- *   + Discovery Factor (Controlled Randomness: 0 to 5)
+ *     Language Match       × 35
+ *   + Mood/Type Match      × 30
+ *   + Trending/Popularity  × 25
+ *   + Artist Diversity     × 8
+ *   + Discovery Factor (0 to 2)
  */
 export function calculateQueueScore(candidate, seedTrack, options = {}) {
   const { artistCounts = new Map(), lastArtist = null, movieCounts = new Map(), lastMovie = null } = options;
@@ -654,13 +793,13 @@ export function calculateQueueScore(candidate, seedTrack, options = {}) {
   const moodMatch = getMoodMatchScore(candidate, seedTrack);
   const popScore = calculatePopularityScore(candidate);
   const artDiversity = calculateArtistDiversityScore(candidate, seedTrack, artistCounts, lastArtist, movieCounts, lastMovie);
-  const discoveryFactor = Math.floor(Math.random() * 5);
+  const discoveryFactor = Math.floor(Math.random() * 3);
 
   const totalScore = Math.round(
-    langMatch * 0.40 +
-    moodMatch * 0.35 +
-    popScore * 0.20 +
-    artDiversity * 0.05 +
+    langMatch * 0.35 +
+    moodMatch * 0.30 +
+    popScore * 0.25 +
+    artDiversity * 0.08 +
     discoveryFactor
   );
 
@@ -697,6 +836,20 @@ export function calculateSecondaryScore(candidate, seedTrack, tierInfo = {}) {
   return scoreObj.totalScore;
 }
 
+export function normalizeBaseTitle(raw) {
+  if (!raw || typeof raw !== "string") return "";
+  return raw
+    .toLowerCase()
+    .replace(/&quot;/g, "")
+    .replace(/&#039;/g, "")
+    .replace(/&#39;/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/\s*[\(\[](?:from|feat\.?|ft\.?|with|original|soundtrack|version|remix|chill|trap|slowed|reverb|lofi|lyrical|video|audio|extended|ost|bgm|reprise|unplugged|male|female|duet|cover|hindi|tamil|telugu|malayalam|kannada)[^\)\]]*[\)\]]/gi, "")
+    .replace(/\s*-\s*(?:from|remix|chill|trap|slowed|reverb|lofi|lyrical|version|soundtrack|ost|reprise|unplugged|extended|cover|hindi|tamil|telugu|malayalam|kannada).*/gi, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
 /**
  * --------------------------------------------------------------------------
  * INTELLIGENT QUEUE BUILDER (User Rules: Same Language + Same Mood + Trending Hits + Diversity)
@@ -705,7 +858,7 @@ export function calculateSecondaryScore(candidate, seedTrack, tierInfo = {}) {
  * 1. Strict Same Language (Malayalam -> Malayalam, Tamil -> Tamil, Hindi -> Hindi, etc.)
  * 2. Strict Same Type/Mood (Sad -> Sad, Feeling/Melody -> Feeling, BGM -> BGM, Mass -> Mass)
  * 3. Popular & Trending (High stream counts, famous chartbuster tracks)
- * 4. Same Artist & Same Movie NOT prioritized: at most 1-2 across the queue, never back-to-back
+ * 4. Same Artist & Same Movie NOT prioritized: at most 1 song per movie/album, never back-to-back
  * 5. Dynamic controlled variety among top famous hits (no static repetitive locking)
  */
 export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
@@ -740,8 +893,14 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
   const seedId = String(seedTrack.id || "").trim();
   if (seedId) excludeIds.add(seedId);
 
+  const seedLang = extractLanguage(seedTrack);
+  const seedBaseTitle = normalizeBaseTitle(seedTrack.title || seedTrack.song || "");
+  const seedMovie = cleanStr(seedTrack.movieName || seedTrack.album || "");
+
   // 1. Clean & Deduplicate candidates
   const seenIds = new Set();
+  const seenBaseTitles = new Set();
+  if (seedBaseTitle) seenBaseTitles.add(seedBaseTitle);
   const seenTitleArtist = new Set();
   const validCandidates = [];
 
@@ -751,12 +910,25 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     if (excludeIds.has(tid)) continue;
     if (seenIds.has(tid)) continue;
 
+    // Strict Language Check: If seed has a detected language, candidate MUST match that language
+    const candLang = extractLanguage(track);
+    if (seedLang && candLang && candLang !== seedLang) {
+      continue; // Strictly reject different language tracks
+    }
+
+    // Strict Duplicate Title Check: Reject same song name variations or remixes
+    const baseTitle = normalizeBaseTitle(track.title || track.song || "");
+    if (baseTitle && seenBaseTitles.has(baseTitle)) {
+      continue; // Avoid duplicate song names in the queue
+    }
+
     const cleanT = cleanStr(track.title || track.song || "");
     const cleanA = cleanStr(track.artist || track.primary_artist || "");
     const taKey = `${cleanT}:::${cleanA}`;
     if (cleanT && cleanA && seenTitleArtist.has(taKey)) continue;
 
     seenIds.add(tid);
+    if (baseTitle) seenBaseTitles.add(baseTitle);
     if (cleanT && cleanA) seenTitleArtist.add(taKey);
     validCandidates.push(track);
   }
@@ -774,9 +946,6 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
 
   const seedArtists = extractArtists(seedTrack);
   const seedLeadArtist = seedArtists[0] || cleanStr(seedTrack.primary_artist || seedTrack.artist || "");
-  const seedMovie = cleanStr(seedTrack.movieName || seedTrack.album || "");
-  const seedMood = classifySongMood(seedTrack);
-  const seedLang = extractLanguage(seedTrack);
 
   let lastArtist = seedLeadArtist;
   let lastMovie = seedMovie;
@@ -791,7 +960,6 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     const level1 = []; // Same language (100) + exact same mood/type (>= 80)
     const level2 = []; // Same language (100) + similar mood/type (>= 50)
     const level3 = []; // Same language (100) + general popular/trending in that language
-    const level4 = []; // Any language fallback (only when same-language is empty)
 
     for (const cand of pool) {
       const lang = getLanguageMatchScore(cand, seedTrack);
@@ -801,10 +969,8 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
         level1.push(cand);
       } else if (lang === 100 && mood >= 50) {
         level2.push(cand);
-      } else if (lang === 100) {
+      } else if (lang === 100 || !seedLang) {
         level3.push(cand);
-      } else {
-        level4.push(cand);
       }
     }
 
@@ -816,7 +982,7 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
         ? level2
         : level3.length > 0
         ? level3
-        : level4;
+        : pool;
 
     // Calculate dynamic scores for active level items
     const scoredList = activeLevel.map((cand) => {
@@ -836,8 +1002,8 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     // Apply Diversity Rules:
     // a. Never place the same artist or same movie back-to-back
     // b. In slots 0 & 1, do NOT pick seed artist or seed movie (immediate variety)
-    // c. Seed artist / movie max 1-2 appearances in the entire queue
-    // d. Other artists / movies max 2 appearances in queue
+    // c. Maximum 1 song from the same movie/album in the entire queue (prevents album flooding)
+    // d. Other artists max 2 appearances in queue
     let eligible = scoredList.filter((item) => {
       const candArtists = extractArtists(item.track);
       const lead = candArtists[0] || cleanStr(item.track.primary_artist || item.track.artist || "");
@@ -853,15 +1019,15 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
       // Slots 0 & 1: do not repeat seed artist or seed movie
       if (queueIndex < 2 && (isSeedArtist || isSeedMovie)) return false;
 
-      // Seed artist & movie cap
-      if (isSeedArtist && seedArtistAppearances >= 2) return false;
-      if (isSeedMovie && seedMovieAppearances >= 2) return false;
+      // Maximum 1 track from the seed movie, or max 1 track per any movie in queue
+      if (isSeedMovie && seedMovieAppearances >= 1) return false;
+      const mCount = movieCounts.get(movie) || 0;
+      if (movie && mCount >= 1) return false;
 
-      // Other artist & movie cap
+      // Seed artist & other artist cap
+      if (isSeedArtist && seedArtistAppearances >= 2) return false;
       const aCount = artistCounts.get(lead) || 0;
       if (aCount >= 2) return false;
-      const mCount = movieCounts.get(movie) || 0;
-      if (movie && mCount >= 2) return false;
 
       return true;
     });
@@ -872,7 +1038,7 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
         const candArtists = extractArtists(item.track);
         const lead = candArtists[0] || cleanStr(item.track.primary_artist || item.track.artist || "");
         const aCount = artistCounts.get(lead) || 0;
-        return aCount < 3;
+        return aCount < 2;
       });
     }
 
@@ -880,14 +1046,20 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
       eligible = scoredList;
     }
 
-    // Sort eligible by totalScore descending
+    // Sort eligible by totalScore descending (top popular & trending songs ranked highest)
     eligible.sort((a, b) => b.totalScore - a.totalScore);
 
-    // Controlled Randomness & Variety among top famous hits:
-    // Dynamically sample from top 6 candidates so user gets fresh diverse hits
-    const sliceSize = Math.min(6, eligible.length);
-    const topSlice = eligible.slice(0, sliceSize);
-    const selectedItem = topSlice[Math.floor(Math.random() * topSlice.length)];
+    // Pick top-scoring popular & trending hit
+    // For immediate next song (slot 0), strictly choose the #1 highest scoring trending hit
+    // For subsequent slots, choose from top 2-3 to maintain smooth variety among top hits
+    let selectedItem;
+    if (queueIndex === 0) {
+      selectedItem = eligible[0];
+    } else {
+      const sliceSize = Math.min(3, eligible.length);
+      const topSlice = eligible.slice(0, sliceSize);
+      selectedItem = topSlice[Math.floor(Math.random() * topSlice.length)];
+    }
 
     const chosenTrack = selectedItem.track;
     const chosenArtists = extractArtists(chosenTrack);

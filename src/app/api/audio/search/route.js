@@ -481,6 +481,7 @@ export async function GET(request) {
             title: cleanTitle,
             artist: primaryArtists,
             album: albumTitle,
+            album_id: s.albumid || s.more_info?.album_id || primaryMovieAlbum?.id || "",
             image: formatImage(s.image || primaryMovieAlbum?.image),
             thumbnail: formatImage(s.image || primaryMovieAlbum?.image),
             coverUrl: formatImage(s.image || primaryMovieAlbum?.image),
@@ -496,6 +497,7 @@ export async function GET(request) {
             audioUrl: directAudioUrl,
             isMovieTrack: true,
             movieName: movieCleanQuery,
+            language: cleanHtmlText(s.language || s.more_info?.language || primaryMovieAlbum?.language || "").toLowerCase(),
           });
         }
       }
@@ -530,6 +532,7 @@ export async function GET(request) {
           title: cleanTitle,
           artist: artist,
           album: albumTitle || artist,
+          album_id: s.albumid || s.more_info?.album_id || "",
           image: formatImage(s.image),
           thumbnail: formatImage(s.image),
           coverUrl: formatImage(s.image),
@@ -543,6 +546,7 @@ export async function GET(request) {
           bitrate: "320kbps",
           type: "song",
           audioUrl: directAudioUrl,
+          language: cleanHtmlText(s.language || s.more_info?.language || "").toLowerCase(),
         });
       }
 
@@ -569,6 +573,9 @@ export async function GET(request) {
               existing.ctr = playCount;
               existing.ctrFormatted = formatPlayCount(playCount);
             }
+            if (!existing.language && (s.language || s.more_info?.language)) {
+              existing.language = cleanHtmlText(s.language || s.more_info?.language).toLowerCase();
+            }
           }
           continue;
         }
@@ -579,6 +586,7 @@ export async function GET(request) {
           title: cleanTitle,
           artist: artist,
           album: albumTitle || artist,
+          album_id: s.albumid || s.more_info?.album_id || "",
           image: formatImage(s.image),
           thumbnail: formatImage(s.image),
           coverUrl: formatImage(s.image),
@@ -592,6 +600,7 @@ export async function GET(request) {
           bitrate: "320kbps",
           type: "song",
           audioUrl: directAudioUrl,
+          language: cleanHtmlText(s.language || s.more_info?.language || "").toLowerCase(),
         });
       }
 

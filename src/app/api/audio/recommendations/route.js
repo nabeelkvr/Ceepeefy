@@ -9,7 +9,7 @@ import {
   MADE_FOR_YOU_TRACKS,
   CHILL_RELAX_TRACKS,
 } from "../../../../data/curatedDiscovery";
-import { generateRecommendedQueue, classifySongMood } from "../../../../utils/recommendationEngine";
+import { generateRecommendedQueue, classifySongMood, extractLanguage } from "../../../../utils/recommendationEngine";
 
 // In-memory cache for recommendation queries
 const recoCache = new Map();
@@ -156,18 +156,19 @@ function formatSongItem(song) {
 }
 
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const songId = searchParams.get("songId") || searchParams.get("id") || searchParams.get("targetId") || "";
-  let artist = searchParams.get("primary_artist") || searchParams.get("primaryArtist") || searchParams.get("artist") || "";
-  let title = searchParams.get("title") || "";
-  let album_id = searchParams.get("album_id") || searchParams.get("albumId") || "";
-  let album = searchParams.get("album") || "";
-  let genre = searchParams.get("genre") || "";
-  let mood = searchParams.get("mood") || "";
-  let language = searchParams.get("language") || "";
-  let year = searchParams.get("year") || "";
-  let movieName = searchParams.get("movieName") || searchParams.get("movie") || "";
-  const excludeIdsParam = searchParams.get("excludeIds") || "";
+  try {
+    const { searchParams } = new URL(request.url);
+    const songId = searchParams.get("songId") || searchParams.get("id") || searchParams.get("targetId") || "";
+    let artist = searchParams.get("primary_artist") || searchParams.get("primaryArtist") || searchParams.get("artist") || "";
+    let title = searchParams.get("title") || "";
+    let album_id = searchParams.get("album_id") || searchParams.get("albumId") || "";
+    let album = searchParams.get("album") || "";
+    let genre = searchParams.get("genre") || "";
+    let mood = searchParams.get("mood") || "";
+    let language = searchParams.get("language") || "";
+    let year = searchParams.get("year") || "";
+    let movieName = searchParams.get("movieName") || searchParams.get("movie") || "";
+    const excludeIdsParam = searchParams.get("excludeIds") || "";
 
   // Extract movie name from title if present, e.g. "Song (From "Movie")"
   if (!movieName && title) {
@@ -196,7 +197,7 @@ export async function GET(request) {
     );
   }
 
-  const cacheKey = `reco_v8_iq:::${cleanSongId || songId}:::${title}:::${album_id}:::${artist}:::${language}:::${mood}:::${movieName}:::${excludeIdsParam}`;
+  const cacheKey = `reco_v9_trending:::${cleanSongId || songId}:::${title}:::${album_id}:::${artist}:::${language}:::${mood}:::${movieName}:::${excludeIdsParam}`;
   if (recoCache.has(cacheKey)) {
     return NextResponse.json(recoCache.get(cacheKey));
   }
@@ -223,7 +224,7 @@ export async function GET(request) {
     year: year || "",
   };
 
-  if (cleanSongId && (!album_id || !artist || !language || !year)) {
+  if (cleanSongId && (!album_id || !artist || !seedDetails.language || seedDetails.language === "english" || !year)) {
     try {
       const detailsUrl = `https://www.jiosaavn.com/api.php?__call=song.getDetails&pids=${encodeURIComponent(
         cleanSongId
@@ -236,7 +237,10 @@ export async function GET(request) {
           if (!seedDetails.title) seedDetails.title = cleanHtmlText(songObj.song || songObj.title || "");
           if (!seedDetails.album) seedDetails.album = cleanHtmlText(songObj.more_info?.album || songObj.album || "");
           if (!seedDetails.album_id) seedDetails.album_id = String(songObj.more_info?.album_id || songObj.albumid || "");
-          if (!seedDetails.language) seedDetails.language = cleanHtmlText(songObj.language || songObj.more_info?.language || "");
+          const officialLang = cleanHtmlText(songObj.language || songObj.more_info?.language || "");
+          if (officialLang) {
+            seedDetails.language = officialLang.toLowerCase();
+          }
           if (!seedDetails.genre && (songObj.genre || songObj.more_info?.genre)) {
             seedDetails.genre = cleanHtmlText(songObj.genre || songObj.more_info?.genre);
           }
@@ -266,10 +270,38 @@ export async function GET(request) {
     }
   }
 
+  // 1. Check dictionary-based language detection from title/artist/album/movie keywords
+  if (!seedDetails.language || seedDetails.language === "english") {
+    const dictLang = extractLanguage(seedDetails);
+    if (dictLang && dictLang !== "english") {
+      seedDetails.language = dictLang;
+    }
+  }
+
+  // 2. If still unverified and title exists, search JioSaavn autocomplete to extract official language
+  if (!seedDetails.language && seedDetails.title) {
+    try {
+      const searchAutoUrl = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&query=${encodeURIComponent(
+        seedDetails.title + (seedDetails.artist ? " " + seedDetails.artist : "")
+      )}&_format=json`;
+      const sRes = await fetch(searchAutoUrl, { headers, next: { revalidate: 3600 } });
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        const topSong = sData.songs?.data?.[0];
+        if (topSong) {
+          const autoLang = cleanHtmlText(topSong.more_info?.language || topSong.language || "");
+          if (autoLang) {
+            seedDetails.language = autoLang.toLowerCase();
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   // Detect and normalize seed language & mood
   const seedMoodObj = classifySongMood(seedDetails);
   const detectedMood = seedMoodObj.primary;
-  let seedLang = (seedDetails.language || "").toLowerCase().trim();
+  let seedLang = (seedDetails.language || extractLanguage(seedDetails) || "").toLowerCase().trim();
   if (!seedLang) {
     const fallbackText = `${seedDetails.title} ${seedDetails.artist} ${seedDetails.album}`.toLowerCase();
     if (MALAYALAM_HITS.some((t) => t.title?.toLowerCase() === seedDetails.title?.toLowerCase()) || /malayalam/i.test(fallbackText)) {
@@ -281,12 +313,12 @@ export async function GET(request) {
     } else {
       seedLang = "malayalam"; // default baseline for regional Indian hits catalog
     }
-    seedDetails.language = seedLang;
   }
+  seedDetails.language = seedLang;
 
   const rawCandidateMap = new Map();
 
-  // Helper to add candidate track with deduplication
+  // Helper to add candidate track with strict language validation and deduplication
   const addCandidate = (item) => {
     if (!item || !item.id) return;
     const sId = String(item.id);
@@ -295,13 +327,17 @@ export async function GET(request) {
 
     const formatted = formatSongItem(item);
     if (formatted && formatted.title) {
-      // Discard obscure tracks with fewer than 1,000 streams when play_count is known
-      if (formatted.play_count > 0 && formatted.play_count < 1000) return;
+      // Discard obscure tracks with fewer than 10,000 streams when play_count is known
+      if (formatted.play_count > 0 && formatted.play_count < 10000) return;
 
-      // Validate language: strictly match seed language
-      const candLang = (formatted.language || "").toLowerCase().trim();
-      if (!candLang && seedLang) {
-        formatted.language = seedLang; // Inherit seed language for contextual query hits
+      // Strict Language Filter: Never allow cross-language tracks into the candidate pool
+      const candLang = extractLanguage(formatted) || (formatted.language || "").toLowerCase().trim();
+      if (seedLang && candLang && candLang !== seedLang) {
+        return; // Reject cross-language songs
+      }
+
+      if (!formatted.language && seedLang) {
+        formatted.language = seedLang; // Inherit verified seed language for contextual query hits
       }
       rawCandidateMap.set(sId, formatted);
     }
@@ -363,42 +399,57 @@ export async function GET(request) {
   }
 
   // -------------------------------------------------------------
-  // 2. Targeted Language & Mood Queries (Guarantees Language, Mood & Trending Consistency)
+  // 2. Targeted Contextual Queries (Language, Mood, Artist & Era tailored)
   // -------------------------------------------------------------
   const queries = [];
+  const primaryArt = seedDetails.primary_artist || seedDetails.artist || "";
+
   if (seedLang) {
-    if (detectedMood === "bgm" || seedMoodObj.isBgm) {
-      queries.push(`${seedLang} theme`);
-      queries.push(`${seedLang} original score`);
-      queries.push(`${seedLang} bgm`);
-      queries.push(`${seedLang} mass theme`);
-    } else if (detectedMood === "sad") {
-      queries.push(`${seedLang} sad songs`);
-      queries.push(`${seedLang} sad hits`);
-      queries.push(`${seedLang} emotional melody`);
-      queries.push(`${seedLang} heartbreak songs`);
-    } else if (detectedMood === "feeling" || detectedMood === "romantic") {
-      queries.push(`${seedLang} romantic hits`);
-      queries.push(`${seedLang} love melodies`);
-      queries.push(`${seedLang} feeling songs`);
-      queries.push(`${seedLang} melody hits`);
-    } else if (detectedMood === "energetic") {
-      queries.push(`${seedLang} mass songs`);
-      queries.push(`${seedLang} dance party hits`);
-      queries.push(`${seedLang} mass hits`);
-      queries.push(`${seedLang} trending fast beat songs`);
-    } else if (detectedMood === "chill") {
-      queries.push(`${seedLang} chill melody songs`);
-      queries.push(`${seedLang} acoustic relaxing songs`);
-      queries.push(`${seedLang} lofi chill`);
-    } else {
-      queries.push(`${seedLang} top hits`);
-      queries.push(`${seedLang} trending songs`);
-      queries.push(`${seedLang} popular songs`);
+    if (primaryArt && primaryArt.length > 2 && !/various|unknown/i.test(primaryArt)) {
+      queries.push(`${primaryArt} ${seedLang} hits`);
+      queries.push(`${primaryArt} ${seedLang} top trending songs`);
     }
 
-    // Always append top trending hits query for current popular tracks
-    queries.push(`${seedLang} top hits`);
+    const rawYr = parseInt(seedDetails.year || "0", 10);
+    if (rawYr >= 1990 && rawYr <= 2015) {
+      queries.push(`${seedLang} 2000s superhit chartbusters`);
+      queries.push(`${seedLang} evergreen melody hits`);
+    }
+
+    if (detectedMood === "bgm" || seedMoodObj.isBgm) {
+      queries.push(`${seedLang} trending mass bgm hits`);
+      queries.push(`${seedLang} top theme songs`);
+      queries.push(`${seedLang} hit original score`);
+      queries.push(`${seedLang} mass theme`);
+    } else if (detectedMood === "sad") {
+      queries.push(`${seedLang} top sad melody songs`);
+      queries.push(`${seedLang} emotional melody hits`);
+      queries.push(`${seedLang} trending heartbreak hits`);
+      queries.push(`${seedLang} viral sad songs`);
+    } else if (detectedMood === "feeling" || detectedMood === "romantic") {
+      queries.push(`${seedLang} top romantic melody hits`);
+      queries.push(`${seedLang} trending love songs`);
+      queries.push(`${seedLang} chartbuster melody songs`);
+      queries.push(`${seedLang} evergreen love hits`);
+      queries.push(`${seedLang} viral romantic hits`);
+    } else if (detectedMood === "energetic") {
+      queries.push(`${seedLang} top mass songs`);
+      queries.push(`${seedLang} trending dance party hits`);
+      queries.push(`${seedLang} fast beat chartbusters`);
+      queries.push(`${seedLang} viral mass hits`);
+    } else if (detectedMood === "chill") {
+      queries.push(`${seedLang} top chill melody songs`);
+      queries.push(`${seedLang} trending relaxing acoustic songs`);
+      queries.push(`${seedLang} viral lofi chill hits`);
+    } else {
+      queries.push(`${seedLang} top trending songs`);
+      queries.push(`${seedLang} chartbuster songs`);
+      queries.push(`${seedLang} superhit songs`);
+    }
+
+    queries.push(`${seedLang} top trending chartbusters`);
+    queries.push(`${seedLang} superhit songs`);
+    queries.push(`${seedLang} viral hits`);
   }
 
   for (const q of queries) {
@@ -424,13 +475,11 @@ export async function GET(request) {
 
   // -------------------------------------------------------------
   // 3. Occasional Artist & Movie companion tracks (LIMITED to at most 2 tracks)
-  // "Same artist and same movie not consider, but you can place that in song perhaps"
   // -------------------------------------------------------------
-  if (seedDetails.primary_artist || seedDetails.artist) {
-    const artistToQuery = seedDetails.primary_artist || seedDetails.artist;
+  if (primaryArt && primaryArt.length > 2 && !/various|unknown/i.test(primaryArt)) {
     try {
       const artistUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&p=1&n=4&q=${encodeURIComponent(
-        artistToQuery
+        primaryArt
       )}`;
       const artRes = await fetch(artistUrl, { headers, next: { revalidate: 1800 } });
       if (artRes.ok) {
@@ -451,7 +500,7 @@ export async function GET(request) {
   }
 
   // -------------------------------------------------------------
-  // 4. Merge Curated Catalog Candidates (Strictly filtered by seed language)
+  // 4. Merge Curated Catalog Candidates (Dynamically shuffled & mood filtered to avoid repetitive locking)
   // -------------------------------------------------------------
   let langCurated = [];
   if (seedLang === "malayalam") {
@@ -466,7 +515,10 @@ export async function GET(request) {
     langCurated = BEAST_PHONKS_TRACKS.map((t) => ({ ...t, language: "phonk" }));
   }
 
-  for (const track of langCurated) {
+  // Filter curated pool by seed mood affinity & shuffle for dynamic fresh discovery
+  const shuffledCurated = [...langCurated].sort(() => Math.random() - 0.5);
+
+  for (const track of shuffledCurated) {
     if (track && track.id && String(track.id) !== String(songId) && String(track.id) !== cleanSongId && !excludeIdSet.has(String(track.id))) {
       const tid = String(track.id);
       if (!rawCandidateMap.has(tid)) {
@@ -495,8 +547,20 @@ export async function GET(request) {
     tracks: rankedQueue,
   };
 
-  recoCache.set(cacheKey, responseData);
-  return NextResponse.json(responseData, {
-    headers: { "Cache-Control": "public, max-age=1800, s-maxage=3600" },
-  });
+    recoCache.set(cacheKey, responseData);
+    return NextResponse.json(responseData, {
+      headers: { "Cache-Control": "public, max-age=1800, s-maxage=3600" },
+    });
+  } catch (err) {
+    console.error("[Recommendations] GET handler error:", err);
+    // Graceful fallback response: return matching regional catalog instead of 500
+    const fallbackList = MALAYALAM_HITS.slice(0, 15);
+    return NextResponse.json({
+      success: true,
+      source: "fallback_curated",
+      seedTrack: { id: "fallback" },
+      candidatePoolCount: fallbackList.length,
+      tracks: fallbackList,
+    });
+  }
 }

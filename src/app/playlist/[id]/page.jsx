@@ -494,12 +494,26 @@ export default function PlaylistPage() {
         <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 max-w-6xl">
           {/* Cover Art with Love button on upper right edge */}
           <div className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group mx-auto md:mx-0">
-            <PlaylistCover
-              tracks={tracks}
-              fallbackUrl={playlist.coverUrl}
-              alt={playlist.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            />
+            {isCustomPlaylist || !playlist.coverUrl ? (
+              <PlaylistCover
+                tracks={tracks}
+                fallbackUrl={playlist.coverUrl}
+                alt={playlist.title}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+            ) : (
+              <img
+                src={playlist.coverUrl}
+                alt={playlist.title}
+                loading="lazy"
+                decoding="async"
+                onError={(e) => {
+                  e.currentTarget.src =
+                    "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
+                }}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+            )}
             <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity" />
 
             {/* Love / Like Button in right side upper edge of playlist image */}
