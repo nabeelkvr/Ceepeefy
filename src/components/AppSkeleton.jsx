@@ -4,11 +4,11 @@ import React from "react";
 
 export default function AppSkeleton() {
   return (
-    <div className="h-[100dvh] h-screen w-screen flex flex-col bg-[#0b1326] text-on-surface font-sans overflow-hidden select-none">
+    <div className="h-[100dvh] h-screen w-screen flex flex-col bg-[#000000] text-on-surface font-sans overflow-hidden select-none">
       {/* Upper area: Sidebar + Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Desktop Sidebar Skeleton */}
-        <aside className="hidden md:flex w-[72px] flex-col bg-[#080d1a] border-r border-white/5 py-4 px-3 gap-5 select-none shrink-0 items-center justify-between">
+        <aside className="hidden md:flex w-[72px] flex-col bg-[#080808] border-r border-[#1b1b1b] py-4 px-3 gap-5 select-none shrink-0 items-center justify-between">
           <div className="flex flex-col gap-5 items-center w-full">
             {/* Logo Skeleton */}
             <div className="w-10 h-10 rounded-2xl bg-white/10 skeleton-shimmer shrink-0" />
@@ -38,9 +38,9 @@ export default function AppSkeleton() {
         </aside>
 
         {/* Main Content Skeleton Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-[#0b1326] via-[#0d172e] to-[#070e1e] md:my-2 md:mr-2 md:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5">
+        <div className="flex-1 flex flex-col min-w-0 bg-[#050505] md:my-2 md:mr-2 md:rounded-2xl overflow-hidden shadow-2xl relative border border-[#1b1b1b]">
           {/* Header Skeleton */}
-          <header className="h-14 sm:h-16 px-4 md:px-8 border-b border-white/5 flex items-center justify-between shrink-0 bg-[#0b1326]/60 backdrop-blur-md">
+          <header className="h-14 sm:h-16 px-4 md:px-8 border-b border-[#1b1b1b] flex items-center justify-between shrink-0 bg-[#050505]/60 backdrop-blur-md">
             {/* Mobile Header Left: Brand Logo & Menu */}
             <div className="flex items-center gap-3 md:hidden">
               <div className="w-8 h-8 rounded-lg bg-white/10 skeleton-shimmer" />
@@ -132,7 +132,7 @@ export default function AppSkeleton() {
       </div>
 
       {/* Bottom Player Bar Skeleton */}
-      <div className="h-16 md:h-20 bg-[#070e1e]/90 border-t border-white/5 px-4 md:px-8 flex items-center justify-between shrink-0">
+      <div className="h-16 md:h-20 bg-[#070707]/90 border-t border-[#1b1b1b] px-4 md:px-8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-white/10 skeleton-shimmer shrink-0" />
           <div className="flex flex-col gap-1.5">
@@ -156,7 +156,7 @@ export default function AppSkeleton() {
       </div>
 
       {/* Mobile Fixed Bottom Navigation Bar Skeleton */}
-      <nav className="md:hidden h-14 border-t border-white/5 bg-[#0b1326]/95 backdrop-blur-xl flex items-center justify-around px-2 shrink-0">
+      <nav className="md:hidden h-14 border-t border-[#1b1b1b] bg-[#080808]/95 backdrop-blur-xl flex items-center justify-around px-2 shrink-0">
         {[1, 2, 3, 4, 5].map((idx) => (
           <div key={idx} className="flex flex-col items-center gap-1">
             <div className="w-5 h-5 rounded-md bg-white/10 skeleton-shimmer" />

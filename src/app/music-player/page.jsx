@@ -4,6 +4,11 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useMusic } from "../../context/MusicContext";
 import SongOptionsMenu from "../../components/SongOptionsMenu";
 import DownloadButton from "../../components/DownloadButton";
+import LocalPlaylistCard from "../../components/LocalPlaylistCard";
+import LocalPlaylistDetailView from "../../components/LocalPlaylistDetailView";
+import LocalPlaylistModal from "../../components/LocalPlaylistModal";
+import AddToLocalPlaylistModal from "../../components/AddToLocalPlaylistModal";
+import LocalMusicInfoModal from "../../components/LocalMusicInfoModal";
 import { formatPlaylistDuration } from "../../utils/playlistUtils";
 import { searchMusicAutocomplete, rankSearchResults } from "../../services/audioService";
 import {
@@ -15,6 +20,13 @@ import {
   recordLocalRecentlyPlayed,
   getLocalRecentlyPlayedTracks,
   formatFileSize,
+  getAllLocalPlaylists,
+  saveLocalPlaylist,
+  deleteLocalPlaylist,
+  addTracksToLocalPlaylist,
+  removeTrackFromLocalPlaylist,
+  reorderLocalPlaylistTracks,
+  scanDirectoryWithFSA,
 } from "../../services/localMusicService";
 
 export default function MusicPlayerPage() {
@@ -28,18 +40,25 @@ export default function MusicPlayerPage() {
     isLiked,
   } = useMusic();
 
+  // Local tracks & playlists state
   const [tracks, setTracks] = useState([]);
   const [recentTracks, setRecentTracks] = useState([]);
+  const [localPlaylists, setLocalPlaylists] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("all"); // 'all', 'recent', 'artists', 'albums', 'folders'
+
+  // Navigation & filtering state
+  const [activeTab, setActiveTab] = useState("all"); // 'all', 'playlists', 'recent', 'artists', 'albums', 'folders'
+  const [activePlaylistId, setActivePlaylistId] = useState(null); // when viewing a local playlist detail
+  const [selectedFilterValue, setSelectedFilterValue] = useState(null); // when clicking an artist/album/folder
+  const [sortBy, setSortBy] = useState("addedAt"); // 'title', 'artist', 'album', 'addedAt', 'duration'
+
+  // Multi-select state
+  const [selectedTrackIds, setSelectedTrackIds] = useState(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+
+  // Search state
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [sortBy, setSortBy] = useState("addedAt"); // 'title', 'artist', 'album', 'addedAt', 'duration'
-  const [selectedFilterValue, setSelectedFilterValue] = useState(null); // when clicking an artist/album/folder
-  const [isImporting, setIsImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, fileName: "" });
-
-  // Catalog search state
   const [catalogSongs, setCatalogSongs] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
@@ -47,8 +66,26 @@ export default function MusicPlayerPage() {
   const [hasMoreCatalog, setHasMoreCatalog] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
+  // Import state
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, fileName: "" });
+
+  // Modals state
+  const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false);
+  const [editingPlaylist, setEditingPlaylist] = useState(null);
+  const [isAddToPlaylistModalOpen, setIsAddToPlaylistModalOpen] = useState(false);
+  const [tracksToAddToPlaylist, setTracksToAddToPlaylist] = useState([]);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
+
+  // Helper to show temporary toasts
+  const showToast = (msg, type = "success") => {
+    setToastMessage({ msg, type });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   // Debounce search input (300ms)
   useEffect(() => {
@@ -58,22 +95,27 @@ export default function MusicPlayerPage() {
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  // Load saved local tracks from IndexedDB
-  const loadTracks = async () => {
+  // Load saved local tracks & playlists from IndexedDB
+  const loadLibrary = async () => {
     try {
-      const stored = await getAllLocalDeviceTracks();
-      setTracks(stored);
-      const recents = await getLocalRecentlyPlayedTracks(stored);
+      const [storedTracks, storedPlaylists] = await Promise.all([
+        getAllLocalDeviceTracks(),
+        getAllLocalPlaylists(),
+      ]);
+      setTracks(storedTracks);
+      setLocalPlaylists(storedPlaylists);
+
+      const recents = await getLocalRecentlyPlayedTracks(storedTracks);
       setRecentTracks(recents);
     } catch (err) {
-      console.warn("[MusicPlayer] Failed to load local tracks:", err);
+      console.warn("[MusicPlayer] Failed to load local library:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadTracks();
+    loadLibrary();
   }, []);
 
   // Fetch catalog songs whenever debounced query changes
@@ -175,32 +217,84 @@ export default function MusicPlayerPage() {
     return [...matchingLocalTracks, ...filteredCatalog];
   }, [matchingLocalTracks, catalogSongs, debouncedQuery]);
 
-  // Handle file import
+  // Handle files import from file input or drag-and-drop
   const handleFileSelect = async (e) => {
-    const files = Array.from(e.target.files || []).filter(
+    const rawFiles = Array.from(e.target.files || []);
+    await processAndSaveFiles(rawFiles);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (folderInputRef.current) folderInputRef.current.value = "";
+  };
+
+  // Process raw audio files with duplicate detection
+  const processAndSaveFiles = async (rawFiles) => {
+    const audioFiles = rawFiles.filter(
       (f) =>
         f.type.startsWith("audio/") ||
         /\.(mp3|m4a|aac|wav|flac|ogg|opus|webm)$/i.test(f.name)
     );
 
-    if (files.length === 0) return;
+    if (audioFiles.length === 0) {
+      showToast("No supported audio files detected in selection.", "error");
+      return;
+    }
 
     setIsImporting(true);
-    setImportProgress({ current: 0, total: files.length, fileName: files[0].name });
+    setImportProgress({ current: 0, total: audioFiles.length, fileName: audioFiles[0].name });
 
     try {
-      const processed = await processImportedFiles(files, (curr, tot, name) => {
-        setImportProgress({ current: curr, total: tot, fileName: name });
-      });
+      const result = await processImportedFiles(
+        audioFiles,
+        tracks,
+        (curr, tot, name) => {
+          setImportProgress({ current: curr, total: tot, fileName: name });
+        }
+      );
 
-      await saveLocalDeviceTracks(processed);
-      await loadTracks();
+      const processed = result.processed || [];
+      if (processed.length > 0) {
+        await saveLocalDeviceTracks(processed);
+        await loadLibrary();
+        const dupText = result.duplicateCount > 0 ? ` (${result.duplicateCount} duplicates skipped)` : "";
+        showToast(`Successfully imported ${processed.length} new ${processed.length === 1 ? "song" : "songs"}${dupText}`);
+      } else if (result.duplicateCount > 0) {
+        showToast(`All ${result.duplicateCount} selected files are already in your library.`);
+      }
     } catch (err) {
       console.error("[MusicPlayer] Import failed:", err);
+      showToast("Failed to import some audio files. Please try again.", "error");
     } finally {
       setIsImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      if (folderInputRef.current) folderInputRef.current.value = "";
+    }
+  };
+
+  // Handle Folder Scan: File System Access API with fallback
+  const handleScanFolder = async () => {
+    // 1. Try modern File System Access API where supported
+    if (typeof window !== "undefined" && window.showDirectoryPicker) {
+      setIsImporting(true);
+      setImportProgress({ current: 0, total: 0, fileName: "Selecting folder..." });
+
+      const scanResult = await scanDirectoryWithFSA((curr, name) => {
+        setImportProgress({ current: curr, total: curr, fileName: name });
+      });
+
+      if (scanResult.cancelled) {
+        setIsImporting(false);
+        return;
+      }
+
+      if (scanResult.supported && scanResult.files?.length > 0) {
+        await processAndSaveFiles(scanResult.files);
+        return;
+      }
+      setIsImporting(false);
+    }
+
+    // 2. Fallback to standard webkitdirectory file input
+    if (folderInputRef.current) {
+      folderInputRef.current.click();
+    } else {
+      setIsInfoModalOpen(true);
     }
   };
 
@@ -209,27 +303,40 @@ export default function MusicPlayerPage() {
     e?.stopPropagation();
     if (
       !confirm(
-        "Remove this song from your local library? (The actual file on your disk remains untouched)"
+        "Remove this song from your local library? (The actual file on your device remains untouched)"
       )
     ) {
       return;
     }
     await deleteLocalDeviceTrack(trackId);
-    await loadTracks();
+    // Also remove from any local playlists that include it
+    for (const pl of localPlaylists) {
+      if (pl.trackIds?.includes(trackId)) {
+        await removeTrackFromLocalPlaylist(pl.id, trackId);
+      }
+    }
+    await loadLibrary();
+    showToast("Song removed from library.");
   };
 
   // Handle clear library
   const handleClearAll = async () => {
-    if (!confirm("Are you sure you want to clear your local music player library?")) {
+    if (!confirm("Are you sure you want to clear your local music player library? Your playlists and imported tracks will be cleared.")) {
       return;
     }
     await clearAllLocalDeviceTracks();
-    await loadTracks();
+    await loadLibrary();
+    showToast("Local music library cleared.");
   };
 
   // Play a song (works seamlessly for local tracks & online catalog tracks)
-  const handlePlaySong = (track, listToQueue) => {
-    if (track.isLocal || String(track.id).startsWith("local-") || track.source === "local-device") {
+  const handlePlaySong = (track, listToQueue = tracks) => {
+    const isLocal =
+      track.isLocal ||
+      String(track.id).startsWith("local-") ||
+      track.source === "local-device";
+
+    if (isLocal) {
       recordLocalRecentlyPlayed(track.id);
       getLocalRecentlyPlayedTracks(tracks).then((r) => setRecentTracks(r));
     }
@@ -237,8 +344,106 @@ export default function MusicPlayerPage() {
     if (currentTrack?.id === track.id) {
       togglePlay();
     } else {
-      playTrack(track, listToQueue || tracks);
+      // Pass options: { context: "playlist", isSequentialPlaylist: true } for local tracks
+      // so local playback queue remains strictly isolated within local files!
+      playTrack(track, listToQueue || tracks, {
+        context: isLocal ? "playlist" : undefined,
+        isSequentialPlaylist: isLocal,
+      });
     }
+  };
+
+  // Play all tracks in a list
+  const handlePlayAll = (list) => {
+    if (!list || list.length === 0) return;
+    handlePlaySong(list[0], list);
+  };
+
+  // Shuffle play tracks
+  const handleShufflePlay = (list) => {
+    if (!list || list.length === 0) return;
+    const shuffled = [...list].sort(() => Math.random() - 0.5);
+    handlePlaySong(shuffled[0], shuffled);
+  };
+
+  // Local Playlists Management
+  const handleCreateOrUpdatePlaylist = async (playlistData) => {
+    await saveLocalPlaylist(playlistData);
+    await loadLibrary();
+    setIsPlaylistModalOpen(false);
+    setEditingPlaylist(null);
+    showToast(`Playlist "${playlistData.name}" saved!`);
+  };
+
+  const handleDeletePlaylist = async (playlistId) => {
+    await deleteLocalPlaylist(playlistId);
+    if (activePlaylistId === playlistId) {
+      setActivePlaylistId(null);
+    }
+    await loadLibrary();
+    showToast("Playlist deleted. Underlying audio files were preserved.");
+  };
+
+  const handleAddToPlaylistAction = async (playlistId, trackIds) => {
+    await addTracksToLocalPlaylist(playlistId, trackIds);
+    await loadLibrary();
+    setSelectedTrackIds(new Set());
+    setIsSelectionMode(false);
+  };
+
+  const handleRemoveTrackFromPlaylist = async (playlistId, trackId) => {
+    await removeTrackFromLocalPlaylist(playlistId, trackId);
+    await loadLibrary();
+    showToast("Song removed from playlist.");
+  };
+
+  const handleReorderPlaylistTracks = async (playlistId, newTrackIds) => {
+    await reorderLocalPlaylistTracks(playlistId, newTrackIds);
+    await loadLibrary();
+  };
+
+  // Multi-selection helpers
+  const toggleSelectTrack = (trackId, e) => {
+    e?.stopPropagation();
+    setSelectedTrackIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(trackId)) {
+        next.delete(trackId);
+      } else {
+        next.add(trackId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllDisplayed = () => {
+    const next = new Set(displayedTracks.map((t) => t.id));
+    setSelectedTrackIds(next);
+  };
+
+  const clearSelection = () => {
+    setSelectedTrackIds(new Set());
+    setIsSelectionMode(false);
+  };
+
+  const handleBatchAddToPlaylist = () => {
+    const selectedObjs = tracks.filter((t) => selectedTrackIds.has(t.id));
+    if (selectedObjs.length === 0) return;
+    setTracksToAddToPlaylist(selectedObjs);
+    setIsAddToPlaylistModalOpen(true);
+  };
+
+  const handleBatchPlaySelected = () => {
+    const selectedObjs = tracks.filter((t) => selectedTrackIds.has(t.id));
+    if (selectedObjs.length === 0) return;
+    handlePlayAll(selectedObjs);
+  };
+
+  // Single track add to playlist
+  const openSingleTrackAddToPlaylist = (track, e) => {
+    e?.stopPropagation();
+    setTracksToAddToPlaylist([track]);
+    setIsAddToPlaylistModalOpen(true);
   };
 
   // Total library duration & size (local tracks)
@@ -312,10 +517,37 @@ export default function MusicPlayerPage() {
     return list;
   }, [tracks, recentTracks, activeTab, selectedFilterValue, sortBy]);
 
+  const activePlaylist = useMemo(() => {
+    if (!activePlaylistId) return null;
+    return localPlaylists.find((p) => p.id === activePlaylistId) || null;
+  }, [localPlaylists, activePlaylistId]);
+
   const isSearchingActive = Boolean(debouncedQuery.trim());
 
   return (
-    <div className="w-full px-3 md:px-8 py-4 md:py-8 flex flex-col gap-6 md:gap-8 select-none">
+    <div className="w-full px-3 md:px-8 py-4 md:py-8 flex flex-col gap-6 select-none relative pb-24 md:pb-16">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-[150] animate-in fade-in slide-in-from-top-4 duration-200">
+          <div
+            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl shadow-2xl border text-xs font-semibold backdrop-blur-xl ${
+              toastMessage.type === "error"
+                ? "bg-red-950/90 border-red-500/40 text-red-200"
+                : "bg-surface-container-highest/90 border-cyan-400/40 text-white shadow-[0_0_25px_rgba(76,215,246,0.25)]"
+            }`}
+          >
+            <span
+              className={`material-symbols-outlined text-[18px] ${
+                toastMessage.type === "error" ? "text-red-400" : "text-primary"
+              }`}
+            >
+              {toastMessage.type === "error" ? "error" : "check_circle"}
+            </span>
+            <span>{toastMessage.msg}</span>
+          </div>
+        </div>
+      )}
+
       {/* Hidden File / Folder Inputs */}
       <input
         ref={fileInputRef}
@@ -337,15 +569,23 @@ export default function MusicPlayerPage() {
 
       {/* Header Banner */}
       <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] md:text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[16px]">music_note</span>
-            Music Player
-          </span>
-          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-          <span className="text-[10px] md:text-[11px] text-outline">
-            Full JioSaavn Catalog &amp; Device Library
-          </span>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] md:text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[16px]">music_note</span>
+              Music Player
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+            <span className="text-[10px] md:text-[11px] text-outline">
+              Offline Library &amp; Local Playlists
+            </span>
+          </div>
+
+          {/* Offline / Storage Status Pill */}
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium shadow-[0_0_12px_rgba(16,185,129,0.15)]">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Offline Ready • No Data Used</span>
+          </div>
         </div>
 
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -353,11 +593,11 @@ export default function MusicPlayerPage() {
             <h1 className="text-2xl md:text-4xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
               <span>Music Player</span>
               <span className="text-[9px] md:text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 font-mono font-bold tracking-widest uppercase">
-                STUDIO
+                OFFLINE
               </span>
             </h1>
             <p className="text-xs md:text-sm text-on-surface-variant max-w-2xl mt-1">
-              Search the entire music catalog with Spotify-level ranking, or play high-resolution master audio directly from your local device.
+              Your personal offline music library. Import songs from your device to build custom playlists and enjoy studio playback anywhere without internet.
             </p>
           </div>
 
@@ -372,18 +612,26 @@ export default function MusicPlayerPage() {
             </button>
 
             <button
-              onClick={() => folderInputRef.current?.click()}
+              onClick={handleScanFolder}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface-container-high hover:bg-surface-container-highest border border-white/10 text-white font-semibold text-xs transition-all cursor-pointer"
-              title="Import an entire folder of music"
+              title="Scan folder or select directory"
             >
               <span className="material-symbols-outlined text-[17px] text-primary">folder_open</span>
-              <span className="hidden sm:inline">Scan Folder</span>
+              <span>Scan Folder</span>
+            </button>
+
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-outline hover:text-white transition-all text-xs cursor-pointer"
+              title="Supported audio formats & PWA storage guide"
+            >
+              <span className="material-symbols-outlined text-[16px]">info</span>
             </button>
 
             {tracks.length > 0 && !isSearchingActive && (
               <button
                 onClick={handleClearAll}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-white/5 hover:bg-red-500/20 text-outline hover:text-red-400 border border-white/5 transition-all text-xs cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-white/5 hover:bg-red-500/20 text-outline hover:text-red-400 border border-white/5 transition-all text-xs cursor-pointer"
                 title="Clear all imported songs"
               >
                 <span className="material-symbols-outlined text-[16px]">delete_sweep</span>
@@ -394,9 +642,12 @@ export default function MusicPlayerPage() {
 
         {/* Telemetry Stats Bar (shown when not searching) */}
         {!isSearchingActive && tracks.length > 0 && (
-          <div className="flex items-center gap-2.5 sm:gap-4 overflow-x-auto no-scrollbar pt-1">
+          <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto no-scrollbar pt-1">
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-surface-container-high/60 border border-white/5 text-[11px] text-outline">
-              <span className="text-white font-bold">{tracks.length}</span> local songs
+              <span className="text-white font-bold">{tracks.length}</span> songs
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-surface-container-high/60 border border-white/5 text-[11px] text-outline">
+              <span className="text-cyan-300 font-bold">{localPlaylists.length}</span> playlists
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-surface-container-high/60 border border-white/5 text-[11px] text-outline">
               <span className="text-white font-bold">{artistsMap.length}</span> artists
@@ -416,13 +667,15 @@ export default function MusicPlayerPage() {
 
       {/* Importing Progress Overlay */}
       {isImporting && (
-        <div className="p-4 rounded-2xl bg-surface-container-high/80 border border-primary/30 flex items-center gap-3 animate-pulse">
+        <div className="p-4 rounded-2xl bg-surface-container-high/90 border border-primary/30 flex items-center gap-3 animate-pulse shadow-xl">
           <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0" />
           <div className="flex flex-col min-w-0 flex-1">
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold text-white">Importing local audio files...</span>
               <span className="font-mono text-primary font-bold">
-                {importProgress.current} / {importProgress.total}
+                {importProgress.total > 0
+                  ? `${importProgress.current} / ${importProgress.total}`
+                  : `${importProgress.current} files`}
               </span>
             </div>
             <span className="text-[11px] text-outline truncate mt-0.5">
@@ -437,17 +690,19 @@ export default function MusicPlayerPage() {
         <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
           {[
             { id: "all", label: "All Songs", icon: "queue_music", count: tracks.length },
+            { id: "playlists", label: "Playlists", icon: "playlist_play", count: localPlaylists.length },
             { id: "recent", label: "Recently Played", icon: "history", count: recentTracks.length },
             { id: "artists", label: "Artists", icon: "person", count: artistsMap.length },
             { id: "albums", label: "Albums", icon: "album", count: albumsMap.length },
             { id: "folders", label: "Folders", icon: "folder", count: foldersMap.length },
           ].map((tab) => {
-            const isActive = activeTab === tab.id && !isSearchingActive;
+            const isActive = activeTab === tab.id && !isSearchingActive && !activePlaylistId;
             return (
               <button
                 key={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id);
+                  setActivePlaylistId(null);
                   setSelectedFilterValue(null);
                   if (searchQuery) {
                     setSearchQuery("");
@@ -489,7 +744,7 @@ export default function MusicPlayerPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search songs, artists, Hindi, Malayalam, Arabic..."
+              placeholder="Search local songs, artists, albums..."
               className={`w-full bg-surface-container-high/60 border rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder-outline focus:outline-none transition-all ${
                 isSearchingActive ? "border-primary/50 ring-1 ring-primary/20" : "border-white/10"
               }`}
@@ -508,8 +763,8 @@ export default function MusicPlayerPage() {
             )}
           </div>
 
-          {/* Sort dropdown (for local library view) */}
-          {!isSearchingActive && (
+          {/* Sort dropdown (for local library views) */}
+          {!isSearchingActive && !activePlaylistId && (
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -525,8 +780,48 @@ export default function MusicPlayerPage() {
         </div>
       </div>
 
+      {/* Floating Multi-Select Action Bar */}
+      {selectedTrackIds.size > 0 && !activePlaylistId && (
+        <div className="sticky top-4 z-30 flex items-center justify-between gap-3 p-3 px-4 rounded-2xl bg-[#101010]/95 backdrop-blur-xl border border-primary/40 shadow-[0_10px_30px_rgba(0,0,0,0.8)] animate-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center font-mono font-bold text-xs">
+              {selectedTrackIds.size}
+            </span>
+            <span className="text-xs font-semibold text-white">
+              {selectedTrackIds.size === 1 ? "song" : "songs"} selected
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBatchPlaySelected}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs hover:scale-105 active:scale-95 transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[16px]">play_arrow</span>
+              <span>Play Selected</span>
+            </button>
+
+            <button
+              onClick={handleBatchAddToPlaylist}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest border border-white/10 text-white font-semibold text-xs transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[16px] text-primary">playlist_add</span>
+              <span>Add to Playlist</span>
+            </button>
+
+            <button
+              onClick={clearSelection}
+              className="p-1.5 rounded-lg text-outline hover:text-white cursor-pointer transition-colors"
+              title="Clear selection"
+            >
+              <span className="material-symbols-outlined text-[16px]">close</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Breadcrumb if filtering by specific Artist/Album/Folder (local) */}
-      {!isSearchingActive && selectedFilterValue && (
+      {!isSearchingActive && selectedFilterValue && !activePlaylistId && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-container-high/40 border border-white/5 text-xs">
           <span className="text-outline uppercase tracking-wider font-mono text-[10px]">Filtering:</span>
           <span className="font-bold text-white">{selectedFilterValue}</span>
@@ -541,9 +836,8 @@ export default function MusicPlayerPage() {
 
       {/* MAIN CONTENT AREA */}
       {isSearchingActive ? (
-        /* SEARCH RESULTS VIEW (Spotify-like Catalog & Local Search) */
+        /* SEARCH RESULTS VIEW (Online Catalog & Local Search) */
         <div className="flex flex-col gap-3">
-          {/* Search Header Banner */}
           <div className="flex items-center justify-between gap-3 pb-2 border-b border-white/10">
             <div className="flex items-center gap-2 min-w-0">
               <span className="material-symbols-outlined text-primary text-[20px]">manage_search</span>
@@ -557,7 +851,7 @@ export default function MusicPlayerPage() {
                   </span>
                 </div>
                 <span className="text-[10px] text-outline hidden sm:inline">
-                  Intelligently ranked by original versions, artist matches, and verified popularity
+                  Intelligently searching local files first, followed by online music catalog
                 </span>
               </div>
             </div>
@@ -657,7 +951,7 @@ export default function MusicPlayerPage() {
                   No songs found for &ldquo;{debouncedQuery}&rdquo;
                 </h3>
                 <p className="text-xs text-on-surface-variant">
-                  Check for typos, search for the artist or movie name, or search in English, Malayalam, Hindi, or Arabic.
+                  Check for typos or search for songs by artist, album, or file name.
                 </p>
               </div>
               <button
@@ -782,15 +1076,12 @@ export default function MusicPlayerPage() {
                         </span>
                       </button>
 
-                      {/* Add to Queue Button */}
+                      {/* Add to Playlist Action */}
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          addToQueue(track);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-outline hover:text-white p-1 rounded-md transition-all cursor-pointer"
-                        title="Add to queue"
+                        onClick={(e) => openSingleTrackAddToPlaylist(track, e)}
+                        className="opacity-0 group-hover:opacity-100 text-outline hover:text-primary p-1 rounded-md transition-all cursor-pointer"
+                        title="Add to local playlist"
                       >
                         <span className="material-symbols-outlined text-[18px]">playlist_add</span>
                       </button>
@@ -855,37 +1146,162 @@ export default function MusicPlayerPage() {
             </div>
           )}
         </div>
+      ) : activePlaylist ? (
+        /* LOCAL PLAYLIST DETAIL VIEW */
+        <LocalPlaylistDetailView
+          playlist={activePlaylist}
+          allTracks={tracks}
+          onBack={() => setActivePlaylistId(null)}
+          onPlaySong={(track, list) => handlePlaySong(track, list)}
+          onPlayAll={(list) => handlePlayAll(list)}
+          onShufflePlay={(list) => handleShufflePlay(list)}
+          onEditPlaylist={(pl) => {
+            setEditingPlaylist(pl);
+            setIsPlaylistModalOpen(true);
+          }}
+          onDeletePlaylist={(id) => handleDeletePlaylist(id)}
+          onRemoveTrackFromPlaylist={(plId, tId) => handleRemoveTrackFromPlaylist(plId, tId)}
+          onReorderTracks={(plId, newIds) => handleReorderPlaylistTracks(plId, newIds)}
+          onOpenAddSongs={() => {
+            // Find tracks not yet in this playlist
+            const existingIds = new Set(activePlaylist.trackIds || []);
+            const availableTracks = tracks.filter((t) => !existingIds.has(t.id));
+            if (availableTracks.length === 0) {
+              showToast("All songs in your library are already in this playlist.");
+              return;
+            }
+            setTracksToAddToPlaylist(availableTracks);
+            setIsAddToPlaylistModalOpen(true);
+          }}
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+        />
       ) : (
-        /* STANDARD LOCAL LIBRARY VIEWS (when search query is empty) */
+        /* STANDARD LOCAL LIBRARY VIEWS (when not searching and not in playlist detail) */
         <>
           {tracks.length === 0 ? (
-            /* Empty Local Library State */
-            <div className="w-full py-16 px-4 rounded-3xl glass-card border border-white/5 flex flex-col items-center justify-center text-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-surface-container-high border border-white/10 flex items-center justify-center text-primary shadow-[0_0_24px_rgba(76,215,246,0.2)]">
-                <span className="material-symbols-outlined text-[32px]">library_music</span>
+            /* Beautiful Empty State matching requirements */
+            <div className="w-full py-16 px-4 rounded-3xl glass-card border border-white/5 flex flex-col items-center justify-center text-center gap-5 my-4">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary/20 via-surface-container-high to-surface-container border border-primary/30 flex items-center justify-center text-primary shadow-[0_0_30px_rgba(76,215,246,0.25)]">
+                  <span className="material-symbols-outlined text-[40px]">library_music</span>
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[16px]">offline_bolt</span>
+                </div>
               </div>
-              <div className="flex flex-col gap-1 max-w-md">
-                <h2 className="text-lg md:text-xl font-bold text-white">Your Local Library is Empty</h2>
-                <p className="text-xs md:text-sm text-on-surface-variant">
-                  Import audio tracks from your device to listen with full Ceepeefy studio fidelity, or use the search bar above to explore millions of songs.
+
+              <div className="flex flex-col gap-1.5 max-w-md">
+                <h2 className="text-xl md:text-2xl font-extrabold text-white tracking-tight">
+                  Your music, your way
+                </h2>
+                <p className="text-xs md:text-sm text-on-surface-variant leading-relaxed">
+                  Import songs from your device to build your personal offline library. Stored safely in your browser database for zero-data playback anytime.
                 </p>
               </div>
-              <div className="flex items-center gap-3 pt-2">
+
+              <div className="flex items-center gap-3 pt-2 flex-wrap justify-center">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(76,215,246,0.4)] cursor-pointer"
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(76,215,246,0.4)] cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[18px]">upload_file</span>
-                  <span>Select Audio Files</span>
+                  <span>Import Audio Files</span>
                 </button>
+
                 <button
-                  onClick={() => folderInputRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest border border-white/10 text-white font-semibold text-xs transition-all cursor-pointer"
+                  onClick={() => setIsInfoModalOpen(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest border border-white/10 text-white font-semibold text-xs transition-all cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[18px] text-primary">folder</span>
-                  <span>Scan Folder</span>
+                  <span className="material-symbols-outlined text-[18px] text-primary">help_outline</span>
+                  <span>Browse Supported Files</span>
                 </button>
               </div>
+
+              <div className="flex items-center gap-2 text-[11px] text-outline pt-2">
+                <span className="material-symbols-outlined text-[15px] text-emerald-400">verified_user</span>
+                <span>MP3, M4A, FLAC, WAV, AAC, OGG • 100% Offline • No data uploads</span>
+              </div>
+            </div>
+          ) : activeTab === "playlists" ? (
+            /* Playlists Tab View */
+            <div className="flex flex-col gap-5">
+              <div className="flex items-center justify-between pb-1">
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-white">Your Local Playlists</h2>
+                  <p className="text-xs text-outline">Custom playlists stored on this device</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingPlaylist(null);
+                    setIsPlaylistModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs hover:scale-105 active:scale-95 transition-all shadow-[0_0_12px_rgba(76,215,246,0.35)] cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add</span>
+                  <span>New Playlist</span>
+                </button>
+              </div>
+
+              {localPlaylists.length === 0 ? (
+                <div className="py-16 text-center text-outline text-xs flex flex-col items-center justify-center gap-3 glass-card rounded-2xl border border-white/5 p-6">
+                  <span className="material-symbols-outlined text-[36px] text-primary/60">playlist_add</span>
+                  <div className="flex flex-col gap-1 max-w-sm">
+                    <span className="font-bold text-white text-sm">No Local Playlists Yet</span>
+                    <span>Create a playlist to group your imported songs by mood, workout, or favorites.</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingPlaylist(null);
+                      setIsPlaylistModalOpen(true);
+                    }}
+                    className="mt-2 px-4 py-2 rounded-full bg-surface-container-high hover:bg-surface-container-highest border border-white/10 text-white font-semibold text-xs cursor-pointer"
+                  >
+                    + Create First Playlist
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                  {/* Create New Playlist Card */}
+                  <div
+                    onClick={() => {
+                      setEditingPlaylist(null);
+                      setIsPlaylistModalOpen(true);
+                    }}
+                    className="group flex flex-col items-center justify-center text-center gap-2 p-4 rounded-2xl border-2 border-dashed border-white/10 hover:border-primary/50 hover:bg-surface-container/60 transition-all duration-300 cursor-pointer aspect-square"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <span className="material-symbols-outlined text-[24px]">add</span>
+                    </div>
+                    <span className="text-xs font-bold text-white group-hover:text-primary transition-colors">
+                      New Playlist
+                    </span>
+                  </div>
+
+                  {localPlaylists.map((pl) => {
+                    const plTracks = (pl.trackIds || [])
+                      .map((id) => tracks.find((t) => t.id === id))
+                      .filter(Boolean);
+
+                    return (
+                      <LocalPlaylistCard
+                        key={pl.id}
+                        playlist={pl}
+                        tracks={plTracks}
+                        onClick={() => setActivePlaylistId(pl.id)}
+                        onPlay={(playlist, trackList) => handlePlayAll(trackList)}
+                        onEdit={(playlist) => {
+                          setEditingPlaylist(playlist);
+                          setIsPlaylistModalOpen(true);
+                        }}
+                        onDelete={(playlist) => handleDeletePlaylist(playlist.id)}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : activeTab === "artists" && !selectedFilterValue ? (
             /* Artists View */
@@ -971,135 +1387,325 @@ export default function MusicPlayerPage() {
             </div>
           ) : (
             /* Local Songs Table View (All Songs, Recent, or Filtered) */
-            <div className="flex flex-col gap-2">
-              {displayedTracks.length > 0 && (
-                <div className="flex items-center justify-between pb-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handlePlaySong(displayedTracks[0], displayedTracks)}
-                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs hover:scale-105 active:scale-95 transition-all shadow-[0_0_12px_rgba(76,215,246,0.3)] cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">play_arrow</span>
-                      <span>Play All</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        const shuffled = [...displayedTracks].sort(() => Math.random() - 0.5);
-                        handlePlaySong(shuffled[0], shuffled);
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest border border-white/10 text-white text-xs font-semibold transition-all cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[16px] text-primary">
-                        shuffle
-                      </span>
-                      <span className="hidden sm:inline">Shuffle</span>
-                    </button>
-                  </div>
-                  <span className="text-[11px] text-outline font-mono">
-                    {displayedTracks.length} {displayedTracks.length === 1 ? "song" : "songs"}
-                  </span>
-                </div>
-              )}
+            <div className="flex flex-col gap-6">
+              {/* Quick Carousels for 'All Songs' main view */}
+              {activeTab === "all" && !selectedFilterValue && (
+                <>
+                  {/* Recently Played Quick Carousel (if any) */}
+                  {recentTracks.length > 0 && (
+                    <div className="flex flex-col gap-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary text-[18px]">history</span>
+                          <h3 className="text-xs sm:text-sm font-bold text-white">Recently Played</h3>
+                        </div>
+                        <button
+                          onClick={() => setActiveTab("recent")}
+                          className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                        >
+                          View All ({recentTracks.length})
+                        </button>
+                      </div>
 
-              {displayedTracks.length === 0 ? (
-                <div className="py-12 text-center text-outline text-xs">
-                  No local tracks found.
-                </div>
-              ) : (
-                <div className="flex flex-col divide-y divide-white/5 rounded-2xl glass-card border border-white/5 overflow-hidden">
-                  {displayedTracks.map((track, idx) => {
-                    const isTrackPlaying = isPlaying && String(currentTrack?.id) === String(track.id);
-                    const isCurrent = String(currentTrack?.id) === String(track.id);
-
-                    return (
-                      <div
-                        key={track.id}
-                        onClick={() => handlePlaySong(track, displayedTracks)}
-                        className={`group flex items-center justify-between gap-3 p-2.5 sm:p-3 hover:bg-surface-container/70 transition-colors cursor-pointer select-none ${
-                          isCurrent ? "bg-primary/10 border-l-2 border-primary" : ""
-                        }`}
-                      >
-                        {/* Left: Index & Play state & Artwork */}
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <span className="text-xs font-mono text-outline w-6 text-center shrink-0">
-                            {isTrackPlaying ? (
-                              <span className="material-symbols-outlined text-[16px] text-primary animate-pulse">
-                                graphic_eq
-                              </span>
-                            ) : (
-                              idx + 1
-                            )}
-                          </span>
-
-                          <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden bg-surface-container-highest shrink-0 shadow">
-                            <img
-                              src={track.coverUrl}
-                              alt={track.title}
-                              className="w-full h-full object-cover"
-                            />
-                            <div
-                              className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${
-                                isCurrent ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                              }`}
-                            >
-                              <span className="material-symbols-outlined text-white text-[20px]">
-                                {isTrackPlaying ? "pause" : "play_arrow"}
-                              </span>
+                      <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-1">
+                        {recentTracks.slice(0, 10).map((track) => (
+                          <div
+                            key={`rec-${track.id}`}
+                            onClick={() => handlePlaySong(track, recentTracks)}
+                            className="group flex items-center gap-2.5 p-2 rounded-xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/70 transition-all cursor-pointer shrink-0 w-52 sm:w-60"
+                          >
+                            <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-surface-container-highest">
+                              <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span className="material-symbols-outlined text-white text-[18px]">play_arrow</span>
+                              </div>
                             </div>
-                          </div>
-
-                          {/* Title & Artist */}
-                          <div className="flex flex-col min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className={`text-xs sm:text-sm font-semibold truncate ${
-                                  isCurrent
-                                    ? "text-primary font-bold"
-                                    : "text-white group-hover:text-primary transition-colors"
-                                }`}
-                              >
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <span className="text-xs font-semibold text-white truncate group-hover:text-primary transition-colors">
                                 {track.title}
                               </span>
-                              <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 uppercase shrink-0 font-bold">
-                                LOCAL
+                              <span className="text-[10px] text-outline truncate">{track.artist}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Your Playlists Quick Carousel (if any) */}
+                  {localPlaylists.length > 0 && (
+                    <div className="flex flex-col gap-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-cyan-300 text-[18px]">playlist_play</span>
+                          <h3 className="text-xs sm:text-sm font-bold text-white">Your Playlists</h3>
+                        </div>
+                        <button
+                          onClick={() => setActiveTab("playlists")}
+                          className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                        >
+                          View All ({localPlaylists.length})
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-1">
+                        {localPlaylists.map((pl) => {
+                          const plTracks = (pl.trackIds || [])
+                            .map((id) => tracks.find((t) => t.id === id))
+                            .filter(Boolean);
+                          const cover =
+                            pl.coverUrl ||
+                            plTracks[0]?.coverUrl ||
+                            "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80";
+
+                          return (
+                            <div
+                              key={`pl-quick-${pl.id}`}
+                              onClick={() => setActivePlaylistId(pl.id)}
+                              className="group flex items-center gap-3 p-2.5 rounded-xl glass-card border border-white/5 hover:border-primary/40 hover:bg-surface-container/70 transition-all cursor-pointer shrink-0 w-48 sm:w-56"
+                            >
+                              <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-surface-container-highest shadow">
+                                <img src={cover} alt={pl.name} className="w-full h-full object-cover" />
+                              </div>
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <span className="text-xs font-bold text-white truncate group-hover:text-primary transition-colors">
+                                  {pl.name}
+                                </span>
+                                <span className="text-[10px] text-outline">
+                                  {plTracks.length} {plTracks.length === 1 ? "song" : "songs"}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Songs List Controls & Actions */}
+              <div className="flex flex-col gap-2">
+                {displayedTracks.length > 0 && (
+                  <div className="flex items-center justify-between pb-1 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handlePlaySong(displayedTracks[0], displayedTracks)}
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs hover:scale-105 active:scale-95 transition-all shadow-[0_0_12px_rgba(76,215,246,0.3)] cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">play_arrow</span>
+                        <span>Play All</span>
+                      </button>
+                      <button
+                        onClick={() => handleShufflePlay(displayedTracks)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest border border-white/10 text-white text-xs font-semibold transition-all cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px] text-primary">
+                          shuffle
+                        </span>
+                        <span className="hidden sm:inline">Shuffle</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setIsSelectionMode(!isSelectionMode);
+                          if (isSelectionMode) clearSelection();
+                        }}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all cursor-pointer ${
+                          isSelectionMode
+                            ? "bg-primary/20 border-primary/40 text-primary"
+                            : "bg-surface-container-high/60 border-white/10 text-outline hover:text-white"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[15px]">
+                          {isSelectionMode ? "check_box" : "check_box_outline_blank"}
+                        </span>
+                        <span className="hidden sm:inline">
+                          {isSelectionMode ? "Select Mode" : "Select"}
+                        </span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isSelectionMode && (
+                        <button
+                          onClick={selectAllDisplayed}
+                          className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                        >
+                          Select All
+                        </button>
+                      )}
+                      <span className="text-[11px] text-outline font-mono">
+                        {displayedTracks.length} {displayedTracks.length === 1 ? "song" : "songs"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {displayedTracks.length === 0 ? (
+                  <div className="py-12 text-center text-outline text-xs">
+                    No local tracks found in this category.
+                  </div>
+                ) : (
+                  <div className="flex flex-col divide-y divide-white/5 rounded-2xl glass-card border border-white/5 overflow-hidden">
+                    {displayedTracks.map((track, idx) => {
+                      const isTrackPlaying = isPlaying && String(currentTrack?.id) === String(track.id);
+                      const isCurrent = String(currentTrack?.id) === String(track.id);
+                      const isSelected = selectedTrackIds.has(track.id);
+
+                      return (
+                        <div
+                          key={track.id}
+                          onClick={() => {
+                            if (isSelectionMode) {
+                              toggleSelectTrack(track.id);
+                            } else {
+                              handlePlaySong(track, displayedTracks);
+                            }
+                          }}
+                          className={`group flex items-center justify-between gap-3 p-2.5 sm:p-3 hover:bg-surface-container/70 transition-colors cursor-pointer select-none ${
+                            isCurrent ? "bg-primary/10 border-l-2 border-primary" : ""
+                          } ${isSelected ? "bg-primary/15" : ""}`}
+                        >
+                          {/* Left: Selection Checkbox / Index & Artwork */}
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {isSelectionMode ? (
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => toggleSelectTrack(track.id, e)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-4 h-4 rounded text-primary focus:ring-primary accent-primary cursor-pointer shrink-0"
+                              />
+                            ) : (
+                              <span className="text-xs font-mono text-outline w-6 text-center shrink-0">
+                                {isTrackPlaying ? (
+                                  <span className="material-symbols-outlined text-[16px] text-primary animate-pulse">
+                                    graphic_eq
+                                  </span>
+                                ) : (
+                                  idx + 1
+                                )}
+                              </span>
+                            )}
+
+                            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden bg-surface-container-highest shrink-0 shadow">
+                              <img
+                                src={track.coverUrl}
+                                alt={track.title}
+                                className="w-full h-full object-cover"
+                              />
+                              <div
+                                className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${
+                                  isCurrent ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-white text-[20px]">
+                                  {isTrackPlaying ? "pause" : "play_arrow"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Title & Artist & Badges */}
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className={`text-xs sm:text-sm font-semibold truncate ${
+                                    isCurrent
+                                      ? "text-primary font-bold"
+                                      : "text-white group-hover:text-primary transition-colors"
+                                  }`}
+                                >
+                                  {track.title}
+                                </span>
+                                <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 uppercase shrink-0 font-bold">
+                                  LOCAL
+                                </span>
+                              </div>
+                              <span className="text-[10px] sm:text-[11px] text-outline truncate mt-0.5">
+                                {track.artist} • {track.album}
                               </span>
                             </div>
-                            <span className="text-[10px] sm:text-[11px] text-outline truncate mt-0.5">
-                              {track.artist} • {track.album}
+                          </div>
+
+                          {/* Right: Duration & Actions */}
+                          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                            <span className="text-[11px] font-mono text-outline hidden sm:inline">
+                              {track.durationFormatted}
                             </span>
+
+                            {/* Add to Local Playlist button */}
+                            <button
+                              type="button"
+                              onClick={(e) => openSingleTrackAddToPlaylist(track, e)}
+                              className="opacity-0 group-hover:opacity-100 text-outline hover:text-primary p-1 rounded-md transition-all cursor-pointer"
+                              title="Add to local playlist"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">playlist_add</span>
+                            </button>
+
+                            {/* Delete from Library */}
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteTrack(track.id, e)}
+                              className="opacity-0 group-hover:opacity-100 text-outline hover:text-red-400 p-1 rounded-md transition-all cursor-pointer"
+                              title="Remove from local library"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+
+                            {/* Song Options Menu */}
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <SongOptionsMenu track={track} />
+                            </div>
                           </div>
                         </div>
-
-                        {/* Right: Duration & Actions */}
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-[11px] font-mono text-outline hidden sm:inline">
-                            {track.durationFormatted}
-                          </span>
-
-                          {/* Delete from Library */}
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteTrack(track.id, e)}
-                            className="opacity-0 group-hover:opacity-100 text-outline hover:text-red-400 p-1 rounded-md transition-all cursor-pointer"
-                            title="Remove from local library"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">delete</span>
-                          </button>
-
-                          {/* Song Options Menu */}
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <SongOptionsMenu track={track} />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </>
       )}
+
+      {/* MODALS */}
+      {/* 1. Create / Edit Local Playlist Modal */}
+      <LocalPlaylistModal
+        isOpen={isPlaylistModalOpen}
+        onClose={() => {
+          setIsPlaylistModalOpen(false);
+          setEditingPlaylist(null);
+        }}
+        onSave={handleCreateOrUpdatePlaylist}
+        playlist={editingPlaylist}
+        existingPlaylists={localPlaylists}
+      />
+
+      {/* 2. Add Tracks to Local Playlist Modal */}
+      <AddToLocalPlaylistModal
+        isOpen={isAddToPlaylistModalOpen}
+        onClose={() => {
+          setIsAddToPlaylistModalOpen(false);
+          setTracksToAddToPlaylist([]);
+        }}
+        tracksToAdd={tracksToAddToPlaylist}
+        playlists={localPlaylists}
+        onAddToPlaylist={handleAddToPlaylistAction}
+        onCreateNewPlaylist={() => {
+          setIsAddToPlaylistModalOpen(false);
+          setEditingPlaylist(null);
+          setIsPlaylistModalOpen(true);
+        }}
+      />
+
+      {/* 3. Supported Audio Formats & PWA Storage Info Modal */}
+      <LocalMusicInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+        onTriggerImport={() => fileInputRef.current?.click()}
+      />
     </div>
   );
 }

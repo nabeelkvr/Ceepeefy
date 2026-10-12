@@ -74,7 +74,7 @@ export default function RecommendationCard({
       title={`Play ${track.title} by ${artistName}`}
     >
       {/* 1. Left: Compact Square Cover Art with Smooth Rounded Edges (rounded-xl) */}
-      <div className="relative w-11 h-11 sm:w-12 sm:h-12 md:w-12.5 md:h-12.5 rounded-xl overflow-hidden bg-[#161922] flex-shrink-0 shadow-sm border border-white/5">
+      <div className="relative w-11 h-11 sm:w-12 sm:h-12 md:w-12.5 md:h-12.5 rounded-xl overflow-hidden bg-[#101010] flex-shrink-0 shadow-sm border border-white/5">
         <img
           src={coverUrl}
           alt={track.title}

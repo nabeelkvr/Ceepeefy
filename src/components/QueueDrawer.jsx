@@ -101,11 +101,11 @@ export default function QueueDrawer() {
       {/* Compact Right-Side Panel: strictly 360px-400px wide, docked to the right edge */}
       <aside 
         onTouchMove={(e) => e.stopPropagation()}
-        className="fixed inset-y-0 right-0 z-[80] w-full sm:w-[380px] md:static md:w-[380px] lg:w-[400px] flex-shrink-0 md:z-30 border-l border-white/10 bg-[#07131d]/98 backdrop-blur-2xl flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-0 overscroll-contain touch-pan-y select-none"
+        className="fixed inset-y-0 right-0 z-[80] w-full sm:w-[380px] md:static md:w-[380px] lg:w-[400px] flex-shrink-0 md:z-30 border-l border-[#1b1b1b] bg-[#080808]/98 backdrop-blur-2xl flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-0 overscroll-contain touch-pan-y select-none"
         style={{ overscrollBehavior: "contain", overscrollBehaviorY: "contain" }}
       >
         {/* Header matching Image 1 */}
-        <div className="h-16 px-5 border-b border-white/5 flex items-center justify-between flex-shrink-0">
+        <div className="h-16 px-5 border-b border-[#1b1b1b] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="material-symbols-outlined text-primary text-[24px]">
               playlist_play
@@ -142,7 +142,7 @@ export default function QueueDrawer() {
               <span className="text-[11px] uppercase tracking-wider text-outline font-bold">
                 NOW PLAYING
               </span>
-              <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#091b29] border border-[#144759] shadow-[0_0_20px_rgba(76,215,246,0.15)]">
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#121212] border border-[#1b1b1b] shadow-[0_0_20px_rgba(76,215,246,0.08)]">
                 <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 relative bg-surface-container-high shadow-md">
                   <img
                     src={currentTrack.coverUrl || currentTrack.thumbnail || currentTrack.image || "/icon-192.png"}
@@ -205,8 +205,8 @@ export default function QueueDrawer() {
                       onClick={toggleAutoplay}
                       className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full border transition-all duration-200 cursor-pointer ${
                         isAutoplayEnabled
-                          ? "bg-[#092233] text-primary border-[#1a556d] shadow-[0_0_12px_rgba(76,215,246,0.25)]"
-                          : "bg-surface-container/60 text-outline hover:text-white border-white/10"
+                          ? "bg-primary/10 text-primary border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.15)]"
+                          : "bg-surface-container/60 text-outline hover:text-white border-[#1b1b1b]"
                       }`}
                       title="Toggle intelligent autoplay recommendations"
                     >

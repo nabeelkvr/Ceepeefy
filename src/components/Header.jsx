@@ -219,7 +219,7 @@ export default function Header({ onToggleMobileMenu }) {
           </button>
 
           {isNotificationsOpen && (
-            <div className="absolute top-12 right-0 w-72 sm:w-80 bg-[#11192b]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.65)] z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="absolute top-12 right-0 w-72 sm:w-80 bg-[#101010]/95 backdrop-blur-2xl border border-[#1b1b1b] rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.65)] z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary text-[18px]">notifications</span>

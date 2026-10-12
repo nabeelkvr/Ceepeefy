@@ -193,8 +193,8 @@ export default function Player() {
         <aside
           ref={cardRef}
           onTouchMove={(e) => e.stopPropagation()}
-          className={`fixed inset-0 z-50 w-full h-full rounded-none bg-[#070e1e]/98 backdrop-blur-3xl border-none p-5 sm:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex flex-col justify-between overflow-y-auto overscroll-contain touch-pan-y select-none animate-slide-up md:fixed md:bottom-5 ${isQueueOpen ? "md:right-[400px] lg:right-[420px]" : "md:right-5"
-            } md:top-auto md:left-auto md:w-80 md:h-auto md:max-h-[calc(100vh-6rem)] md:rounded-2xl md:border md:border-white/20 md:p-3.5 md:gap-2.5 md:shadow-[0_16px_50px_rgba(0,0,0,0.85)] md:overflow-hidden transition-all duration-300`}
+          className={`fixed inset-0 z-50 w-full h-full rounded-none bg-[#070707]/98 backdrop-blur-3xl border-none p-5 sm:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex flex-col justify-between overflow-y-auto overscroll-contain touch-pan-y select-none animate-slide-up md:fixed md:bottom-5 ${isQueueOpen ? "md:right-[400px] lg:right-[420px]" : "md:right-5"
+            } md:top-auto md:left-auto md:w-80 md:h-auto md:max-h-[calc(100vh-6rem)] md:rounded-2xl md:border md:border-[#1b1b1b] md:p-3.5 md:gap-2.5 md:shadow-[0_16px_50px_rgba(0,0,0,0.85)] md:overflow-hidden transition-all duration-300`}
           style={{ overscrollBehavior: "contain", overscrollBehaviorY: "contain", WebkitOverflowScrolling: "touch" }}
           aria-label="Now Playing Card"
         >
@@ -477,7 +477,7 @@ export default function Player() {
       {playerMode !== "card" && currentTrack && (
         <aside
           onClick={() => setPlayerMode("card")}
-          className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 w-full h-[74px] bg-[#080f1e] border-t border-b border-white/10 px-4 py-2.5 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group shadow-xl"
+          className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 w-full h-[74px] bg-[#070707] border-t border-b border-[#1b1b1b] px-4 py-2.5 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group shadow-xl"
           role="region"
           aria-label="Mobile Mini Player"
         >
@@ -694,12 +694,12 @@ export default function Player() {
             isQueueOpen
               ? "left-[84px] right-[380px] lg:right-[400px]"
               : "left-[84px] right-3 md:right-4"
-          } h-[88px] rounded-[24px] bg-[#070d1a]/95 backdrop-blur-3xl border border-white/[0.04] px-5 md:px-7 z-40 items-center justify-between shadow-[0_20px_60px_rgba(0,0,0,0.85),0_0_35px_rgba(6,182,212,0.1)] select-none animate-slide-up transition-all duration-300`}
+          } h-[88px] rounded-[24px] bg-[#070707]/95 backdrop-blur-3xl border border-[#1b1b1b] px-5 md:px-7 z-40 items-center justify-between shadow-[0_20px_60px_rgba(0,0,0,0.85)] select-none animate-slide-up transition-all duration-300`}
         >
           {/* Left: Track Details */}
           <div className="flex items-center gap-3.5 md:gap-4 w-52 sm:w-64 md:w-80 min-w-0">
             <div
-              className="relative w-13 h-13 md:w-14 md:h-14 rounded-2xl overflow-hidden bg-[#161922] flex-shrink-0 flex items-center justify-center shadow-lg border border-white/5 group"
+              className="relative w-13 h-13 md:w-14 md:h-14 rounded-2xl overflow-hidden bg-[#101010] flex-shrink-0 flex items-center justify-center shadow-lg border border-[#1b1b1b] group"
             >
               <img
                 alt={currentTrack.title}

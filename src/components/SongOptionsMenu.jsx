@@ -294,13 +294,13 @@ export default function SongOptionsMenu({
             left: `${menuCoords.left}px`,
             zIndex: 9999,
           }}
-          className="w-56 bg-[#16171d]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] py-1.5 px-1 animate-in fade-in zoom-in-95 duration-150 select-none text-sm text-neutral-200"
+          className="w-56 bg-[#101010]/95 backdrop-blur-xl border border-[#1b1b1b] rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] py-1.5 px-1 animate-in fade-in zoom-in-95 duration-150 select-none text-sm text-neutral-200"
           onClick={(e) => e.stopPropagation()}
         >
           {currentView === "playlists" ? (
             /* Drill-down: Select Playlist View (always fully visible on screen) */
             <div className="flex flex-col py-0.5">
-              <div className="flex items-center gap-2 px-2 py-1.5 border-b border-white/10 mb-1">
+              <div className="flex items-center gap-2 px-2 py-1.5 border-b border-[#1b1b1b] mb-1">
                 <button
                   type="button"
                   onClick={() => setCurrentView("main")}

@@ -83,7 +83,7 @@ export default function PlaylistCard({
     >
       {/* Square Artwork (Refined Rounded-[10px]) */}
       <div
-        className={`relative aspect-square w-full rounded-[10px] overflow-hidden bg-[#161922] shadow-md transition-all duration-200 ${
+        className={`relative aspect-square w-full rounded-[10px] overflow-hidden bg-[#101010] shadow-md transition-all duration-200 ${
           isPlaylistPlaying
             ? "ring-2 ring-primary shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.35)]"
             : "ring-1 ring-white/10 group-hover:ring-white/25"

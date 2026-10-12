@@ -232,10 +232,10 @@ export default function Footer() {
           onClick={closeModal}
         >
           <div
-            className="bg-[#121216] border border-white/15 rounded-2xl p-6 max-w-md w-full shadow-2xl relative text-left"
+            className="bg-[#101010] border border-[#1b1b1b] rounded-2xl p-6 max-w-md w-full shadow-2xl relative text-left"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#1b1b1b] mb-4">
               <h2 className="text-base font-bold text-white tracking-tight">
                 {modalContent.title}
               </h2>

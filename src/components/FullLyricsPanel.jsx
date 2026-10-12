@@ -30,7 +30,7 @@ export default function FullLyricsPanel() {
 
   return (
     <div
-      className="absolute inset-0 z-30 flex flex-col bg-gradient-to-b from-[#091122]/95 via-[#060c19]/98 to-[#03070f] backdrop-blur-3xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden select-none border-l border-white/5"
+      className="absolute inset-0 z-30 flex flex-col bg-gradient-to-b from-[#0a0a0a]/95 via-[#050505]/98 to-[#000000] backdrop-blur-3xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden select-none border-l border-[#1b1b1b]"
       style={{
         backgroundImage: currentTrack.coverUrl
           ? `radial-gradient(ellipse 70% 50% at 20% 25%, rgba(76,215,246,0.12), transparent 70%), radial-gradient(ellipse 50% 60% at 85% 80%, rgba(168,85,247,0.08), transparent 80%)`

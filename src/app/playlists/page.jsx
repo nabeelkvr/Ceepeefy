@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMusic } from "../../context/MusicContext";
 import { formatPlaylistDuration, formatPlaylistTracksAndDurationUppercase } from "../../utils/playlistUtils";
 import PlaylistCover from "../../components/PlaylistCover";
+import SpotifyImportModal from "../../components/SpotifyImportModal";
 
 export default function PlaylistsPage() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export default function PlaylistsPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [editingPlaylistId, setEditingPlaylistId] = useState(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -150,6 +152,18 @@ export default function PlaylistsPage() {
                 </button>
               )}
             </div>
+
+            {/* Import Spotify Playlist Button */}
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 md:px-4 md:py-2 rounded-full bg-surface-container hover:bg-[#1DB954]/10 border border-[#1DB954]/30 hover:border-[#1DB954] text-white hover:text-[#1DB954] font-bold text-xs shadow-[0_0_12px_rgba(29,185,84,0.15)] active:scale-95 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer"
+              title="Import Spotify Playlist"
+            >
+              <svg className="w-4 h-4 fill-current text-[#1DB954]" viewBox="0 0 24 24">
+                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.306c-.215.353-.674.464-1.027.25-2.812-1.718-6.353-2.107-10.525-1.155-.403.093-.805-.16-.897-.563-.092-.403.16-.805.563-.897 4.568-1.042 8.497-.6 11.636 1.338.353.214.464.674.25 1.027zm1.468-3.26c-.27.44-.847.578-1.287.308-3.22-1.979-8.128-2.552-11.936-1.396-.497.15-1.026-.134-1.176-.631-.15-.497.134-1.026.631-1.176 4.364-1.324 9.774-.679 13.46 1.588.44.27.578.847.308 1.307zm.126-3.41c-3.86-2.292-10.228-2.503-13.91-1.385-.593.18-1.223-.153-1.403-.746-.18-.593.153-1.223.746-1.403 4.234-1.285 11.272-1.04 15.688 1.583.534.317.708 1.01.391 1.544-.316.533-1.009.708-1.544.391z" />
+              </svg>
+              <span>Import Playlist</span>
+            </button>
 
             {/* Create Playlist Button */}
             <button
@@ -515,6 +529,12 @@ export default function PlaylistsPage() {
           </div>
         </div>
       )}
+
+      {/* Spotify Import Modal */}
+      <SpotifyImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+      />
     </div>
   );
 }

@@ -242,7 +242,7 @@ export default function Sidebar({ className = "", onClose }) {
                   isExpanded ? "w-full h-11 px-3.5 gap-3.5" : "w-11 h-11 justify-center"
                 } ${
                   isActive
-                    ? "bg-[#1d233d] text-primary font-semibold border border-primary/30 shadow-[0_0_18px_rgba(76,215,246,0.22)]"
+                    ? "bg-[#161616] text-primary font-semibold border border-primary/30 shadow-[0_0_18px_rgba(76,215,246,0.18)]"
                     : "text-on-surface-variant hover:text-white hover:bg-white/[0.06] hover:translate-x-0.5"
                 }`}
               >
@@ -337,10 +337,10 @@ export default function Sidebar({ className = "", onClose }) {
                   top: `${popoverCoords.top}px`,
                   left: `${popoverCoords.left}px`,
                 }}
-                className="w-64 bg-[#0d172e]/98 backdrop-blur-2xl border border-primary/40 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-3.5 z-[100] animate-in fade-in zoom-in-95 duration-200 select-none"
+                className="w-64 bg-[#101010]/98 backdrop-blur-2xl border border-primary/40 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-3.5 z-[100] animate-in fade-in zoom-in-95 duration-200 select-none"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="absolute -left-1.5 w-3 h-3 bg-[#0d172e] border-b border-l border-primary/40 rotate-45 pointer-events-none"
+                <div className="absolute -left-1.5 w-3 h-3 bg-[#101010] border-b border-l border-primary/40 rotate-45 pointer-events-none"
                   style={{ top: `${popoverCoords.arrowTop}px` }}
                 />
 
@@ -533,7 +533,7 @@ export default function Sidebar({ className = "", onClose }) {
           }`}
         >
           {isExpanded ? (
-            <div className="p-3 rounded-2xl bg-[#10172a]/90 backdrop-blur-xl border border-white/10 flex items-center justify-between gap-2 shadow-lg group/install select-none">
+            <div className="p-3 rounded-2xl bg-[#101010]/90 backdrop-blur-xl border border-[#1b1b1b] flex items-center justify-between gap-2 shadow-lg group/install select-none">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-8 h-8 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center text-primary flex-shrink-0">
                   <span className="material-symbols-outlined text-[18px]">install_mobile</span>
@@ -586,9 +586,9 @@ export default function Sidebar({ className = "", onClose }) {
   if (isMobile) {
     return (
       <aside
-        className={`w-72 bg-[#080d1a]/98 backdrop-blur-3xl z-50 flex flex-col justify-between ${
+        className={`w-72 bg-[#080808]/98 backdrop-blur-3xl z-50 flex flex-col justify-between ${
           currentTrack ? "pb-28" : "pb-6"
-        } pt-4 border-r border-white/10 shadow-2xl flex-shrink-0 select-none ${className}`}
+        } pt-4 border-r border-[#1b1b1b] shadow-2xl flex-shrink-0 select-none ${className}`}
       >
         {sidebarContent}
       </aside>
@@ -605,9 +605,9 @@ export default function Sidebar({ className = "", onClose }) {
         onMouseLeave={() => setIsHovered(false)}
         className={`absolute inset-y-0 left-0 z-50 flex flex-col justify-between ${
           currentTrack ? "pb-28" : "pb-5"
-        } pt-4 bg-[#080d1a]/96 backdrop-blur-3xl border-r border-white/[0.08] select-none transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+        } pt-4 bg-[#080808]/96 backdrop-blur-3xl border-r border-[#1b1b1b] select-none transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
           isHovered
-            ? "w-[248px] shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-r-white/20"
+            ? "w-[248px] shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-r-[#282828]"
             : "w-[72px] shadow-lg"
         }`}
         style={{

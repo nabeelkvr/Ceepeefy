@@ -7,7 +7,7 @@ import PWAUpdateToast from "../components/PWAUpdateToast";
 import { Analytics } from "@vercel/analytics/next";
 
 export const viewport = {
-  themeColor: "#0b1326",
+  themeColor: "#000000",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -77,7 +77,7 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="bg-[#0b1326] font-sans antialiased text-on-surface selection:bg-primary selection:text-black overflow-hidden overscroll-none">
+      <body className="bg-[#000000] font-sans antialiased text-on-surface selection:bg-primary selection:text-black overflow-hidden overscroll-none">
         <PWAProvider>
           <MusicProvider>
             <AppShell>{children}</AppShell>

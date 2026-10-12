@@ -11,7 +11,7 @@ export const BACKGROUND_PRESETS = [
     description: "Atmospheric golden sunset horizon peaking through mountain ridge pine silhouettes, deep indigo dusk sky.",
     imageUrl: "/backgrounds/sunset_cinematic_bg.jpg",
     thumbnailUrl: "/backgrounds/sunset_cinematic_bg.jpg",
-    baseBg: "#050914",
+    baseBg: "#000000",
     palette: {
       primary: "#4cd7f6",
       primaryRgb: "76 215 246",

@@ -44,11 +44,11 @@ export default function AmbientBackground() {
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(130% 110% at 50% 10%, #090e1d 0%, #060a15 40%, #050914 75%, #020409 100%)",
+            "radial-gradient(130% 110% at 50% 10%, #080808 0%, #050505 40%, #020202 75%, #000000 100%)",
         }}
       />
 
-      {/* LAYER 2: Cinematic Sunset Horizon & Mountain Silhouette */}
+      {/* LAYER 2: Cinematic Horizon / Subtle Silhouette */}
       {activeImageUrl && (
         <div
           className="absolute -inset-1 transition-all duration-700 ease-out"
@@ -57,52 +57,52 @@ export default function AmbientBackground() {
             backgroundPosition: "center 12%",
             backgroundSize: "cover",
             backgroundRepeat: "no-repeat",
-            opacity: bgOpacity,
-            filter: "saturate(1.20) brightness(0.98) contrast(1.06)",
+            opacity: Math.min(bgOpacity, 0.40),
+            filter: "saturate(1.1) brightness(0.85) contrast(1.1)",
           }}
         />
       )}
 
-      {/* LAYER 3: Atmospheric Sunset Glows */}
+      {/* LAYER 3: Atmospheric Subtle Glows */}
       
-      {/* Top-Right Golden Sunset Glow (Directly behind the sunset light) */}
+      {/* Top-Right Golden Sunset Glow */}
       <div
         className="absolute -top-[5%] right-[2%] w-[60vw] max-w-[800px] h-[50vw] max-h-[650px] rounded-full transition-all duration-700 pointer-events-none"
         style={{
           background:
-            "radial-gradient(circle at 65% 35%, rgba(251, 146, 60, 0.22) 0%, rgba(249, 115, 22, 0.12) 30%, rgba(217, 70, 239, 0.04) 55%, transparent 75%)",
-          opacity: glowOpacity * 1.25,
+            "radial-gradient(circle at 65% 35%, rgba(251, 146, 60, 0.10) 0%, rgba(249, 115, 22, 0.05) 30%, transparent 60%)",
+          opacity: glowOpacity * 0.65,
           filter: "blur(70px)",
         }}
       />
 
-      {/* Top-Left Dusk Cyber Cyan / Sky Blue Glow */}
+      {/* Top-Left Dusk Cyan Glow */}
       <div
         className="absolute -top-[5%] left-[8%] w-[50vw] max-w-[700px] h-[45vw] max-h-[600px] rounded-full transition-all duration-700 pointer-events-none"
         style={{
           background:
-            "radial-gradient(circle at 45% 45%, rgba(6, 182, 212, 0.14) 0%, rgba(56, 189, 248, 0.07) 35%, transparent 70%)",
-          opacity: glowOpacity * 1.05,
+            "radial-gradient(circle at 45% 45%, rgba(6, 182, 212, 0.08) 0%, rgba(56, 189, 248, 0.04) 35%, transparent 65%)",
+          opacity: glowOpacity * 0.55,
           filter: "blur(75px)",
         }}
       />
 
-      {/* LAYER 4: Soft Contrast Overlays */}
+      {/* LAYER 4: Pure Black Depth Overlays */}
 
-      {/* Smooth Vertical Gradient: Clear at the top to showcase the sunset, deepening gently toward bottom */}
+      {/* Smooth Vertical Gradient: Immersive fade to deep black */}
       <div
         className="absolute inset-0 transition-opacity duration-500"
         style={{
-          background: `linear-gradient(to bottom, rgba(3, 7, 16, ${overlayOpacity * 0.40}) 0%, rgba(2, 5, 12, ${overlayOpacity * 0.15}) 20%, rgba(3, 6, 14, ${overlayOpacity * 0.45}) 60%, rgba(2, 4, 10, ${Math.min(0.95, overlayOpacity + 0.55)}) 100%)`,
+          background: `linear-gradient(to bottom, rgba(0, 0, 0, ${overlayOpacity * 0.50}) 0%, rgba(0, 0, 0, ${overlayOpacity * 0.30}) 20%, rgba(0, 0, 0, ${overlayOpacity * 0.65}) 60%, rgba(0, 0, 0, 0.98) 100%)`,
         }}
       />
 
-      {/* Left Sidebar Atmospheric Shield (Ensures sidebar icons and labels remain crisp) */}
+      {/* Left Sidebar Atmospheric Shield */}
       <div
         className="hidden md:block absolute inset-y-0 left-0 w-80 pointer-events-none"
         style={{
           background:
-            "linear-gradient(to right, rgba(2, 5, 12, 0.65) 0%, rgba(3, 7, 16, 0.30) 80px, transparent 100%)",
+            "linear-gradient(to right, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 80px, transparent 100%)",
         }}
       />
 
@@ -111,7 +111,7 @@ export default function AmbientBackground() {
         className="absolute inset-x-0 bottom-0 h-36 pointer-events-none"
         style={{
           background:
-            "linear-gradient(to top, rgba(1, 3, 8, 0.96) 0%, rgba(2, 5, 12, 0.55) 60px, transparent 100%)",
+            "linear-gradient(to top, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.6) 60px, transparent 100%)",
         }}
       />
     </div>

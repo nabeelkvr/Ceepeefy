@@ -56,7 +56,7 @@ export default function MobileBottomNav() {
   return (
     <nav
       aria-label="Mobile Navigation"
-      className="fixed bottom-0 inset-x-0 h-16 pb-safe box-content bg-[#060c18] border-t border-white/10 z-40 flex items-center justify-around px-2 md:hidden select-none shadow-[0_-12px_32px_rgba(0,0,0,0.95)]"
+      className="fixed bottom-0 inset-x-0 h-16 pb-safe box-content bg-[#080808] border-t border-[#1b1b1b] z-40 flex items-center justify-around px-2 md:hidden select-none shadow-[0_-12px_32px_rgba(0,0,0,0.95)]"
     >
       {navItems.map((item) => (
         <Link

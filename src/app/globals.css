@@ -13,7 +13,7 @@
     --color-primary-rgb: 56 189 248;
     --color-primary-container-rgb: 2 132 199;
     --color-on-primary-rgb: 0 54 64;
-    --theme-bg-base: #050d18;
+    --theme-bg-base: #000000;
     --theme-bg-opacity: 0.35;
     --theme-overlay-opacity: 0.72;
     --theme-bg-blur: 14px;
@@ -25,8 +25,8 @@
   body {
     margin: 0;
     padding: 0;
-    background-color: #0b1326;
-    color: #dae2fd;
+    background-color: #000000;
+    color: #ffffff;
     font-family: 'Inter', sans-serif;
     overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent;
@@ -63,12 +63,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(134, 147, 151, 0.25);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(134, 147, 151, 0.45);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Hide scrollbar for Chrome, Safari, Opera, Edge and Firefox */
@@ -85,13 +85,13 @@
 
 /* Glassmorphism Classes directly from Stitch */
 .glass-panel {
-  background: linear-gradient(135deg, rgba(23, 31, 51, 0.75) 0%, rgba(11, 19, 38, 0.85) 100%);
+  background: linear-gradient(135deg, rgba(16, 16, 16, 0.85) 0%, rgba(8, 8, 8, 0.95) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
 
 .glass-card {
-  background: linear-gradient(145deg, rgba(34, 42, 61, 0.5) 0%, rgba(19, 27, 46, 0.75) 100%);
+  background: linear-gradient(145deg, rgba(18, 18, 18, 0.7) 0%, rgba(10, 10, 10, 0.85) 100%);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }

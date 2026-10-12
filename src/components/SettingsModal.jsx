@@ -87,7 +87,7 @@ export default function SettingsModal() {
       onClick={() => setIsSettingsModalOpen(false)}
     >
       <div
-        className="relative w-full max-w-2xl max-h-[92vh] bg-[#090d16]/95 border border-white/10 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col animate-scale-in"
+        className="relative w-full max-w-2xl max-h-[92vh] bg-[#101010]/95 border border-[#1b1b1b] rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Dynamic Ambient Blur Glow */}
@@ -95,7 +95,7 @@ export default function SettingsModal() {
         <div className="absolute -bottom-24 -left-24 w-60 h-60 bg-secondary/15 rounded-full blur-3xl pointer-events-none" />
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4.5 border-b border-white/10 bg-surface-container-lowest/80 relative z-10">
+        <div className="flex items-center justify-between px-6 py-4.5 border-b border-[#1b1b1b] bg-[#080808]/80 relative z-10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 flex items-center justify-center text-primary shadow-[0_0_16px_rgba(76,215,246,0.25)]">
               <span className="material-symbols-outlined text-[22px]">settings</span>
@@ -126,10 +126,10 @@ export default function SettingsModal() {
         </div>
 
         {/* User Profile Mini Banner */}
-        <div className="mx-6 mt-4 p-3.5 rounded-2xl bg-gradient-to-r from-primary/10 via-surface-container/60 to-surface-container/30 border border-white/10 flex items-center justify-between gap-3 relative z-10">
+        <div className="mx-6 mt-4 p-3.5 rounded-2xl bg-gradient-to-r from-primary/10 via-surface-container/60 to-surface-container/30 border border-[#1b1b1b] flex items-center justify-between gap-3 relative z-10">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-cyan-300 p-0.5 shadow-[0_0_12px_rgba(76,215,246,0.4)] flex-shrink-0">
-              <div className="w-full h-full rounded-full bg-[#0c1424] flex items-center justify-center text-primary font-bold text-sm">
+              <div className="w-full h-full rounded-full bg-[#141414] flex items-center justify-center text-primary font-bold text-sm">
                 {(user?.name || "N")[0].toUpperCase()}
               </div>
             </div>

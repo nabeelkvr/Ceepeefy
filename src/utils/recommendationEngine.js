@@ -1,3 +1,5 @@
+import { classifySongDetailed } from "./songClassifier.js";
+
 /**
  * Ceepify — Intelligent Automatic Queue Algorithm & Recommendation Engine
  *
@@ -418,7 +420,7 @@ export function extractLanguage(track) {
       ? track.subtitle.split("•")[0]
       : "") ||
     "";
-  
+
   const clean = cleanStr(raw);
 
   const titleText = [track.title, track.song, track.album, track.movieName, track.movie]
@@ -777,41 +779,203 @@ export function calculateArtistDiversityScore(candidate, seedTrack, artistCounts
 
 /**
  * --------------------------------------------------------------------------
- * QUEUE SCORING FORMULA
+ * WEIGHTED RECOMMENDATION SCORING MODEL (Section 7)
+ * Total Score = 100 Points:
+ * 1. Same Language: 20
+ * 2. Same Song Type / BGM: 20
+ * 3. Same Mood and Emotional Character: 15
+ * 4. Trending Status: 12
+ * 5. Popularity: 10
+ * 6. Musical / Genre Similarity: 7
+ * 7. Energy and Tempo Compatibility: 5
+ * 8. Recency: 4
+ * 9. Artist Similarity / Occasional Same-Artist Bonus: 3
+ * 10. Album / Movie Relationship Bonus: 2
+ * 11. Discovery and Variety Bonus: 2
  * --------------------------------------------------------------------------
- * Queue Score =
- *     Language Match       × 35
- *   + Mood/Type Match      × 30
- *   + Trending/Popularity  × 25
- *   + Artist Diversity     × 8
- *   + Discovery Factor (0 to 2)
  */
 export function calculateQueueScore(candidate, seedTrack, options = {}) {
-  const { artistCounts = new Map(), lastArtist = null, movieCounts = new Map(), lastMovie = null } = options;
+  const {
+    artistCounts = new Map(),
+    lastArtist = null,
+    movieCounts = new Map(),
+    lastMovie = null,
+    recentQueueTrackIds = new Set(),
+  } = options;
 
-  const langMatch = getLanguageMatchScore(candidate, seedTrack);
-  const moodMatch = getMoodMatchScore(candidate, seedTrack);
-  const popScore = calculatePopularityScore(candidate);
-  const artDiversity = calculateArtistDiversityScore(candidate, seedTrack, artistCounts, lastArtist, movieCounts, lastMovie);
-  const discoveryFactor = Math.floor(Math.random() * 3);
+  const seedProfile = classifySongDetailed(seedTrack);
+  const candProfile = classifySongDetailed(candidate);
 
-  const totalScore = Math.round(
-    langMatch * 0.35 +
-    moodMatch * 0.30 +
-    popScore * 0.25 +
-    artDiversity * 0.08 +
-    discoveryFactor
+  // 1. Same Language (Weight: 20)
+  let langScore = 0;
+  const langMatchRaw = getLanguageMatchScore(candidate, seedTrack);
+  if (langMatchRaw === 100) {
+    langScore = 20;
+  } else if (langMatchRaw >= 70) {
+    langScore = 14;
+  } else if (langMatchRaw >= 40) {
+    langScore = 8;
+  } else {
+    langScore = 0;
+  }
+
+  // 2. Same Song Type / BGM Classification (Weight: 18)
+  let typeScore = 0;
+  if (!seedProfile.isBgm && !candProfile.isBgm) {
+    typeScore = 18; // Both are vocal songs
+  } else if (seedProfile.isBgm && candProfile.isBgm) {
+    if (seedProfile.contentType === candProfile.contentType) {
+      typeScore = 18; // Exact BGM subtype match
+    } else {
+      typeScore = 14;
+    }
+  } else {
+    typeScore = 0; // Vocal vs BGM mismatch
+  }
+
+  // 3. Same Mood and Emotional Character (Weight: 12)
+  let moodScore = 0;
+  if (seedProfile.primaryMood === candProfile.primaryMood) {
+    moodScore = 12; // Exact primary mood match
+  } else {
+    const common = seedProfile.moodCategories.filter((m) => candProfile.moodCategories.includes(m));
+    if (common.length > 0) {
+      moodScore = 9; // Secondary / overlapping mood match
+    } else {
+      const p1 = seedProfile.primaryMood;
+      const p2 = candProfile.primaryMood;
+      const isRelated =
+        (p1 === "love_romance" && p2 === "happy_feel_good") ||
+        (p1 === "happy_feel_good" && p2 === "love_romance") ||
+        (p1 === "sad_emotional" && p2 === "chill_peaceful") ||
+        (p1 === "chill_peaceful" && p2 === "sad_emotional") ||
+        (p1 === "energetic_hype" && p2 === "happy_feel_good") ||
+        (p1 === "happy_feel_good" && p2 === "energetic_hype");
+      if (isRelated) {
+        moodScore = 6;
+      } else {
+        moodScore = 0; // Opposites (e.g. sad vs energetic)
+      }
+    }
+  }
+
+  const yr = candProfile.year || parseInt(candidate.year || "2024", 10);
+  const plays = candProfile.playCount || candidate.play_count || candidate.playCount || 0;
+  const chartRank = candidate.chartRank || candidate.chart_rank || null;
+
+  // 4. Verified Trending Evidence (Weight: 15)
+  let trendingScore = 2;
+  if (chartRank && chartRank > 0) {
+    if (chartRank <= 10) trendingScore = 15;
+    else if (chartRank <= 25) trendingScore = 13.5;
+    else if (chartRank <= 50) trendingScore = 12;
+  } else if (candidate.isTrending || candidate.badge === "Trending") {
+    trendingScore = 11;
+  } else if (yr >= 2025 && plays >= 1500000) {
+    trendingScore = 11;
+  } else if (yr >= 2024 && plays >= 2000000) {
+    trendingScore = 10;
+  } else if (yr >= 2024 && plays >= 500000) {
+    trendingScore = 8;
+  } else if (yr >= 2023 && plays >= 300000) {
+    trendingScore = 6;
+  } else if (yr >= 2021) {
+    trendingScore = 3.5;
+  } else {
+    trendingScore = 2;
+  }
+
+  // 5. Reliable Popularity Evidence (Weight: 15)
+  let popScore = 0;
+  if (plays >= 25000000) popScore = 15;
+  else if (plays >= 10000000) popScore = 13.5;
+  else if (plays >= 3000000) popScore = 11.5;
+  else if (plays >= 1000000) popScore = 9.5;
+  else if (plays >= 300000) popScore = 7.5;
+  else if (plays >= 100000) popScore = 5.5;
+  else if (plays >= 30000) popScore = 3.5;
+  else if (plays >= 15000) popScore = 1.5;
+  else if (candidate.badge === "Master" || candidate.source === "curated") popScore = 7;
+  else popScore = 0;
+
+  // 6. Musical/Genre Similarity (Weight: 7)
+  let genreScore = 1.5;
+  const commonGenres = seedProfile.genres.filter((g) => candProfile.genres.includes(g));
+  if (commonGenres.length > 0) {
+    genreScore = 7;
+  } else {
+    genreScore = 4;
+  }
+
+  // 7. Energy and Tempo Compatibility (Weight: 5)
+  const energyDiff = Math.abs(seedProfile.energyLevel - candProfile.energyLevel);
+  let energyScore = 0;
+  if (energyDiff === 0) energyScore = 5;
+  else if (energyDiff === 1) energyScore = 4;
+  else if (energyDiff === 2) energyScore = 2;
+  else energyScore = 0;
+
+  // 8. Recency (Weight: 4)
+  let recencyScore = 1;
+  if (yr >= 2025) recencyScore = 4;
+  else if (yr >= 2023) recencyScore = 3;
+  else if (yr >= 2020) recencyScore = 2;
+  else if (yr >= 2015) recencyScore = 1.5;
+  else recencyScore = 1;
+
+  // 9. Occasional Artist, Album, or Movie Bonus (Weight: 2)
+  const isSameArt = isArtistMatch(candidate, seedTrack);
+  const isMovieAlbum = isMovieAlbumMatch(candidate, seedTrack);
+  const artistScore = isSameArt ? 2 : 0;
+  const movieScore = isMovieAlbum ? 1.5 : 0;
+  const artistMovieBonus = Math.min(2, artistScore + movieScore);
+
+  // 10. Discovery and Variety Bonus (Weight: 2)
+  let discoveryScore = 1;
+  const tid = String(candidate.id);
+  if (!recentQueueTrackIds.has(tid) && plays >= 50000 && plays <= 1500000 && moodScore >= 9) {
+    discoveryScore = 2;
+  }
+
+  // Total raw score (0 to 100)
+  let totalScore = Math.round(
+    langScore +
+    typeScore +
+    moodScore +
+    trendingScore +
+    popScore +
+    genreScore +
+    energyScore +
+    recencyScore +
+    artistMovieBonus +
+    discoveryScore
   );
 
+  // Anti-Repetition Penalty (Section 15):
+  // If track was already recommended in the immediate recent queue of another starting song, dampen it by 12 points
+  if (recentQueueTrackIds.has(tid)) {
+    totalScore = Math.max(0, totalScore - 12);
+  }
+
   return {
-    totalScore,
-    langMatch,
-    moodMatch,
+    totalScore: Math.min(100, Math.max(0, totalScore)),
+    langScore,
+    typeScore,
+    moodScore,
+    trendingScore,
     popScore,
-    artDiversity,
-    discoveryFactor,
+    genreScore,
+    energyScore,
+    recencyScore,
+    artistScore,
+    movieScore,
+    discoveryScore,
+    isSameArtist: isSameArt,
+    seedProfile,
+    candProfile,
   };
 }
+
 /**
  * Backwards compatibility helper for existing references
  */
@@ -852,14 +1016,14 @@ export function normalizeBaseTitle(raw) {
 
 /**
  * --------------------------------------------------------------------------
- * INTELLIGENT QUEUE BUILDER (User Rules: Same Language + Same Mood + Trending Hits + Diversity)
+ * INTELLIGENT QUEUE BUILDER (Sections 7, 8 & 15)
+ * - Strict Same Language (Malayalam -> Malayalam, Telugu -> Telugu, etc.)
+ * - Strict Song Type Match (Vocal -> Vocal, BGM -> BGM)
+ * - Transparent 100-Point Weighted Scoring Model
+ * - Diversity & Repetition Protection (Never back-to-back same artist/movie, max 2 tracks per artist, max 1 per movie)
+ * - Beautiful Sequencing Layer: Generates exactly 20 tracks!
+ * - Anti-Repetition Across Starting Songs: Context-aware anchor queues
  * --------------------------------------------------------------------------
- * Rules:
- * 1. Strict Same Language (Malayalam -> Malayalam, Tamil -> Tamil, Hindi -> Hindi, etc.)
- * 2. Strict Same Type/Mood (Sad -> Sad, Feeling/Melody -> Feeling, BGM -> BGM, Mass -> Mass)
- * 3. Popular & Trending (High stream counts, famous chartbuster tracks)
- * 4. Same Artist & Same Movie NOT prioritized: at most 1 song per movie/album, never back-to-back
- * 5. Dynamic controlled variety among top famous hits (no static repetitive locking)
  */
 export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
   if (!seedTrack || !Array.isArray(candidatePool) || candidatePool.length === 0) {
@@ -872,8 +1036,8 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     (Array.isArray(options.excludeIds)
       ? options.excludeIds
       : options.excludeIds instanceof Set
-      ? Array.from(options.excludeIds)
-      : String(options.excludeIds || "").split(",")
+        ? Array.from(options.excludeIds)
+        : String(options.excludeIds || "").split(",")
     )
       .map((s) => String(s).trim())
       .filter(Boolean)
@@ -883,8 +1047,19 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     (Array.isArray(options.sessionPlayedIds)
       ? options.sessionPlayedIds
       : options.sessionPlayedIds instanceof Set
-      ? Array.from(options.sessionPlayedIds)
-      : String(options.sessionPlayedIds || "").split(",")
+        ? Array.from(options.sessionPlayedIds)
+        : String(options.sessionPlayedIds || "").split(",")
+    )
+      .map((s) => String(s).trim())
+      .filter(Boolean)
+  );
+
+  const recentQueueTrackIds = new Set(
+    (Array.isArray(options.recentQueueTrackIds)
+      ? options.recentQueueTrackIds
+      : options.recentQueueTrackIds instanceof Set
+        ? Array.from(options.recentQueueTrackIds)
+        : String(options.recentQueueTrackIds || "").split(",")
     )
       .map((s) => String(s).trim())
       .filter(Boolean)
@@ -892,8 +1067,11 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
 
   const seedId = String(seedTrack.id || "").trim();
   if (seedId) excludeIds.add(seedId);
+  const cleanSeedId = seedId.replace(/^track-/, "").trim();
+  if (cleanSeedId) excludeIds.add(cleanSeedId);
 
-  const seedLang = extractLanguage(seedTrack);
+  const seedProfile = classifySongDetailed(seedTrack);
+  const seedLang = seedProfile.language;
   const seedBaseTitle = normalizeBaseTitle(seedTrack.title || seedTrack.song || "");
   const seedMovie = cleanStr(seedTrack.movieName || seedTrack.album || "");
 
@@ -907,13 +1085,19 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
   for (const track of candidatePool) {
     if (!track || !track.id) continue;
     const tid = String(track.id).trim();
-    if (excludeIds.has(tid)) continue;
-    if (seenIds.has(tid)) continue;
+    const cleanTid = tid.replace(/^track-/, "").trim();
+    if (excludeIds.has(tid) || excludeIds.has(cleanTid)) continue;
+    if (seenIds.has(tid) || seenIds.has(cleanTid)) continue;
 
     // Strict Language Check: If seed has a detected language, candidate MUST match that language
-    const candLang = extractLanguage(track);
-    if (seedLang && candLang && candLang !== seedLang) {
+    const candProfile = classifySongDetailed(track);
+    if (seedLang && candProfile.language && candProfile.language !== seedLang) {
       continue; // Strictly reject different language tracks
+    }
+
+    // Strict Song Type Check: Vocal seed -> Vocal candidate; BGM seed -> BGM candidate
+    if (seedProfile.isBgm !== candProfile.isBgm) {
+      continue; // Strictly reject cross-type songs
     }
 
     // Strict Duplicate Title Check: Reject same song name variations or remixes
@@ -928,12 +1112,36 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     if (cleanT && cleanA && seenTitleArtist.has(taKey)) continue;
 
     seenIds.add(tid);
+    seenIds.add(cleanTid);
     if (baseTitle) seenBaseTitles.add(baseTitle);
     if (cleanT && cleanA) seenTitleArtist.add(taKey);
     validCandidates.push(track);
   }
 
-  // Exclude session history tracks when enough fresh candidates exist
+  // Controlled constraint relaxation: if candidate pool is small, allow related languages or unclassified candidates matching BGM type
+  if (validCandidates.length < maxResults) {
+    const relatedLangs = RELATED_LANGUAGES[seedLang] || [];
+    for (const track of candidatePool) {
+      if (!track || !track.id) continue;
+      const tid = String(track.id).trim();
+      const cleanTid = tid.replace(/^track-/, "").trim();
+      if (excludeIds.has(tid) || excludeIds.has(cleanTid)) continue;
+      if (seenIds.has(tid) || seenIds.has(cleanTid)) continue;
+
+      const candProfile = classifySongDetailed(track);
+      if (seedProfile.isBgm !== candProfile.isBgm) continue;
+      if (candProfile.language && candProfile.language !== seedLang && !relatedLangs.includes(candProfile.language)) {
+        continue;
+      }
+
+      seenIds.add(tid);
+      seenIds.add(cleanTid);
+      validCandidates.push(track);
+      if (validCandidates.length >= maxResults * 2) break;
+    }
+  }
+
+  // Session history exclusion (relax if pool is small)
   let pool = validCandidates.filter((t) => !sessionPlayedIds.has(String(t.id)));
   if (pool.length < maxResults) {
     const played = validCandidates.filter((t) => sessionPlayedIds.has(String(t.id)));
@@ -952,58 +1160,31 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
   let seedArtistAppearances = 0;
   let seedMovieAppearances = 0;
 
-  // 2. Iteratively build queue slots
+  // 2. Iteratively build exactly maxResults (20) queue slots
   while (finalQueue.length < maxResults && pool.length > 0) {
     const queueIndex = finalQueue.length;
 
-    // Segment remaining candidates into strict Fallback Levels
-    const level1 = []; // Same language (100) + exact same mood/type (>= 80)
-    const level2 = []; // Same language (100) + similar mood/type (>= 50)
-    const level3 = []; // Same language (100) + general popular/trending in that language
-
-    for (const cand of pool) {
-      const lang = getLanguageMatchScore(cand, seedTrack);
-      const mood = getMoodMatchScore(cand, seedTrack);
-
-      if (lang === 100 && mood >= 80) {
-        level1.push(cand);
-      } else if (lang === 100 && mood >= 50) {
-        level2.push(cand);
-      } else if (lang === 100 || !seedLang) {
-        level3.push(cand);
-      }
-    }
-
-    // Always select from highest available non-empty Fallback Level
-    const activeLevel =
-      level1.length > 0
-        ? level1
-        : level2.length > 0
-        ? level2
-        : level3.length > 0
-        ? level3
-        : pool;
-
-    // Calculate dynamic scores for active level items
-    const scoredList = activeLevel.map((cand) => {
+    // Score all remaining candidates against seedTrack using the transparent 100-point model
+    const scoredList = pool.map((cand) => {
       const scoreObj = calculateQueueScore(cand, seedTrack, {
         artistCounts,
         lastArtist,
         movieCounts,
         lastMovie,
+        recentQueueTrackIds,
       });
       return {
         track: cand,
-        moodObj: classifySongMood(cand),
+        candProfile: scoreObj.candProfile,
         ...scoreObj,
       };
     });
 
-    // Apply Diversity Rules:
+    // Diversity & Sequencing Filters:
     // a. Never place the same artist or same movie back-to-back
-    // b. In slots 0 & 1, do NOT pick seed artist or seed movie (immediate variety)
-    // c. Maximum 1 song from the same movie/album in the entire queue (prevents album flooding)
-    // d. Other artists max 2 appearances in queue
+    // b. In slots 0 & 1, do NOT pick seed artist or seed movie (immediate fresh variety)
+    // c. Maximum 1 song from the same movie/album in the entire queue
+    // d. Other artists maximum 2 appearances in queue
     let eligible = scoredList.filter((item) => {
       const candArtists = extractArtists(item.track);
       const lead = candArtists[0] || cleanStr(item.track.primary_artist || item.track.artist || "");
@@ -1016,15 +1197,15 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
       const isSeedArtist = candArtists.some((ca) => seedArtists.includes(ca));
       const isSeedMovie = Boolean(seedMovie && movie && (movie === seedMovie || movie.includes(seedMovie) || seedMovie.includes(movie)));
 
-      // Slots 0 & 1: do not repeat seed artist or seed movie
+      // Slots 0 & 1: do not repeat seed artist or seed movie if alternatives exist
       if (queueIndex < 2 && (isSeedArtist || isSeedMovie)) return false;
 
-      // Maximum 1 track from the seed movie, or max 1 track per any movie in queue
+      // Maximum 1 track from any movie in the entire queue
       if (isSeedMovie && seedMovieAppearances >= 1) return false;
       const mCount = movieCounts.get(movie) || 0;
       if (movie && mCount >= 1) return false;
 
-      // Seed artist & other artist cap
+      // Artist appearances cap (max 2)
       if (isSeedArtist && seedArtistAppearances >= 2) return false;
       const aCount = artistCounts.get(lead) || 0;
       if (aCount >= 2) return false;
@@ -1032,13 +1213,13 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
       return true;
     });
 
-    // If filters were too strict for the remaining pool, gently relax
+    // If diversity filters were too strict for remaining pool, gently relax
     if (eligible.length === 0) {
       eligible = scoredList.filter((item) => {
         const candArtists = extractArtists(item.track);
         const lead = candArtists[0] || cleanStr(item.track.primary_artist || item.track.artist || "");
         const aCount = artistCounts.get(lead) || 0;
-        return aCount < 2;
+        return aCount < 3;
       });
     }
 
@@ -1046,15 +1227,24 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
       eligible = scoredList;
     }
 
-    // Sort eligible by totalScore descending (top popular & trending songs ranked highest)
+    // Sort eligible by totalScore descending
     eligible.sort((a, b) => b.totalScore - a.totalScore);
 
-    // Pick top-scoring popular & trending hit
-    // For immediate next song (slot 0), strictly choose the #1 highest scoring trending hit
-    // For subsequent slots, choose from top 2-3 to maintain smooth variety among top hits
+    // Beautiful Sequencing Layer:
+    // Slot 0: #1 highest scoring compatible hit
+    // Slot 1: Top trending / energetic match
+    // Slot 2: High genre & energy match
+    // Slot 3: Newer release matching mood
+    // Slot 4: Strong companion or same artist track
+    // Slot 5: Hidden gem with high mood score
+    // Slots 6-19: Balanced alternation of trending and evergreen hits
     let selectedItem;
     if (queueIndex === 0) {
       selectedItem = eligible[0];
+    } else if (queueIndex === 4 && eligible.some((e) => e.isSameArtist && e.totalScore >= 60)) {
+      selectedItem = eligible.find((e) => e.isSameArtist && e.totalScore >= 60) || eligible[0];
+    } else if (queueIndex === 5 && eligible.some((e) => e.discoveryScore === 2 && e.moodScore >= 12)) {
+      selectedItem = eligible.find((e) => e.discoveryScore === 2 && e.moodScore >= 12) || eligible[0];
     } else {
       const sliceSize = Math.min(3, eligible.length);
       const topSlice = eligible.slice(0, sliceSize);
@@ -1086,19 +1276,19 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     const s = Math.floor(durSec % 60);
     const durationFormatted = chosenTrack.durationFormatted || `${m}:${s < 10 ? "0" : ""}${s}`;
 
-    const candLang = extractLanguage(chosenTrack) || seedLang || "";
+    const candLang = chosenTrack.language || seedLang || "";
     const langFormatted = candLang ? candLang.charAt(0).toUpperCase() + candLang.slice(1) : "";
-    const moodLabel = selectedItem.moodObj?.label || "Trending";
+    const moodLabel = selectedItem.candProfile?.primaryMood ? selectedItem.candProfile.primaryMood.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Trending";
 
     let tier = 1;
     let tierReason = "";
     if (isMatchArtist && seedArtistAppearances <= 1) {
       tier = 3;
       tierReason = `Artist • ${chosenLead}`;
-    } else if (selectedItem.langMatch === 100 && selectedItem.moodMatch >= 80) {
+    } else if (selectedItem.langScore === 20 && selectedItem.moodScore >= 12) {
       tier = 1;
       tierReason = langFormatted ? `${moodLabel} • ${langFormatted}` : moodLabel;
-    } else if (selectedItem.langMatch === 100) {
+    } else if (selectedItem.langScore === 20) {
       tier = 2;
       tierReason = langFormatted ? `Trending • ${langFormatted}` : "Trending Hit";
     } else {
@@ -1120,11 +1310,17 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
       isManual: false,
       queueMeta: {
         score: selectedItem.totalScore,
-        languageScore: selectedItem.langMatch,
-        moodScore: selectedItem.moodMatch,
+        languageScore: selectedItem.langScore,
+        typeScore: selectedItem.typeScore,
+        moodScore: selectedItem.moodScore,
+        trendingScore: selectedItem.trendingScore,
         popularityScore: selectedItem.popScore,
-        artistScore: selectedItem.artDiversity,
-        discoveryScore: selectedItem.discoveryFactor,
+        genreScore: selectedItem.genreScore,
+        energyScore: selectedItem.energyScore,
+        recencyScore: selectedItem.recencyScore,
+        artistScore: selectedItem.artistScore,
+        movieScore: selectedItem.movieScore,
+        discoveryScore: selectedItem.discoveryScore,
         isSameArtist: isMatchArtist,
         moodLabel,
         language: candLang,
@@ -1145,4 +1341,7 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
 export function generateRecommendedQueue(currentSong, musicCatalog, options = {}) {
   return buildIntelligentQueue(currentSong, musicCatalog, options);
 }
+
+
+
 

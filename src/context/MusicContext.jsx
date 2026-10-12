@@ -31,6 +31,10 @@ import {
 } from "../services/offlineStorage";
 import { formatPlaylistDuration } from "../utils/playlistUtils";
 import {
+  applySyncPlan,
+  buildSnapshotFromExistingPlaylist,
+} from "../services/spotifySyncService";
+import {
   DEFAULT_USER_ID,
   getAccountUserId,
   getAccountStorageKey,
@@ -68,13 +72,47 @@ export const normalizeTrack = (track) => {
   const rawId = track.id || track._id || track.trackId;
   const rawTitle = track.title || track.name || "Unknown Track";
   const rawArtist = track.artist || track.subtitle || track.artistName || track.singers || "Unknown Artist";
-  const rawCover =
-    track.coverUrl ||
-    track.thumbnail ||
-    track.image ||
-    track.imageUrl ||
-    (Array.isArray(track.image) && track.image[track.image.length - 1]?.url) ||
-    "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
+  let rawCover = "";
+  if (Array.isArray(track.image) && track.image.length > 0) {
+    const last = track.image[track.image.length - 1];
+    if (typeof last === "string") rawCover = last;
+    else if (last && typeof last.url === "string") rawCover = last.url;
+    else if (last && typeof last.link === "string") rawCover = last.link;
+  } else if (Array.isArray(track.images) && track.images.length > 0) {
+    const last = track.images[track.images.length - 1];
+    if (typeof last === "string") rawCover = last;
+    else if (last && typeof last.url === "string") rawCover = last.url;
+  }
+
+  if (!rawCover) {
+    const candidates = [
+      track.coverUrl,
+      track.thumbnail,
+      typeof track.image === "string" ? track.image : null,
+      typeof track.image === "object" && track.image?.url ? track.image.url : null,
+      track.imageUrl,
+      track.albumArt,
+      track.artwork,
+      track.more_info?.image,
+    ];
+    for (const c of candidates) {
+      if (typeof c === "string" && c.trim().length > 0) {
+        rawCover = c.trim();
+        break;
+      }
+    }
+  }
+
+  if (!rawCover) {
+    rawCover = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
+  }
+
+  if (typeof rawCover === "string") {
+    rawCover = rawCover.replace(/^http:\/\//i, "https://");
+    if (rawCover.includes("saavncdn.com") || rawCover.includes("jiosaavn.com")) {
+      rawCover = rawCover.replace(/50x50|150x150/g, "500x500");
+    }
+  }
 
   let formattedDuration = track.durationFormatted;
   if (!formattedDuration && track.duration) {
@@ -939,6 +977,232 @@ export const MusicProvider = ({ children }) => {
     return newPlaylist;
   };
 
+  const importSpotifyPlaylist = ({
+    title,
+    description,
+    coverUrl,
+    tracks,
+    sourceMeta,
+  }) => {
+    const currentUserId = getAccountUserId(user);
+    const count = customPlaylists.length + 1;
+    const cleanTitle = title?.trim() || `Imported Playlist #${count}`;
+    const id = `playlist-custom-${Date.now()}`;
+
+    const safeTracks = Array.isArray(tracks)
+      ? tracks.map(normalizeTrack).filter(Boolean)
+      : [];
+
+    const fallbackCovers = [
+      "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80",
+    ];
+
+    const finalCover =
+      coverUrl ||
+      safeTracks[0]?.coverUrl ||
+      fallbackCovers[customPlaylists.length % fallbackCovers.length];
+
+    const formattedDuration = formatPlaylistDuration(safeTracks);
+
+    const newPlaylist = {
+      id,
+      title: cleanTitle,
+      subtitle: `Imported • ${safeTracks.length} tracks`,
+      description:
+        description ||
+        `Spotify playlist "${cleanTitle}" imported to Ceepeefy Studio Mode with JioSaavn lossless audio streaming.`,
+      curator: "You",
+      curatorAvatar:
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuB0776cuJDNwyUTJA-rmqEC0bmxGrVq2yheMO1LRRjEKa8X3Cf3UEDu0hJn4mdmjyKKeTpXvIjAXGckcnVAnrz3t0pLZyIHxk3oSWIBKnTAewK0vZY8jNgt5WWU1mB33uzQZJtQJNQfehNFMnRCim5JQVgBeDcIsQ21sOVpfHhvACpeifEiQ9VMkYu25PbaQ5RDOCGsSjDtlsMuC8kifyPcZ62qnvBUyplbvUNIWKL7azjlQ_ONJ0ZS",
+      songsCount: safeTracks.length,
+      duration: formattedDuration,
+      updatedDate: "Imported today",
+      fidelity: "Imported Playlist • Hi-Res Lossless",
+      spec: "24-Bit • 192kHz",
+      badge: "SPOTIFY",
+      badgeVariant: "emerald",
+      stat: `${safeTracks.length} tracks`,
+      coverUrl: finalCover,
+      tracks: safeTracks,
+      isCustom: true,
+      source: "spotify_import",
+      sourceMeta: sourceMeta || null,
+    };
+
+    setCustomPlaylists((prev) => {
+      const updated = [newPlaylist, ...prev];
+      try {
+        localStorage.setItem(getAccountStorageKey("ceepeefy_custom_playlists", currentUserId), JSON.stringify(updated));
+      } catch {}
+      persistAccountData({ customPlaylists: updated });
+      return updated;
+    });
+
+    savePlaylistToCloud(newPlaylist, currentUserId).catch((err) => {
+      console.error("[MusicContext] Failed to persist imported playlist to Supabase:", err);
+    });
+
+    return newPlaylist;
+  };
+
+  // Set of playlist IDs currently undergoing Spotify synchronization
+  const [syncingPlaylistIds, setSyncingPlaylistIds] = useState(new Set());
+
+  /**
+   * Fetches the Spotify sync preview/diff plan for a given playlist.
+   * Compares the current Spotify playlist with the last synced snapshot.
+   */
+  const fetchSpotifySyncPlan = async (playlistId) => {
+    if (!playlistId) return { success: false, error: "Playlist ID is required." };
+    if (syncingPlaylistIds.has(playlistId)) {
+      return { success: false, error: "Sync operation is already in progress for this playlist." };
+    }
+
+    const playlist = customPlaylists.find((p) => String(p.id) === String(playlistId));
+    if (!playlist) {
+      return { success: false, error: "Playlist not found in your custom playlists." };
+    }
+
+    const spotifyId = playlist.sourceMeta?.spotifyId;
+    if (!spotifyId) {
+      return { success: false, error: "This playlist is not linked to a Spotify source." };
+    }
+
+    setSyncingPlaylistIds((prev) => new Set([...prev, playlistId]));
+
+    try {
+      const baselineSnapshot =
+        Array.isArray(playlist.sourceMeta?.syncedSnapshot) && playlist.sourceMeta.syncedSnapshot.length > 0
+          ? playlist.sourceMeta.syncedSnapshot
+          : buildSnapshotFromExistingPlaylist(playlist);
+
+      const res = await fetch("/api/spotify/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playlistId,
+          spotifyId,
+          currentSnapshot: baselineSnapshot,
+          existingTracks: playlist.tracks || [],
+        }),
+      });
+
+      const data = await res.json();
+      return data;
+    } catch (err) {
+      console.error("[MusicContext] fetchSpotifySyncPlan error:", err);
+      return {
+        success: false,
+        error: "Failed to connect to Spotify sync service. Please check your network connection.",
+      };
+    } finally {
+      setSyncingPlaylistIds((prev) => {
+        const next = new Set(prev);
+        next.delete(playlistId);
+        return next;
+      });
+    }
+  };
+
+  /**
+   * Commits the reviewed/accepted sync plan to the playlist.
+   * Updates only what changed without rebuilding unchanged tracks.
+   */
+  const commitSpotifySync = async (playlistId, syncPlanResult, options = {}) => {
+    if (!playlistId || !syncPlanResult?.diff) {
+      return { success: false, error: "Invalid sync plan data." };
+    }
+
+    const currentUserId = getAccountUserId(user);
+    const playlist = customPlaylists.find((p) => String(p.id) === String(playlistId));
+    if (!playlist) {
+      return { success: false, error: "Playlist not found." };
+    }
+
+    const matchedAddedItems =
+      options.selectedAdditions ||
+      syncPlanResult.addedMatches?.filter(
+        (m) => m.status === "matched" || m.userSelectedTrack
+      ) ||
+      [];
+    const unresolvedAdditions =
+      options.unresolvedAdditions ||
+      syncPlanResult.addedMatches?.filter(
+        (m) => m.status !== "matched" && !m.userSelectedTrack
+      ) ||
+      [];
+
+    const planOutput = applySyncPlan({
+      diff: syncPlanResult.diff,
+      matchedAddedItems: matchedAddedItems.map((m) => ({
+        sourceEntryId: m.sourceEntryId,
+        playableTrack: m.userSelectedTrack || m.matchedTrack,
+        targetIndex: m.targetIndex,
+        spotifyTrack: m.spotifyTrack,
+      })),
+      unresolvedAdditions,
+      existingTracks: playlist.tracks || [],
+      playlistTitle: playlist.title,
+    });
+
+    const formattedDuration = formatPlaylistDuration(planOutput.updatedTracks);
+
+    const updatedSourceMeta = {
+      ...(playlist.sourceMeta || {}),
+      spotifyId: syncPlanResult.spotifyMetadata?.id || playlist.sourceMeta?.spotifyId,
+      snapshotId: syncPlanResult.spotifyMetadata?.snapshotId || playlist.sourceMeta?.snapshotId,
+      lastSyncedAt: Date.now(),
+      lastSyncStatus: planOutput.unresolvedCount > 0 ? "partial" : "success",
+      totalSourceTracks:
+        syncPlanResult.spotifyMetadata?.totalTracks || planOutput.newSnapshot.length,
+      syncedSnapshot: planOutput.newSnapshot,
+      unresolvedTracks: planOutput.pendingUnresolved,
+    };
+
+    const updatedPlaylist = {
+      ...playlist,
+      tracks: planOutput.updatedTracks,
+      songsCount: planOutput.updatedTracks.length,
+      duration: formattedDuration,
+      subtitle: `Imported • ${planOutput.updatedTracks.length} tracks`,
+      updatedDate: "Synced today",
+      sourceMeta: updatedSourceMeta,
+    };
+
+    setCustomPlaylists((prev) => {
+      const next = prev.map((p) =>
+        String(p.id) === String(playlistId) ? updatedPlaylist : p
+      );
+      try {
+        localStorage.setItem(
+          getAccountStorageKey("ceepeefy_custom_playlists", currentUserId),
+          JSON.stringify(next)
+        );
+      } catch {}
+      persistAccountData({ customPlaylists: next });
+      return next;
+    });
+
+    // Save to Supabase cloud
+    savePlaylistToCloud(updatedPlaylist, currentUserId).catch((err) => {
+      console.warn("[MusicContext] Failed to persist synced playlist to Supabase:", err);
+    });
+
+    return {
+      success: true,
+      updatedPlaylist,
+      summary: {
+        added: planOutput.addedCount,
+        removed: planOutput.removedCount,
+        reordered: syncPlanResult.summary?.reorderedCount || 0,
+        unchanged: syncPlanResult.summary?.unchangedCount || 0,
+        unresolved: planOutput.unresolvedCount,
+      },
+    };
+  };
+
   const deleteCustomPlaylist = (id) => {
     const currentUserId = getAccountUserId(user);
     setCustomPlaylists((prev) => prev.filter((p) => p.id !== id));
@@ -1307,6 +1571,10 @@ export const MusicProvider = ({ children }) => {
   const autoQueueRef = useRef(autoQueue);
   const queueRef = useRef(queue);
   const isShuffleRef = useRef(isShuffle);
+  const playRequestIdRef = useRef(0);
+  const queueRequestIdRef = useRef(0);
+  const recentRecommendedTrackIdsRef = useRef(new Set());
+  const isTransitioningTrackRef = useRef(false);
 
   // Centralized Playback History (tracks played prior to current song)
   const [playbackHistory, setPlaybackHistory] = useState([]);
@@ -1687,6 +1955,139 @@ export const MusicProvider = ({ children }) => {
     }
   };
 
+  // Web Media Session API: Extract genuine track artwork (never empty or placeholder)
+  const getMediaSessionArtwork = (track) => {
+    if (!track) return [];
+
+    let coverUrlStr = "";
+
+    // 1. Array of images (e.g. JioSaavn returns image: [{ quality: '500x500', url: '...' }, ...])
+    if (Array.isArray(track.image) && track.image.length > 0) {
+      const last = track.image[track.image.length - 1];
+      if (typeof last === "string") coverUrlStr = last;
+      else if (last && typeof last.url === "string") coverUrlStr = last.url;
+      else if (last && typeof last.link === "string") coverUrlStr = last.link;
+    } else if (Array.isArray(track.images) && track.images.length > 0) {
+      const last = track.images[track.images.length - 1];
+      if (typeof last === "string") coverUrlStr = last;
+      else if (last && typeof last.url === "string") coverUrlStr = last.url;
+    }
+
+    // 2. Direct string properties
+    if (!coverUrlStr) {
+      const candidates = [
+        track.coverUrl,
+        track.thumbnail,
+        typeof track.image === "string" ? track.image : null,
+        typeof track.image === "object" && track.image?.url ? track.image.url : null,
+        track.imageUrl,
+        track.albumArt,
+        track.artwork,
+        track.more_info?.image,
+      ];
+      for (const candidate of candidates) {
+        if (typeof candidate === "string" && candidate.trim().length > 0) {
+          coverUrlStr = candidate.trim();
+          break;
+        }
+      }
+    }
+
+    // 3. Fallback to default high-res music artwork if missing so notification artwork is never empty
+    if (!coverUrlStr) {
+      coverUrlStr = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=512&auto=format&fit=crop&q=80";
+    }
+
+    let absoluteUrl = coverUrlStr.replace(/^http:\/\//i, "https://");
+    if (absoluteUrl.includes("saavncdn.com") || absoluteUrl.includes("jiosaavn.com")) {
+      absoluteUrl = absoluteUrl.replace(/50x50|150x150/g, "500x500");
+    }
+
+    try {
+      if (
+        !absoluteUrl.startsWith("http://") &&
+        !absoluteUrl.startsWith("https://") &&
+        !absoluteUrl.startsWith("blob:") &&
+        !absoluteUrl.startsWith("data:")
+      ) {
+        if (typeof window !== "undefined") {
+          absoluteUrl = new URL(absoluteUrl, window.location.origin).href;
+        }
+      }
+    } catch {
+      return [];
+    }
+
+    const ext = absoluteUrl.split("?")[0].split(".").pop()?.toLowerCase();
+    const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+
+    return [
+      { src: absoluteUrl, sizes: "96x96", type: mimeType },
+      { src: absoluteUrl, sizes: "128x128", type: mimeType },
+      { src: absoluteUrl, sizes: "192x192", type: mimeType },
+      { src: absoluteUrl, sizes: "256x256", type: mimeType },
+      { src: absoluteUrl, sizes: "384x384", type: mimeType },
+      { src: absoluteUrl, sizes: "512x512", type: mimeType },
+    ];
+  };
+
+  // Immediate Web Media Session metadata synchronization
+  const updateMediaSessionMetadata = (track) => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+
+    if (!track) {
+      try {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = "none";
+      } catch { }
+      return;
+    }
+
+    const title = track.title || "Unknown Title";
+    const artist = track.artist || track.subtitle || track.primaryArtist || track.primary_artist || "Ceepeefy Artist";
+    const album = track.album || track.albumName || track.movie || "Ceepeefy";
+    const artwork = getMediaSessionArtwork(track);
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title,
+        artist,
+        album,
+        artwork,
+      });
+    } catch (e) {
+      console.warn("[MediaSession] Metadata error, falling back:", e);
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title,
+          artist,
+          album,
+        });
+      } catch { }
+    }
+  };
+
+  // Synchronize Media Session Playback Position
+  const updateMediaSessionPositionState = (customPosition = null) => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+    if (!("setPositionState" in navigator.mediaSession)) return;
+    const dur = audioRef.current?.duration ?? durationRef.current ?? 0;
+    const cur = customPosition !== null ? customPosition : (audioRef.current?.currentTime ?? currentTimeRef.current ?? 0);
+    if (!dur || isNaN(dur) || dur <= 0) return;
+
+    try {
+      const validDuration = Number(dur);
+      const validPosition = Math.max(0, Math.min(Number(cur) || 0, validDuration));
+      if (validDuration > 0 && isFinite(validDuration) && isFinite(validPosition)) {
+        navigator.mediaSession.setPositionState({
+          duration: validDuration,
+          playbackRate: 1.0,
+          position: validPosition,
+        });
+      }
+    } catch { }
+  };
+
   // HTML5 Audio Event Handlers
   const handleTimeUpdate = () => {
     if (audioRef.current) {
@@ -1700,7 +2101,7 @@ export const MusicProvider = ({ children }) => {
       // and playback reaches within 25s before ending (or 75% progress), silently fetch & append next similar tracks!
       if (
         isAutoplayEnabledRef.current &&
-        queueRef.current.length <= 2 &&
+        (manualQueueRef.current.length + autoQueueRef.current.length) <= 2 &&
         dur > 15 &&
         (cur >= dur - 25 || cur >= dur * 0.75) &&
         !isFetchingAutoplayRef.current
@@ -1718,21 +2119,45 @@ export const MusicProvider = ({ children }) => {
       setDuration(audioRef.current.duration);
     }
     setIsBuffering(false);
+    if (currentTrackRef.current) {
+      updateMediaSessionMetadata(currentTrackRef.current);
+    }
+    updateMediaSessionPositionState();
   };
 
   const handleDurationChange = () => {
     if (audioRef.current && !isNaN(audioRef.current.duration) && audioRef.current.duration > 0) {
       setDuration(audioRef.current.duration);
     }
+    updateMediaSessionPositionState();
   };
 
   const handlePlay = () => {
     setIsPlaying(true);
     setIsBuffering(false);
+    isTransitioningTrackRef.current = false;
+    if (currentTrackRef.current) {
+      updateMediaSessionMetadata(currentTrackRef.current);
+    }
+    if (typeof window !== "undefined" && "mediaSession" in navigator) {
+      try {
+        navigator.mediaSession.playbackState = "playing";
+      } catch { }
+    }
+    updateMediaSessionPositionState();
   };
 
   const handlePause = () => {
-    setIsPlaying(false);
+    // Only pause if this is an intentional pause, not a background track transition
+    if (!isTransitioningTrackRef.current) {
+      setIsPlaying(false);
+      if (typeof window !== "undefined" && "mediaSession" in navigator) {
+        try {
+          navigator.mediaSession.playbackState = "paused";
+        } catch { }
+      }
+      updateMediaSessionPositionState();
+    }
   };
 
   const handleWaiting = () => {
@@ -1742,11 +2167,21 @@ export const MusicProvider = ({ children }) => {
   const handlePlaying = () => {
     setIsPlaying(true);
     setIsBuffering(false);
+    isTransitioningTrackRef.current = false;
     isRecoveringRef.current = false;
     if (stallTimeoutRef.current) {
       clearTimeout(stallTimeoutRef.current);
       stallTimeoutRef.current = null;
     }
+    if (currentTrackRef.current) {
+      updateMediaSessionMetadata(currentTrackRef.current);
+    }
+    if (typeof window !== "undefined" && "mediaSession" in navigator) {
+      try {
+        navigator.mediaSession.playbackState = "playing";
+      } catch { }
+    }
+    updateMediaSessionPositionState();
   };
 
   // Stall Event Listener: Handles connection stalls where no data is incoming from CDN
@@ -1781,7 +2216,12 @@ export const MusicProvider = ({ children }) => {
     const code = err?.code; // 1 = MEDIA_ERR_ABORTED, 2 = MEDIA_ERR_NETWORK, 3 = MEDIA_ERR_DECODE, 4 = MEDIA_ERR_SRC_NOT_SUPPORTED
     console.warn(`[AudioEngine] HTML5 audio error event triggered (code: ${code}):`, err?.message || e);
 
-    if (code === 1 || code === 2 || !code) {
+    // If load was deliberately aborted due to switching songs, ignore
+    if (code === 1) {
+      return;
+    }
+
+    if (code === 2 || !code) {
       if (retryCountRef.current < 2) {
         retryCountRef.current++;
         console.warn(`[AudioEngine] Network/Connection drop detected. Retrying playback attempt ${retryCountRef.current}...`);
@@ -1799,8 +2239,14 @@ export const MusicProvider = ({ children }) => {
       }, 350);
     } else {
       consecutiveErrorsRef.current = 0;
+      isTransitioningTrackRef.current = false;
       setIsBuffering(false);
       setIsPlaying(false);
+      if (typeof window !== "undefined" && "mediaSession" in navigator) {
+        try {
+          navigator.mediaSession.playbackState = "none";
+        } catch { }
+      }
     }
   };
 
@@ -1824,10 +2270,11 @@ export const MusicProvider = ({ children }) => {
     const isLocalSong = Boolean(
       seedTrack.isLocal ||
       String(seedTrack.id).startsWith("local-") ||
-      seedTrack.source === "local-upload"
+      seedTrack.source === "local-upload" ||
+      seedTrack.source === "local-device"
     );
     if (isLocalSong) {
-      console.log("[Autoplay] Seed track is a local upload; queue finished.");
+      console.log("[Autoplay] Seed track is a local track; queue finished.");
       return null;
     }
 
@@ -1869,11 +2316,12 @@ export const MusicProvider = ({ children }) => {
 
     // If Autoplay is OFF, allow initial queue generation, but skip append/transition
     if (mode !== "initial" && !isAutoplayEnabledRef.current) return;
-    if (isFetchingAutoplayRef.current) return;
 
     const seedMeta = extractSeedMetadata(seedTrack);
     if (!seedMeta || (!seedMeta.id && !seedMeta.cleanId)) return;
 
+    // Track request ID to safely prevent race conditions when users switch songs rapidly
+    const reqId = ++queueRequestIdRef.current;
     isFetchingAutoplayRef.current = true;
     setIsAutoplayLoading(true);
 
@@ -1903,19 +2351,29 @@ export const MusicProvider = ({ children }) => {
         if (seedMeta.title) params.set("title", seedMeta.title);
         if (seedMeta.artist) params.set("artist", seedMeta.artist);
 
-        // Session history exclusion to avoid repetitive recommendations
-        const excludeSet = new Set(sessionPlayedTrackIdsRef.current);
+        // Exclude currently playing track & manual queue tracks
+        const excludeSet = new Set();
         if (seedMeta.id) excludeSet.add(String(seedMeta.id));
         if (seedMeta.cleanId) excludeSet.add(String(seedMeta.cleanId));
         if (currentTrackRef.current?.id) excludeSet.add(String(currentTrackRef.current.id));
+        (manualQueueRef.current || []).forEach((t) => { if (t.id) excludeSet.add(String(t.id)); });
 
-        const excludeList = Array.from(excludeSet).slice(-40).join(",");
+        const excludeList = Array.from(excludeSet).join(",");
         if (excludeList) params.set("excludeIds", excludeList);
 
+        // Pass rolling session recommendation history for anti-repetition frequency damping (Section 15)
+        const recentRecos = Array.from(recentRecommendedTrackIdsRef.current).slice(-40).join(",");
+        if (recentRecos) params.set("recentQueueTrackIds", recentRecos);
+
         console.log(
-          `[Autoplay] Querying intelligent recommendations for seed: "${seedMeta.title}" (${seedMeta.cleanId || seedMeta.id}) | Mode: ${mode} | Album: ${seedMeta.album_id || "N/A"} | Artist: ${seedMeta.primary_artist} | Lang: ${seedMeta.language || "N/A"}`
+          `[Autoplay] Querying intelligent recommendations for seed: "${seedMeta.title}" (${seedMeta.cleanId || seedMeta.id}) | Mode: ${mode} | Artist: ${seedMeta.primary_artist} | Lang: ${seedMeta.language || "N/A"}`
         );
         const res = await fetch(`/api/audio/recommendations?${params.toString()}`);
+
+        if (reqId !== queueRequestIdRef.current) {
+          console.log("[Autoplay] Stale request discarded; superseded by newer song click.");
+          return;
+        }
 
         if (!res.ok) {
           throw new Error(`Recommendations endpoint returned status ${res.status}`);
@@ -1924,6 +2382,8 @@ export const MusicProvider = ({ children }) => {
         const data = await res.json();
         rawTracks = data.tracks || [];
       }
+
+      if (reqId !== queueRequestIdRef.current) return;
 
       // Filter out seedTrack, currently playing track, and current queue duplicates
       const playedIds = sessionPlayedTrackIdsRef.current;
@@ -1943,7 +2403,7 @@ export const MusicProvider = ({ children }) => {
           return true;
         });
 
-      // Strictly filter out any tracks the user has already listened to in the current session
+      // Filter session played tracks if enough fresh tracks exist
       const freshTracks = candidateTracks.filter((t) => {
         const tid = String(t.id);
         if (playedIds.has(tid)) return false;
@@ -1953,11 +2413,20 @@ export const MusicProvider = ({ children }) => {
         return true;
       });
 
-      // Fallback if session history exhausted candidates: use candidateTracks so queue never halts
-      const tracksToUse = freshTracks.length > 0 ? freshTracks : candidateTracks;
-
-      // Select top 20 ranked tracks for initial queue, or 10 tracks for append
+      // Ensure exactly 20 ranked tracks for initial queue, or 10 tracks for append
       const countToTake = mode === "initial" ? 20 : 10;
+      let tracksToUse = [...freshTracks];
+      if (tracksToUse.length < countToTake && candidateTracks.length > tracksToUse.length) {
+        const usedIds = new Set(tracksToUse.map((t) => String(t.id)));
+        for (const cand of candidateTracks) {
+          if (!usedIds.has(String(cand.id))) {
+            tracksToUse.push(cand);
+            usedIds.add(String(cand.id));
+            if (tracksToUse.length >= countToTake) break;
+          }
+        }
+      }
+
       let topRankedTracks = tracksToUse.slice(0, countToTake);
 
       if (topRankedTracks.length > 0) {
@@ -1970,13 +2439,18 @@ export const MusicProvider = ({ children }) => {
           setAutoQueue(topRankedTracks);
           setCurrentTracklist([...topRankedTracks]);
           prevSongQueueRef.current = topRankedTracks;
-          // Record into session history so next clicked song gets fresh new recommendations
+
+          // Track recommended tracks for anti-repetition across subsequent clicks
           topRankedTracks.forEach((t) => {
-            if (t.id) sessionPlayedTrackIdsRef.current.add(String(t.id));
+            if (t.id) recentRecommendedTrackIdsRef.current.add(String(t.id));
           });
+          if (recentRecommendedTrackIdsRef.current.size > 60) {
+            const arr = Array.from(recentRecommendedTrackIdsRef.current).slice(-40);
+            recentRecommendedTrackIdsRef.current = new Set(arr);
+          }
         } else if (mode === "append") {
           console.log(
-            `[Autoplay] Silently appending ${topRankedTracks.length} ranked candidate tracks to the active queue:`,
+            `[Autoplay] Silently appending ${topRankedTracks.length} ranked candidate tracks to active queue:`,
             topRankedTracks.map((t) => `[Tier ${t.tier}: ${t.tierReason}] ${t.title}`).join(", ")
           );
           setAutoQueue((prev) => {
@@ -1998,10 +2472,16 @@ export const MusicProvider = ({ children }) => {
       } else {
         console.warn("[Autoplay] No suitable recommendations found.");
         if (mode === "transition") {
+          isTransitioningTrackRef.current = false;
           setIsPlaying(false);
+          setIsBuffering(false);
+          if (typeof window !== "undefined" && "mediaSession" in navigator) {
+            try { navigator.mediaSession.playbackState = "none"; } catch { }
+          }
         }
       }
     } catch (err) {
+      if (reqId !== queueRequestIdRef.current) return;
       console.error("[Autoplay] Error during autoplay queue injection:", err);
       if (mode === "transition") {
         const fallbackList = NOCTURNE_TRACKS.filter((t) => String(t.id) !== String(seedTrack.id));
@@ -2009,12 +2489,19 @@ export const MusicProvider = ({ children }) => {
           const fallback = fallbackList[Math.floor(Math.random() * fallbackList.length)];
           playTrack(fallback);
         } else {
+          isTransitioningTrackRef.current = false;
           setIsPlaying(false);
+          setIsBuffering(false);
+          if (typeof window !== "undefined" && "mediaSession" in navigator) {
+            try { navigator.mediaSession.playbackState = "none"; } catch { }
+          }
         }
       }
     } finally {
-      isFetchingAutoplayRef.current = false;
-      setIsAutoplayLoading(false);
+      if (reqId === queueRequestIdRef.current) {
+        isFetchingAutoplayRef.current = false;
+        setIsAutoplayLoading(false);
+      }
     }
   };
 
@@ -2024,56 +2511,39 @@ export const MusicProvider = ({ children }) => {
   };
 
   const handleEnded = () => {
-    setIsPlaying(false);
-    setIsBuffering(false);
+    // Prevent duplicate triggers if already transitioning
+    if (isTransitioningTrackRef.current) return;
+    isTransitioningTrackRef.current = true;
 
     // 1. Single track repeat mode: Replay current track
     if (repeatModeRef.current === "one") {
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => { });
+        audioRef.current.play().then(() => {
+          setIsPlaying(true);
+          isTransitioningTrackRef.current = false;
+          updateMediaSessionPositionState();
+        }).catch((err) => {
+          console.warn("[MediaSession] Loop play error:", err);
+          isTransitioningTrackRef.current = false;
+        });
         setIsPlaying(true);
+      } else {
+        isTransitioningTrackRef.current = false;
       }
       return;
     }
 
-    const cur = currentTrackRef.current;
-    const activeQueue = queueRef.current || [];
-
-    // 2. If there are still songs queued up in user's active queue, play next
-    if (activeQueue.length > 0) {
-      handleNextTrack();
-      return;
-    }
-
-    // 3. Current track is the last song in user's active queue (activeQueue is empty)
-    // If Repeat Mode is "all", restart the tracklist from the beginning
-    if (repeatModeRef.current === "all") {
-      const tracklist = currentTracklistRef.current || [];
-      if (tracklist.length > 0) {
-        const firstTrack = tracklist[0];
-        const remaining = tracklist.slice(1);
-        setQueue(remaining);
-        playTrack(firstTrack);
-      }
-      return;
-    }
-
-    // 4. Autoplay Interceptor: If it's the last song and isAutoplayEnabled is true,
-    // fetch related tracks and seamlessly transition with zero downtime!
-    if (isAutoplayEnabledRef.current && cur) {
-      triggerAutoplayTransition(cur);
-      return;
-    }
-
-    // 5. If Autoplay is disabled and active queue finished, cleanly stop playback
-    setIsPlaying(false);
-    setIsBuffering(false);
-    if (audioRef.current) {
+    // 2. Continuous playback: Keep Android notification / lock-screen player active
+    setIsBuffering(true);
+    if (typeof window !== "undefined" && "mediaSession" in navigator) {
       try {
-        audioRef.current.pause();
+        navigator.mediaSession.playbackState = "playing";
       } catch { }
     }
+
+    // 3. Automatically advance to next eligible song according to queue & recommendation logic
+    handleNextTrack();
   };
 
   // Recent searches management
@@ -2119,80 +2589,6 @@ export const MusicProvider = ({ children }) => {
     } catch (e) { }
   };
 
-  // Web Media Session API: Extract genuine track artwork (never Ceepify logo or placeholder)
-  const getMediaSessionArtwork = (track) => {
-    if (!track) return [];
-    const rawCover =
-      track.coverUrl ||
-      track.thumbnail ||
-      track.image ||
-      track.imageUrl ||
-      (Array.isArray(track.image) && track.image[track.image.length - 1]?.url) ||
-      track.albumArt ||
-      "";
-
-    if (!rawCover || typeof rawCover !== "string") return [];
-    // Strict requirement: Never use logo or default placeholder
-    if (rawCover.includes("icon-512") || rawCover.includes("ceepeefy-logo")) return [];
-
-    let absoluteUrl = rawCover;
-    try {
-      if (
-        !rawCover.startsWith("http://") &&
-        !rawCover.startsWith("https://") &&
-        !rawCover.startsWith("blob:") &&
-        !rawCover.startsWith("data:")
-      ) {
-        if (typeof window !== "undefined") {
-          absoluteUrl = new URL(rawCover, window.location.origin).href;
-        }
-      }
-    } catch {
-      return [];
-    }
-
-    const ext = absoluteUrl.split("?")[0].split(".").pop()?.toLowerCase();
-    const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
-
-    return [
-      { src: absoluteUrl, sizes: "96x96", type: mimeType },
-      { src: absoluteUrl, sizes: "128x128", type: mimeType },
-      { src: absoluteUrl, sizes: "192x192", type: mimeType },
-      { src: absoluteUrl, sizes: "256x256", type: mimeType },
-      { src: absoluteUrl, sizes: "384x384", type: mimeType },
-      { src: absoluteUrl, sizes: "512x512", type: mimeType },
-    ];
-  };
-
-  // Immediate Web Media Session metadata synchronization
-  const updateMediaSessionMetadata = (track) => {
-    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
-
-    if (!track) {
-      try {
-        navigator.mediaSession.metadata = null;
-        navigator.mediaSession.playbackState = "none";
-      } catch { }
-      return;
-    }
-
-    const title = track.title || "Unknown Title";
-    const artist = track.artist || "Ceepeefy Artist";
-    const album = track.album || track.movie || "";
-    const artwork = getMediaSessionArtwork(track);
-
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title,
-        artist,
-        album,
-        artwork,
-      });
-    } catch (e) {
-      console.warn("[MediaSession] Metadata error:", e);
-    }
-  };
-
   // Play a specific track: fetches raw direct audio streaming URL from open-source music search
   const playTrack = async (track, tracklist = null, options = {}) => {
     if (!track) return;
@@ -2219,17 +2615,29 @@ export const MusicProvider = ({ children }) => {
       }
     }
 
+    // Monotonic request ID: prevents race conditions when rapidly switching songs
+    const requestId = ++playRequestIdRef.current;
+
     // Record previous song to history for backwards navigation (unless navigating backwards)
     if (!options?.fromHistory && currentTrackRef.current && String(currentTrackRef.current.id) !== String(track.id)) {
       setPlaybackHistory((prev) => [...prev.slice(-30), currentTrackRef.current]);
     }
 
-    setCurrentTrack(track);
-    currentTrackRef.current = track;
-    updateMediaSessionMetadata(track);
+    const norm = normalizeTrack(track);
+    const resolvedTrack = norm || track;
+
+    setCurrentTrack(resolvedTrack);
+    currentTrackRef.current = resolvedTrack;
+    updateMediaSessionMetadata(resolvedTrack);
     setCurrentTime(0);
-    setDuration(track.duration || 210);
+    setDuration(resolvedTrack.duration || 210);
     setIsBuffering(true);
+    setIsPlaying(true);
+    if (typeof window !== "undefined" && "mediaSession" in navigator) {
+      try {
+        navigator.mediaSession.playbackState = "playing";
+      } catch { }
+    }
 
     // If playing a new song from search or standalone (not consuming from existing queue),
     // preserve current active queue into prevSongQueueRef so the queue algorithm can pick a random matching track
@@ -2275,7 +2683,24 @@ export const MusicProvider = ({ children }) => {
       }
     } else {
       // Individual track played (Search, Home page, SongCard, RecommendationCard, etc.):
-      setAutoQueue([]);
+      if (tracklist && Array.isArray(tracklist) && tracklist.length > 1) {
+        const seedLang = (track.language || track.more_info?.language || "").toLowerCase().trim();
+        const initialSeed = tracklist
+          .filter((t) => {
+            if (!t || String(t.id) === String(track.id)) return false;
+            const tLang = (t.language || t.more_info?.language || "").toLowerCase().trim();
+            if (seedLang && tLang && tLang !== seedLang) return false;
+            return true;
+          })
+          .slice(0, 20);
+        if (initialSeed.length > 0) {
+          setAutoQueue(initialSeed);
+        } else {
+          setAutoQueue([]);
+        }
+      } else {
+        setAutoQueue([]);
+      }
       fetchAndInjectAutoplayQueue(track, { mode: "initial" });
     }
 
@@ -2289,8 +2714,6 @@ export const MusicProvider = ({ children }) => {
     }
 
     // Add to recently played tracks with full metadata (local tracks are strictly isolated to their Self Mix)
-    const norm = normalizeTrack(track);
-
     if (norm && !isLocalTrack) {
       // Record into current session history for filtering in ListenFree tiered recommendations
       if (norm.id) {
@@ -2375,10 +2798,15 @@ export const MusicProvider = ({ children }) => {
         }
       }
 
+      if (requestId !== playRequestIdRef.current) return;
+
       // 3. Graceful offline detection: if no local/offline audio and browser is disconnected
       const isOnlineNow = typeof navigator !== "undefined" ? navigator.onLine : true;
       if (!rawAudioUrl && !isOnlineNow) {
-        setIsBuffering(false);
+        if (requestId === playRequestIdRef.current) {
+          setIsBuffering(false);
+          isTransitioningTrackRef.current = false;
+        }
         showOfflineNotice("This track is not downloaded for offline listening. Connect to the internet or play your offline songs.");
         return;
       }
@@ -2387,6 +2815,25 @@ export const MusicProvider = ({ children }) => {
       if (!rawAudioUrl) {
         const streamData = await getDirectAudioStreamUrl(track.title, track.artist, track.id);
         rawAudioUrl = streamData.audioUrl;
+      }
+
+      if (requestId !== playRequestIdRef.current) return;
+
+      if (!rawAudioUrl) {
+        console.warn("[MusicContext] No playable audio URL found for track:", resolvedTrack.title);
+        if (requestId === playRequestIdRef.current) {
+          setIsBuffering(false);
+          isTransitioningTrackRef.current = false;
+          if (queueRef.current?.length > 0 || isAutoplayEnabledRef.current) {
+            handleNextTrack();
+          } else {
+            setIsPlaying(false);
+            if (typeof window !== "undefined" && "mediaSession" in navigator) {
+              try { navigator.mediaSession.playbackState = "none"; } catch { }
+            }
+          }
+        }
+        return;
       }
 
       if (rawAudioUrl && norm && !isLocalTrack) {
@@ -2401,13 +2848,27 @@ export const MusicProvider = ({ children }) => {
         audioRef.current.load();
         try {
           await audioRef.current.play();
+          if (requestId === playRequestIdRef.current) {
+            setIsPlaying(true);
+            setIsBuffering(false);
+            isTransitioningTrackRef.current = false;
+            updateMediaSessionMetadata(resolvedTrack);
+            updateMediaSessionPositionState();
+          }
         } catch (playErr) {
           console.warn("HTML5 audio play was prevented by browser policy or error:", playErr);
+          if (requestId === playRequestIdRef.current) {
+            setIsBuffering(false);
+            isTransitioningTrackRef.current = false;
+          }
         }
       }
     } catch (err) {
       console.error("Failed to load and play audio stream:", err);
-      setIsBuffering(false);
+      if (requestId === playRequestIdRef.current) {
+        setIsBuffering(false);
+        isTransitioningTrackRef.current = false;
+      }
     }
   };
 
@@ -2467,10 +2928,17 @@ export const MusicProvider = ({ children }) => {
     }
 
     const cur = currentTrackRef.current;
-    const tracklist = currentTracklistRef.current;
+    const tracklist = currentTracklistRef.current || [];
     if (!cur) {
-      if (tracklist && tracklist.length > 0) {
+      if (tracklist.length > 0) {
         playTrack(tracklist[0]);
+      } else {
+        isTransitioningTrackRef.current = false;
+        setIsPlaying(false);
+        setIsBuffering(false);
+        if (typeof window !== "undefined" && "mediaSession" in navigator) {
+          try { navigator.mediaSession.playbackState = "none"; } catch { }
+        }
       }
       return;
     }
@@ -2481,23 +2949,39 @@ export const MusicProvider = ({ children }) => {
       if (nextIndex >= tracklist.length) {
         if (repeatModeRef.current === "all") {
           nextIndex = 0;
+          playTrack(tracklist[nextIndex]);
         } else if (isAutoplayEnabledRef.current && cur) {
           triggerAutoplayTransition(cur);
-          return;
         } else {
+          isTransitioningTrackRef.current = false;
           setIsPlaying(false);
           setIsBuffering(false);
+          if (typeof window !== "undefined" && "mediaSession" in navigator) {
+            try { navigator.mediaSession.playbackState = "none"; } catch { }
+          }
           if (audioRef.current) {
             try {
               audioRef.current.pause();
             } catch { }
           }
-          return;
         }
+        return;
       }
       playTrack(tracklist[nextIndex]);
     } else if (isAutoplayEnabledRef.current && cur) {
       triggerAutoplayTransition(cur);
+    } else {
+      isTransitioningTrackRef.current = false;
+      setIsPlaying(false);
+      setIsBuffering(false);
+      if (typeof window !== "undefined" && "mediaSession" in navigator) {
+        try { navigator.mediaSession.playbackState = "none"; } catch { }
+      }
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+        } catch { }
+      }
     }
   };
 
@@ -2519,7 +3003,6 @@ export const MusicProvider = ({ children }) => {
     const aIdx = aQ.findIndex((t) => String(t.id) === tid);
     if (aIdx !== -1) {
       // User clicked into Automatic Queue: play selected track, and immediately regenerate upcoming queue matching this clicked song!
-      setManualQueue([]);
       playTrack(track, null, { fromQueue: true, wasManual: false, refreshQueueForTrack: true });
       return;
     }
@@ -2715,6 +3198,7 @@ export const MusicProvider = ({ children }) => {
         console.warn("Audio seekTo error:", err);
       }
     }
+    updateMediaSessionPositionState(clamped);
   };
 
   // Previous track with history and tracklist support
@@ -2791,29 +3275,15 @@ export const MusicProvider = ({ children }) => {
       if (!currentTrack) {
         navigator.mediaSession.playbackState = "none";
       } else {
-        navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+        navigator.mediaSession.playbackState = (isPlaying || isBuffering) ? "playing" : "paused";
       }
     } catch { }
-  }, [isPlaying, currentTrack]);
+  }, [isPlaying, isBuffering, currentTrack]);
 
-  // Sync Media Session Playback Position
+  // Sync Media Session Playback Position on duration or track changes
   useEffect(() => {
-    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
-    if (!("setPositionState" in navigator.mediaSession)) return;
-    if (!currentTrack || !duration || isNaN(duration) || duration <= 0) return;
-
-    try {
-      const validDuration = Number(duration);
-      const validPosition = Math.max(0, Math.min(Number(currentTime) || 0, validDuration));
-      if (validDuration > 0 && isFinite(validDuration) && isFinite(validPosition)) {
-        navigator.mediaSession.setPositionState({
-          duration: validDuration,
-          playbackRate: 1.0,
-          position: validPosition,
-        });
-      }
-    } catch { }
-  }, [currentTime, duration, currentTrack]);
+    updateMediaSessionPositionState();
+  }, [duration, currentTrack, updateMediaSessionPositionState]);
 
   // Register OS Media Controls Action Handlers ONCE on mount
   useEffect(() => {
@@ -2870,6 +3340,13 @@ export const MusicProvider = ({ children }) => {
           audioRef.current.currentTime = 0;
         }
         setIsPlaying(false);
+        setIsBuffering(false);
+        isTransitioningTrackRef.current = false;
+        if (typeof window !== "undefined" && "mediaSession" in navigator) {
+          try {
+            navigator.mediaSession.playbackState = "none";
+          } catch { }
+        }
       }],
     ];
 
@@ -3095,6 +3572,10 @@ export const MusicProvider = ({ children }) => {
         clearAllRecentSearches,
         formatTime,
         createPlaylist,
+        importSpotifyPlaylist,
+        syncingPlaylistIds,
+        fetchSpotifySyncPlan,
+        commitSpotifySync,
         deleteCustomPlaylist,
         renamePlaylist,
         bumpPlaylistToTop,
@@ -3127,7 +3608,7 @@ export const MusicProvider = ({ children }) => {
 
       {/* Floating Offline Notification Toast */}
       {offlineNotice && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] bg-[#0d172e]/95 text-white border border-primary/40 px-4 py-2.5 rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] bg-[#101010]/95 text-white border border-primary/40 px-4 py-2.5 rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200">
           <span className="material-symbols-outlined text-primary text-[18px]">
             offline_pin
           </span>

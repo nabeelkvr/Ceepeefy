@@ -10,9 +10,10 @@
  */
 
 const DB_NAME = "CeepeefyLocalMusicDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_TRACKS = "device_tracks";
 const STORE_RECENT = "recent_played";
+const STORE_PLAYLISTS = "local_playlists";
 
 // In-memory active Object URL cache to prevent duplicate Blob allocations
 const activeLocalUrlCache = new Map();
@@ -41,6 +42,10 @@ export function openLocalMusicDB() {
       }
       if (!db.objectStoreNames.contains(STORE_RECENT)) {
         db.createObjectStore(STORE_RECENT, { keyPath: "trackId" });
+      }
+      if (!db.objectStoreNames.contains(STORE_PLAYLISTS)) {
+        const playlistStore = db.createObjectStore(STORE_PLAYLISTS, { keyPath: "id" });
+        playlistStore.createIndex("updatedAt", "updatedAt", { unique: false });
       }
     };
 
@@ -263,16 +268,52 @@ export function cleanFileNameMetadata(fileName = "") {
 }
 
 /**
- * Processes a list of imported Files into structured Ceepeefy local tracks
+ * Processes a list of imported Files into structured Ceepeefy local tracks.
+ * Handles duplicate detection, ID3 tags extraction, filename clean fallbacks, and audio durations.
  * @param {Array<File>} files
- * @param {Function} [onProgress]
- * @returns {Promise<Array<object>>}
+ * @param {Array<object>|Function} [arg2] Existing tracks array or onProgress callback
+ * @param {Function} [arg3] onProgress callback
+ * @returns {Promise<Array<object>>} Processed tracks array with .duplicateCount and .skippedCount attached
  */
-export async function processImportedFiles(files = [], onProgress = null) {
+export async function processImportedFiles(files = [], arg2 = null, arg3 = null) {
+  let existingTracks = [];
+  let onProgress = null;
+
+  if (typeof arg2 === "function") {
+    onProgress = arg2;
+  } else if (Array.isArray(arg2)) {
+    existingTracks = arg2;
+    if (typeof arg3 === "function") onProgress = arg3;
+  }
+
+  const existingSet = new Set(
+    existingTracks.map((t) => `${(t.fileName || "").toLowerCase()}__${t.fileSize || 0}`)
+  );
+
   const processedTracks = [];
+  let duplicateCount = 0;
+  let skippedCount = 0;
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+
+    // Check supported format
+    const isAudio =
+      file.type?.startsWith("audio/") ||
+      /\.(mp3|m4a|aac|wav|flac|ogg|opus|webm)$/i.test(file.name);
+    if (!isAudio) {
+      skippedCount++;
+      continue;
+    }
+
+    // Check duplicate
+    const key = `${(file.name || "").toLowerCase()}__${file.size || 0}`;
+    if (existingSet.has(key)) {
+      duplicateCount++;
+      continue;
+    }
+    existingSet.add(key);
+
     if (onProgress) {
       onProgress(i + 1, files.length, file.name);
     }
@@ -331,6 +372,12 @@ export async function processImportedFiles(files = [], onProgress = null) {
       addedAt: Date.now(),
     });
   }
+
+  // Attach metrics
+  processedTracks.duplicateCount = duplicateCount;
+  processedTracks.skippedCount = skippedCount;
+  processedTracks.total = files.length;
+  processedTracks.tracks = processedTracks;
 
   return processedTracks;
 }
@@ -537,9 +584,241 @@ export async function getLocalRecentlyPlayedTracks(allTracks = []) {
  * @returns {string}
  */
 export function formatFileSize(bytes = 0) {
-  if (!bytes || bytes <= 0) return "0 KB";
+  if (!bytes || bytes <= 0) return "0 MB";
+  const gb = bytes / (1024 * 1024 * 1024);
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
   const mb = bytes / (1024 * 1024);
   if (mb >= 1) return `${mb.toFixed(1)} MB`;
   const kb = bytes / 1024;
   return `${Math.round(kb)} KB`;
 }
+
+/**
+ * Retrieves all user-created local playlists.
+ * Persists in IndexedDB with localStorage mirroring.
+ * @returns {Promise<Array<object>>}
+ */
+export async function getAllLocalPlaylists() {
+  try {
+    const db = await openLocalMusicDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_PLAYLISTS, "readonly");
+      const store = tx.objectStore(STORE_PLAYLISTS);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const list = req.result || [];
+        if (list.length === 0 && typeof localStorage !== "undefined") {
+          try {
+            const raw = localStorage.getItem("ceepeefy_local_playlists");
+            if (raw) return resolve(JSON.parse(raw));
+          } catch {}
+        }
+        resolve(list);
+      };
+      req.onerror = () => {
+        if (typeof localStorage !== "undefined") {
+          try {
+            const raw = localStorage.getItem("ceepeefy_local_playlists");
+            if (raw) return resolve(JSON.parse(raw));
+          } catch {}
+        }
+        resolve([]);
+      };
+    });
+  } catch (err) {
+    if (typeof localStorage !== "undefined") {
+      try {
+        const raw = localStorage.getItem("ceepeefy_local_playlists");
+        if (raw) return JSON.parse(raw);
+      } catch {}
+    }
+    return [];
+  }
+}
+
+/**
+ * Saves or updates a local playlist.
+ * @param {object} playlist
+ * @returns {Promise<boolean>}
+ */
+export async function saveLocalPlaylist(playlist) {
+  if (!playlist || !playlist.id) return false;
+
+  const record = {
+    ...playlist,
+    updatedAt: Date.now(),
+  };
+
+  try {
+    const db = await openLocalMusicDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_PLAYLISTS, "readwrite");
+      const store = tx.objectStore(STORE_PLAYLISTS);
+      store.put(record);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  } catch (err) {
+    console.warn("[LocalMusic] Failed to save playlist in IndexedDB:", err);
+  }
+
+  // Mirror to localStorage
+  if (typeof localStorage !== "undefined") {
+    try {
+      const existing = await getAllLocalPlaylists();
+      const updated = existing.some((p) => p.id === record.id)
+        ? existing.map((p) => (p.id === record.id ? record : p))
+        : [record, ...existing];
+      localStorage.setItem("ceepeefy_local_playlists", JSON.stringify(updated));
+    } catch {}
+  }
+
+  return true;
+}
+
+/**
+ * Deletes a local playlist from IndexedDB and localStorage.
+ * CRITICAL RULE: Underlying audio files are strictly NOT deleted.
+ * @param {string} playlistId
+ * @returns {Promise<boolean>}
+ */
+export async function deleteLocalPlaylist(playlistId) {
+  if (!playlistId) return false;
+
+  try {
+    const db = await openLocalMusicDB();
+    await new Promise((resolve) => {
+      const tx = db.transaction(STORE_PLAYLISTS, "readwrite");
+      tx.objectStore(STORE_PLAYLISTS).delete(playlistId);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch (err) {
+    console.warn("[LocalMusic] deleteLocalPlaylist error:", err);
+  }
+
+  if (typeof localStorage !== "undefined") {
+    try {
+      const existing = await getAllLocalPlaylists();
+      const filtered = existing.filter((p) => p.id !== playlistId);
+      localStorage.setItem("ceepeefy_local_playlists", JSON.stringify(filtered));
+    } catch {}
+  }
+
+  return true;
+}
+
+/**
+ * Adds tracks to a local playlist.
+ * @param {string} playlistId
+ * @param {Array<string>} trackIds
+ * @returns {Promise<boolean>}
+ */
+export async function addTracksToLocalPlaylist(playlistId, trackIds = []) {
+  if (!playlistId || !Array.isArray(trackIds) || trackIds.length === 0) return false;
+  const playlists = await getAllLocalPlaylists();
+  const playlist = playlists.find((p) => p.id === playlistId);
+  if (!playlist) return false;
+
+  const currentIds = Array.isArray(playlist.trackIds) ? [...playlist.trackIds] : [];
+  trackIds.forEach((id) => {
+    if (!currentIds.includes(id)) {
+      currentIds.push(id);
+    }
+  });
+
+  return saveLocalPlaylist({
+    ...playlist,
+    trackIds: currentIds,
+  });
+}
+
+/**
+ * Removes a track from a local playlist by track ID or index.
+ * CRITICAL RULE: Removes membership only; does NOT delete local file.
+ * @param {string} playlistId
+ * @param {string|number} trackIdOrIndex
+ * @returns {Promise<boolean>}
+ */
+export async function removeTrackFromLocalPlaylist(playlistId, trackIdOrIndex) {
+  if (!playlistId || trackIdOrIndex === undefined || trackIdOrIndex === null) return false;
+  const playlists = await getAllLocalPlaylists();
+  const playlist = playlists.find((p) => p.id === playlistId);
+  if (!playlist) return false;
+
+  let currentIds = Array.isArray(playlist.trackIds) ? [...playlist.trackIds] : [];
+  if (typeof trackIdOrIndex === "number") {
+    currentIds.splice(trackIdOrIndex, 1);
+  } else {
+    currentIds = currentIds.filter((id) => id !== trackIdOrIndex);
+  }
+
+  return saveLocalPlaylist({
+    ...playlist,
+    trackIds: currentIds,
+  });
+}
+
+/**
+ * Reorders tracks in a local playlist.
+ * @param {string} playlistId
+ * @param {Array<string>} newTrackIds
+ * @returns {Promise<boolean>}
+ */
+export async function reorderLocalPlaylistTracks(playlistId, newTrackIds = []) {
+  if (!playlistId || !Array.isArray(newTrackIds)) return false;
+  const playlists = await getAllLocalPlaylists();
+  const playlist = playlists.find((p) => p.id === playlistId);
+  if (!playlist) return false;
+
+  return saveLocalPlaylist({
+    ...playlist,
+    trackIds: newTrackIds,
+  });
+}
+
+/**
+ * Scans a folder using File System Access API where supported by browser/device.
+ * Gracefully handles abort or unsupported platforms (e.g. mobile sandbox).
+ */
+export async function scanDirectoryWithFSA(onProgress = null) {
+  if (typeof window === "undefined" || !window.showDirectoryPicker) {
+    return {
+      supported: false,
+      error: "Directory scanning is not supported by your browser sandbox. Mobile devices require manual file selection.",
+    };
+  }
+
+  try {
+    const dirHandle = await window.showDirectoryPicker();
+    const files = [];
+
+    async function scanDir(handle, path = "") {
+      for await (const entry of handle.values()) {
+        if (entry.kind === "file") {
+          if (/\.(mp3|m4a|aac|wav|flac|ogg|opus|webm)$/i.test(entry.name)) {
+            const file = await entry.getFile();
+            Object.defineProperty(file, "webkitRelativePath", {
+              value: path ? `${path}/${entry.name}` : entry.name,
+              configurable: true,
+            });
+            files.push(file);
+            if (onProgress) onProgress(files.length, entry.name);
+          }
+        } else if (entry.kind === "directory") {
+          await scanDir(entry, path ? `${path}/${entry.name}` : entry.name);
+        }
+      }
+    }
+
+    await scanDir(dirHandle, dirHandle.name);
+    return { supported: true, files };
+  } catch (err) {
+    if (err.name === "AbortError") {
+      return { supported: true, cancelled: true, files: [] };
+    }
+    console.warn("[LocalMusic] FSA scan error:", err);
+    return { supported: false, error: err.message };
+  }
+}
+

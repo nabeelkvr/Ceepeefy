@@ -193,7 +193,7 @@ export default function AmbientSettingsSection() {
                   }`}
               >
                 {/* Visual Thumbnail Image */}
-                <div className="relative aspect-[16/10] w-full bg-[#0a0f1d] overflow-hidden">
+                <div className="relative aspect-[16/10] w-full bg-[#0a0a0a] overflow-hidden">
                   {preset.imageUrl ? (
                     <img
                       src={preset.thumbnailUrl || preset.imageUrl}
@@ -203,7 +203,7 @@ export default function AmbientSettingsSection() {
                     />
                   ) : (
                     /* Minimal Dark preview gradient */
-                    <div className="w-full h-full bg-gradient-to-br from-[#0c1424] via-[#090d18] to-[#04060c] flex items-center justify-center text-outline">
+                    <div className="w-full h-full bg-gradient-to-br from-[#141414] via-[#0a0a0a] to-[#000000] flex items-center justify-center text-outline">
                       <span className="material-symbols-outlined text-[24px]">dark_mode</span>
                     </div>
                   )}

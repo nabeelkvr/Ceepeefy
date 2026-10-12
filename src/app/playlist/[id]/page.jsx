@@ -40,6 +40,7 @@ import {
 } from "../../../services/supabaseClient";
 import { getAccountUserId } from "../../../config/authConfig";
 import PlaylistSkeleton from "../../../components/PlaylistSkeleton";
+import SpotifySyncModal from "../../../components/SpotifySyncModal";
 
 export default function PlaylistPage() {
   const params = useParams();
@@ -76,10 +77,20 @@ export default function PlaylistPage() {
     removePlaylistOffline,
     renamePlaylist,
     bumpPlaylistToTop,
+    syncingPlaylistIds,
+    fetchSpotifySyncPlan,
+    commitSpotifySync,
     user,
   } = useMusic();
 
   const currentUserId = getAccountUserId(user);
+
+  // Spotify Sync States
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncPlan, setSyncPlan] = useState(null);
+  const [isFetchingSync, setIsFetchingSync] = useState(false);
+  const [isApplyingSync, setIsApplyingSync] = useState(false);
+  const [syncNotice, setSyncNotice] = useState(null);
 
   const fileInputRef = useRef(null);
   const titleInputRef = useRef(null);
@@ -147,6 +158,93 @@ export default function PlaylistPage() {
   );
 
   const tracks = playlist?.tracks || (isCustomPlaylist ? [] : NOCTURNE_TRACKS);
+
+  const isSpotifyLinked = Boolean(
+    playlist?.source === "spotify_import" || playlist?.sourceMeta?.spotifyId
+  );
+
+  const isSyncing = Boolean(syncingPlaylistIds?.has(playlist?.id) || isFetchingSync);
+
+  // Auto-dismiss sync notice toast after 4.5 seconds
+  useEffect(() => {
+    if (syncNotice) {
+      const timer = setTimeout(() => {
+        setSyncNotice(null);
+      }, 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [syncNotice]);
+
+  const handleStartSync = async () => {
+    if (isSyncing || !playlist?.id) return;
+    setIsFetchingSync(true);
+    setSyncNotice(null);
+
+    try {
+      const planResult = await fetchSpotifySyncPlan(playlist.id);
+      if (!planResult || !planResult.success) {
+        setSyncNotice({
+          type: "error",
+          message: planResult?.error || "Failed to check Spotify playlist source. Please try again.",
+        });
+        return;
+      }
+
+      if (planResult.isUpToDate) {
+        setSyncNotice({
+          type: "info",
+          message: "Your playlist is already up to date.",
+        });
+        return;
+      }
+
+      setSyncPlan(planResult);
+      setIsSyncModalOpen(true);
+    } catch (err) {
+      console.error("Sync error:", err);
+      setSyncNotice({
+        type: "error",
+        message: "Network error occurred while syncing with Spotify.",
+      });
+    } finally {
+      setIsFetchingSync(false);
+    }
+  };
+
+  const handleConfirmSync = async (userChoices) => {
+    if (!syncPlan || !playlist?.id) return;
+    setIsApplyingSync(true);
+
+    try {
+      const result = await commitSpotifySync(playlist.id, syncPlan, userChoices);
+      if (result && result.success) {
+        setIsSyncModalOpen(false);
+        const { added, removed, reordered } = result.summary;
+        const parts = [];
+        if (added > 0) parts.push(`${added} added`);
+        if (removed > 0) parts.push(`${removed} removed`);
+        if (reordered > 0) parts.push(`${reordered} reordered`);
+        const summaryMsg = parts.length > 0 ? parts.join(", ") : "Playlist updated";
+        setSyncNotice({
+          type: "success",
+          message: `Synced with Spotify! (${summaryMsg})`,
+        });
+      } else {
+        setSyncNotice({
+          type: "error",
+          message: result?.error || "Failed to apply synchronization changes.",
+        });
+      }
+    } catch (err) {
+      console.error("Sync commit error:", err);
+      setSyncNotice({
+        type: "error",
+        message: "An error occurred while saving the updated playlist.",
+      });
+    } finally {
+      setIsApplyingSync(false);
+    }
+  };
 
   // Auto-play when opened with ?play=true query param
   useEffect(() => {
@@ -618,6 +716,24 @@ export default function PlaylistPage() {
                 >
                   <span className="material-symbols-outlined text-[18px]">edit</span>
                 </button>
+                {isSpotifyLinked && (
+                  <button
+                    type="button"
+                    onClick={handleStartSync}
+                    disabled={isSyncing}
+                    className={`p-1.5 rounded-lg border transition-all cursor-pointer flex-shrink-0 flex items-center justify-center ${
+                      isSyncing
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse"
+                        : "text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 hover:border-emerald-500/50 shadow-sm"
+                    }`}
+                    title="Sync with Spotify"
+                    aria-label="Sync with Spotify"
+                  >
+                    <span className={`material-symbols-outlined text-[18px] ${isSyncing ? "animate-spin" : ""}`}>
+                      sync
+                    </span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -687,6 +803,26 @@ export default function PlaylistPage() {
             </span>
           </button>
 
+          {/* Spotify Sync Button (Only for Spotify-imported playlists) */}
+          {isSpotifyLinked && (
+            <button
+              type="button"
+              onClick={handleStartSync}
+              disabled={isSyncing}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isSyncing
+                  ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/50 shadow-[0_0_18px_rgba(16,185,129,0.4)] animate-pulse"
+                  : "bg-surface-container-high/60 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border-white/10 hover:border-emerald-500/40 shadow-sm hover:shadow-[0_0_15px_rgba(16,185,129,0.25)]"
+              }`}
+              title="Sync with Spotify"
+              aria-label="Sync with Spotify"
+            >
+              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isSyncing ? "animate-spin" : ""}`}>
+                sync
+              </span>
+            </button>
+          )}
+
           {/* Offline Download Control */}
           <div className="relative flex-shrink-0">
             {isDownloadingOffline ? (
@@ -709,8 +845,8 @@ export default function PlaylistPage() {
                 </button>
 
                 {isOfflineMenuOpen && (
-                  <div className="absolute top-full left-0 mt-2 w-52 bg-[#0d172e]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-3 py-1.5 text-[11px] text-outline border-b border-white/10 mb-1">
+                  <div className="absolute top-full left-0 mt-2 w-52 bg-[#101010]/98 backdrop-blur-2xl border border-[#1b1b1b] rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 text-[11px] text-outline border-b border-[#1b1b1b] mb-1">
                       {downloadedTrackCount} of {totalTrackCount} songs offline
                     </div>
                     <button
@@ -797,7 +933,7 @@ export default function PlaylistPage() {
       {/* Delete Confirmation Modal Dialog */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-sm bg-[#0d172e] border border-red-500/30 rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex flex-col gap-4">
+          <div className="w-full max-w-sm bg-[#101010] border border-red-500/30 rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex flex-col gap-4">
             <div className="w-12 h-12 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto">
               <span className="material-symbols-outlined text-[26px]">delete</span>
             </div>
@@ -1362,6 +1498,41 @@ export default function PlaylistPage() {
           </div>
         )}
       </div>
+
+      {/* Floating Sync Notification Toast */}
+      {syncNotice && (
+        <div
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[120] px-4 py-2.5 rounded-full shadow-[0_15px_35px_rgba(0,0,0,0.85)] backdrop-blur-xl border flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200 select-none ${
+            syncNotice.type === "error"
+              ? "bg-red-950/95 text-red-200 border-red-500/50"
+              : syncNotice.type === "info"
+              ? "bg-[#0d1f38]/95 text-cyan-300 border-cyan-500/50"
+              : "bg-emerald-950/95 text-emerald-200 border-emerald-500/50"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            {syncNotice.type === "error" ? "error" : syncNotice.type === "info" ? "info" : "check_circle"}
+          </span>
+          <span>{syncNotice.message}</span>
+          <button
+            type="button"
+            onClick={() => setSyncNotice(null)}
+            className="ml-2 hover:opacity-75 cursor-pointer text-outline"
+          >
+            <span className="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        </div>
+      )}
+
+      {/* Spotify Sync Preview & Diff Modal */}
+      <SpotifySyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        syncPlan={syncPlan}
+        playlistTitle={playlist?.title}
+        onConfirmSync={handleConfirmSync}
+        isApplying={isApplyingSync}
+      />
     </div>
   );
 }

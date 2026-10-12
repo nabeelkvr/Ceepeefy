@@ -77,7 +77,7 @@ export default function SongCard({
     >
       {/* Rectangular Portrait Artwork (Aspect 4/5) */}
       <div
-        className={`relative aspect-[4/5] w-full ${imageRounded} overflow-hidden bg-[#161922] shadow-lg transition-all duration-200 ${
+        className={`relative aspect-[4/5] w-full ${imageRounded} overflow-hidden bg-[#101010] shadow-lg transition-all duration-200 ${
           isCurrent
             ? "ring-2 ring-primary shadow-[0_0_18px_rgba(var(--color-primary-rgb),0.4)]"
             : "ring-1 ring-white/10 group-hover:ring-white/30"
