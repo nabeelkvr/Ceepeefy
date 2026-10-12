@@ -3608,7 +3608,7 @@ export const MusicProvider = ({ children }) => {
 
       {/* Floating Offline Notification Toast */}
       {offlineNotice && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] bg-[#101010]/95 text-white border border-primary/40 px-4 py-2.5 rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] bg-[#181818] text-white border border-primary/40 px-4 py-2.5 rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200">
           <span className="material-symbols-outlined text-primary text-[18px]">
             offline_pin
           </span>

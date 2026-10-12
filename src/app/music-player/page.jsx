@@ -782,7 +782,7 @@ export default function MusicPlayerPage() {
 
       {/* Floating Multi-Select Action Bar */}
       {selectedTrackIds.size > 0 && !activePlaylistId && (
-        <div className="sticky top-4 z-30 flex items-center justify-between gap-3 p-3 px-4 rounded-2xl bg-[#101010]/95 backdrop-blur-xl border border-primary/40 shadow-[0_10px_30px_rgba(0,0,0,0.8)] animate-in slide-in-from-top-2 duration-150">
+        <div className="sticky top-4 z-30 flex items-center justify-between gap-3 p-3 px-4 rounded-2xl bg-[#181818] backdrop-blur-xl border border-primary/40 shadow-[0_10px_30px_rgba(0,0,0,0.8)] animate-in slide-in-from-top-2 duration-150">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center font-mono font-bold text-xs">
               {selectedTrackIds.size}

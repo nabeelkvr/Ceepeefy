@@ -3,7 +3,7 @@ import {
   matchPlaylistTracks,
   matchSingleTrack,
   searchJioSaavnCandidates,
-} from "../../../../services/spotifyMatcherService";
+} from "../../../../services/spotifyMatcherService.js";
 
 export async function POST(request) {
   try {

@@ -193,8 +193,8 @@ export default function Player() {
         <aside
           ref={cardRef}
           onTouchMove={(e) => e.stopPropagation()}
-          className={`fixed inset-0 z-50 w-full h-full rounded-none bg-[#070707]/98 backdrop-blur-3xl border-none p-5 sm:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex flex-col justify-between overflow-y-auto overscroll-contain touch-pan-y select-none animate-slide-up md:fixed md:bottom-5 ${isQueueOpen ? "md:right-[400px] lg:right-[420px]" : "md:right-5"
-            } md:top-auto md:left-auto md:w-80 md:h-auto md:max-h-[calc(100vh-6rem)] md:rounded-2xl md:border md:border-[#1b1b1b] md:p-3.5 md:gap-2.5 md:shadow-[0_16px_50px_rgba(0,0,0,0.85)] md:overflow-hidden transition-all duration-300`}
+          className={`fixed inset-0 z-50 w-full h-full rounded-none bg-[#050505]/98 backdrop-blur-3xl border-none p-5 sm:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex flex-col justify-between overflow-y-auto overscroll-contain touch-pan-y select-none animate-slide-up md:fixed md:bottom-5 ${isQueueOpen ? "md:right-[400px] lg:right-[420px]" : "md:right-5"
+            } md:top-auto md:left-auto md:w-80 md:h-auto md:max-h-[calc(100vh-6rem)] md:rounded-2xl md:border md:border-[#1c1c1c] md:p-3.5 md:gap-2.5 md:shadow-[0_16px_50px_rgba(0,0,0,0.85)] md:overflow-hidden transition-all duration-300`}
           style={{ overscrollBehavior: "contain", overscrollBehaviorY: "contain", WebkitOverflowScrolling: "touch" }}
           aria-label="Now Playing Card"
         >
@@ -256,7 +256,7 @@ export default function Player() {
               <MiniLyricsView />
             </div>
           ) : (
-            <div className="relative aspect-square w-full max-w-[320px] sm:max-w-[340px] mx-auto md:max-w-none md:max-h-48 md:aspect-[4/3] rounded-2xl md:rounded-xl overflow-hidden bg-surface-container-highest shadow-2xl border border-white/10 group my-auto flex-shrink-0">
+            <div className="relative aspect-square w-full max-w-[320px] sm:max-w-[340px] mx-auto md:max-w-none md:max-h-48 md:aspect-[4/3] rounded-2xl md:rounded-xl overflow-hidden bg-[#181818] shadow-2xl border border-[#282828] group my-auto flex-shrink-0">
               <img
                 alt={currentTrack.title}
                 src={currentTrack.coverUrl}
@@ -319,7 +319,7 @@ export default function Player() {
             <div
               ref={cardProgressBarRef}
               onClick={handleCardSeekClick}
-              className="relative flex-1 h-1.5 md:h-1 bg-surface-container-high rounded-full cursor-pointer group hover:h-2 md:hover:h-1.5 transition-all"
+              className="relative flex-1 h-1.5 md:h-1 bg-[#414141] rounded-full cursor-pointer group hover:h-2 md:hover:h-1.5 transition-all"
             >
               <div
                 className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-cyan-400 to-primary rounded-full transition-all duration-100"
@@ -461,7 +461,7 @@ export default function Player() {
               <div
                 ref={cardVolumeBarRef}
                 onClick={handleCardVolumeClick}
-                className="w-20 md:w-16 h-1.5 md:h-1 bg-surface-container-high rounded-full relative cursor-pointer group hover:h-2 md:hover:h-1.5 transition-all"
+                className="w-20 md:w-16 h-1.5 md:h-1 bg-[#414141] rounded-full relative cursor-pointer group hover:h-2 md:hover:h-1.5 transition-all"
               >
                 <div
                   className="absolute left-0 top-0 bottom-0 bg-primary rounded-full transition-all duration-100"
@@ -477,12 +477,12 @@ export default function Player() {
       {playerMode !== "card" && currentTrack && (
         <aside
           onClick={() => setPlayerMode("card")}
-          className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 w-full h-[74px] bg-[#070707] border-t border-b border-[#1b1b1b] px-4 py-2.5 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group shadow-xl"
+          className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 w-full h-[74px] bg-[#050505] border-t border-b border-[#1c1c1c] px-4 py-2.5 flex items-center justify-between md:hidden select-none cursor-pointer overflow-hidden animate-slide-up group shadow-xl"
           role="region"
           aria-label="Mobile Mini Player"
         >
           {/* Top Progress Line */}
-          <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-white/10">
+          <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-[#414141]">
             <div
               className="h-full bg-primary transition-all duration-100"
               style={{ width: `${progressPercent}%` }}
@@ -519,7 +519,7 @@ export default function Player() {
             </div>
 
             {/* Thumbnail Photo */}
-            <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-surface-container flex-shrink-0 shadow-md border border-white/10 group-hover:scale-105 transition-transform">
+            <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-[#181818] flex-shrink-0 shadow-md border border-[#282828] group-hover:scale-105 transition-transform">
               <img
                 alt={currentTrack.title}
                 src={currentTrack.coverUrl}
@@ -590,7 +590,7 @@ export default function Player() {
       {/* 3. DESKTOP FLOATING MINI-PLAYER WIDGET (Image 2 & 4, md:flex only) */}
       {playerMode === "mini" && (
         <aside
-          className="hidden md:flex fixed bottom-6 right-6 z-50 w-80 h-16 rounded-2xl bg-surface-container-lowest/95 backdrop-blur-2xl border border-white/20 px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.7)] items-center justify-between select-none transition-all duration-300 ease-in-out hover:border-primary/40 group overflow-hidden"
+          className="hidden md:flex fixed bottom-6 right-6 z-50 w-80 h-16 rounded-2xl bg-[#050505] backdrop-blur-2xl border border-[#1c1c1c] px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.85)] items-center justify-between select-none transition-all duration-300 ease-in-out hover:border-[#383838] group overflow-hidden"
           aria-label="Mini Player"
         >
           {/* Left Side: Click opens the Big Photo Card */}
@@ -627,7 +627,7 @@ export default function Player() {
             </div>
 
             {/* Thumbnail Photo */}
-            <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-surface-container flex-shrink-0 shadow-md border border-white/10 group-hover:scale-105 transition-transform ml-1">
+            <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-[#181818] flex-shrink-0 shadow-md border border-[#282828] group-hover:scale-105 transition-transform ml-1">
               <img
                 alt={currentTrack.title}
                 src={currentTrack.coverUrl}
@@ -678,7 +678,7 @@ export default function Player() {
           </div>
 
           {/* Bottom edge mini progress bar */}
-          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10">
+          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#414141]">
             <div
               className="h-full bg-primary transition-all duration-100"
               style={{ width: `${progressPercent}%` }}
@@ -692,14 +692,19 @@ export default function Player() {
         <footer
           className={`hidden md:flex fixed bottom-3 md:bottom-4 ${
             isQueueOpen
-              ? "left-[84px] right-[380px] lg:right-[400px]"
-              : "left-[84px] right-3 md:right-4"
-          } h-[88px] rounded-[24px] bg-[#070707]/95 backdrop-blur-3xl border border-[#1b1b1b] px-5 md:px-7 z-40 items-center justify-between shadow-[0_20px_60px_rgba(0,0,0,0.85)] select-none animate-slide-up transition-all duration-300`}
+              ? "left-[84px] right-[388px] lg:right-[408px] px-3 sm:px-4 md:px-5"
+              : "left-[84px] right-3 md:right-4 px-5 md:px-7"
+          } h-[88px] rounded-[24px] border border-[#1c1c1c] z-40 items-center justify-between select-none animate-slide-up transition-all duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.85)]`}
+          style={{
+            backgroundColor: "#050505",
+          }}
         >
           {/* Left: Track Details */}
-          <div className="flex items-center gap-3.5 md:gap-4 w-52 sm:w-64 md:w-80 min-w-0">
+          <div className={`flex items-center gap-3 min-w-0 flex-shrink-0 ${
+            isQueueOpen ? "w-40 sm:w-48 lg:w-56" : "w-52 sm:w-64 md:w-72 lg:w-80"
+          }`}>
             <div
-              className="relative w-13 h-13 md:w-14 md:h-14 rounded-2xl overflow-hidden bg-[#101010] flex-shrink-0 flex items-center justify-center shadow-lg border border-[#1b1b1b] group"
+              className="relative w-12 h-12 md:w-13 md:h-13 rounded-2xl overflow-hidden bg-[#181818] flex-shrink-0 flex items-center justify-center shadow-lg border border-[#282828] group"
             >
               <img
                 alt={currentTrack.title}
@@ -708,20 +713,20 @@ export default function Player() {
               />
             </div>
 
-            <div className="flex flex-col min-w-0">
+            <div className="flex flex-col min-w-0 flex-1">
               <span
                 className="text-xs md:text-sm font-bold text-white truncate"
               >
                 {currentTrack.title}
               </span>
-              <span className="text-[10px] md:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate mt-0.5">
+              <span className="text-[10px] md:text-[11px] font-semibold text-[#B3B3B3] uppercase tracking-wider truncate mt-0.5">
                 {currentTrack.artist}
               </span>
             </div>
 
             <button
               onClick={() => toggleLike(currentTrack)}
-              className={`flex-shrink-0 p-1.5 rounded-full hover:bg-surface-container ml-1 transition-colors ${
+              className={`flex-shrink-0 p-1.5 rounded-full hover:bg-white/5 transition-colors ${
                 isLiked(currentTrack.id)
                   ? "text-primary hover:text-cyan-300"
                   : "text-outline hover:text-primary"
@@ -740,11 +745,15 @@ export default function Player() {
           </div>
 
           {/* Center: Playback Controls & Timeline Scrubber */}
-          <div className="flex flex-col items-center gap-1.5 md:gap-2 max-w-xl lg:max-w-2xl w-full px-2 md:px-4">
-            <div className="flex items-center gap-3 sm:gap-6">
+          <div className={`flex flex-col items-center gap-1.5 md:gap-2 min-w-0 flex-1 mx-2 lg:mx-4 ${
+            isQueueOpen ? "max-w-xs sm:max-w-sm lg:max-w-md" : "max-w-xl lg:max-w-2xl"
+          }`}>
+            <div className={`flex items-center flex-nowrap ${
+              isQueueOpen ? "gap-2 sm:gap-3 lg:gap-4" : "gap-3 sm:gap-5 lg:gap-6"
+            }`}>
               <button
                 onClick={() => setIsShuffle(!isShuffle)}
-                className={`p-1.5 rounded-full hover:bg-surface-container transition-colors ${
+                className={`flex-shrink-0 p-1.5 rounded-full hover:bg-white/5 transition-colors ${
                   isShuffle ? "text-primary" : "text-outline hover:text-primary"
                 }`}
                 title={`Shuffle: ${isShuffle ? "On" : "Off"}`}
@@ -756,9 +765,9 @@ export default function Player() {
                 type="button"
                 onClick={handlePrevTrack}
                 disabled={!hasPrevTrack}
-                className={`p-1.5 rounded-full transition-all active:scale-95 ${
+                className={`flex-shrink-0 p-1.5 rounded-full transition-all active:scale-95 ${
                   hasPrevTrack
-                    ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
+                    ? "text-white hover:text-primary hover:bg-white/5 cursor-pointer"
                     : "opacity-30 text-white/40 cursor-not-allowed"
                 }`}
                 title={hasPrevTrack ? "Previous track" : "No previous track"}
@@ -768,7 +777,7 @@ export default function Player() {
 
               <button
                 onClick={togglePlay}
-                className={`w-10 h-10 md:w-11 md:h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_22px_rgba(76,215,246,0.6)] ${
+                className={`flex-shrink-0 w-10 h-10 md:w-11 md:h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_22px_rgba(76,215,246,0.6)] ${
                   isBuffering ? "ring-2 ring-cyan-300 animate-pulse" : ""
                 }`}
                 title={isBuffering ? "Buffering..." : isPlaying ? "Pause" : "Play"}
@@ -786,9 +795,9 @@ export default function Player() {
                 type="button"
                 onClick={handleNextTrack}
                 disabled={!hasNextTrack}
-                className={`p-1.5 rounded-full transition-all active:scale-95 ${
+                className={`flex-shrink-0 p-1.5 rounded-full transition-all active:scale-95 ${
                   hasNextTrack
-                    ? "text-white hover:text-primary hover:bg-surface-container cursor-pointer"
+                    ? "text-white hover:text-primary hover:bg-white/5 cursor-pointer"
                     : "opacity-30 text-white/40 cursor-not-allowed"
                 }`}
                 title={hasNextTrack ? "Next track" : "No next track in queue"}
@@ -798,7 +807,7 @@ export default function Player() {
 
               <button
                 onClick={cycleRepeat}
-                className={`p-1.5 rounded-full hover:bg-surface-container transition-colors relative ${
+                className={`flex-shrink-0 p-1.5 rounded-full hover:bg-white/5 transition-colors relative ${
                   repeatMode !== "off" ? "text-primary" : "text-outline hover:text-primary"
                 }`}
                 title={`Repeat: ${repeatMode}`}
@@ -811,7 +820,7 @@ export default function Player() {
               {/* Autoplay / Infinite Smart Queue Toggle */}
               <button
                 onClick={toggleAutoplay}
-                className={`p-1.5 rounded-full hover:bg-surface-container transition-colors relative group ${
+                className={`flex-shrink-0 p-1.5 rounded-full hover:bg-white/5 transition-colors relative group ${
                   isAutoplayEnabled ? "text-primary" : "text-outline hover:text-primary"
                 }`}
                 title={`Autoplay: ${isAutoplayEnabled ? "On (Infinite Smart Queue)" : "Off"}`}
@@ -830,15 +839,15 @@ export default function Player() {
             </div>
 
             {/* Progress Bar with timestamps */}
-            <div className="flex items-center gap-2 md:gap-3 w-full max-w-lg">
-              <span className="text-[10px] md:text-xs text-outline font-mono w-8 md:w-9 text-right font-medium select-none">
+            <div className="flex items-center gap-2 md:gap-2.5 w-full">
+              <span className="text-[10px] md:text-xs text-outline font-mono w-7 md:w-8 text-right font-medium select-none flex-shrink-0">
                 {formatTime(currentTime)}
               </span>
 
               <div
                 ref={progressBarRef}
                 onClick={handleSeekClick}
-                className="relative flex-1 h-1 md:h-1.5 bg-surface-container-high rounded-full cursor-pointer group hover:h-2 transition-all"
+                className="relative flex-1 h-1 md:h-1.5 bg-[#414141] rounded-full cursor-pointer group hover:h-2 transition-all min-w-[50px]"
               >
                 <div
                   className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-cyan-400 to-primary rounded-full transition-all duration-100"
@@ -850,18 +859,20 @@ export default function Player() {
                 />
               </div>
 
-              <span className="text-[10px] md:text-xs text-outline font-mono w-8 md:w-9 font-medium select-none">
+              <span className="text-[10px] md:text-xs text-outline font-mono w-7 md:w-8 font-medium select-none flex-shrink-0">
                 {formatTime(duration)}
               </span>
             </div>
           </div>
 
           {/* Right: Lyrics, Queue, Device & Volume Controls + Edge 'X' Button (Image 5) */}
-          <div className="flex items-center justify-end gap-1.5 md:gap-2.5 w-48 sm:w-64 md:w-80 min-w-0">
+          <div className={`flex items-center justify-end gap-1 md:gap-1.5 flex-shrink-0 min-w-0 ${
+            isQueueOpen ? "w-auto" : "w-48 sm:w-60 md:w-72 lg:w-80"
+          }`}>
             <button
               onClick={() => setLyricsMode(lyricsMode === "full" ? "hidden" : "full")}
-              className={`p-1.5 md:p-2 rounded-full hover:bg-surface-container transition-colors ${
-                lyricsMode === "full" ? "text-primary bg-surface-container" : "text-outline hover:text-white"
+              className={`flex-shrink-0 p-1.5 md:p-2 rounded-full hover:bg-white/5 transition-colors ${
+                lyricsMode === "full" ? "text-primary bg-white/10" : "text-outline hover:text-white"
               }`}
               title="Lyrics (Full-Width View)"
             >
@@ -877,8 +888,8 @@ export default function Player() {
                   setIsQueueOpen(!isQueueOpen);
                 }
               }}
-              className={`p-1.5 md:p-2 rounded-full hover:bg-surface-container transition-colors ${
-                isQueueOpen ? "text-primary bg-surface-container" : "text-outline hover:text-white"
+              className={`flex-shrink-0 p-1.5 md:p-2 rounded-full hover:bg-white/5 transition-colors ${
+                isQueueOpen ? "text-primary bg-white/10" : "text-outline hover:text-white"
               }`}
               title="Up Next Queue"
             >
@@ -887,22 +898,22 @@ export default function Player() {
 
             {/* Settings / Track Options Menu Button */}
             {currentTrack && (
-              <div className="hidden sm:flex items-center">
+              <div className="flex-shrink-0 flex items-center">
                 <SongOptionsMenu
                   track={currentTrack}
                   iconName="settings"
                   title="Track options & settings"
-                  buttonClassName="p-1.5 md:p-2 rounded-full hover:bg-surface-container text-outline hover:text-white"
+                  buttonClassName="p-1.5 md:p-2 rounded-full hover:bg-white/5 text-outline hover:text-white"
                   iconClassName="text-[18px] md:text-[20px]"
                 />
               </div>
             )}
 
             {/* Volume Slider */}
-            <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-white/10">
+            <div className="flex-shrink-0 flex items-center gap-1.5 pl-1.5 md:pl-2 border-l border-[#282828]">
               <button
                 onClick={toggleMute}
-                className="text-outline hover:text-white transition-colors p-1"
+                className="text-outline hover:text-white transition-colors p-1 flex-shrink-0"
                 title={isMuted ? "Unmute" : "Mute"}
               >
                 <span className="material-symbols-outlined text-[18px] md:text-[20px]">
@@ -917,7 +928,9 @@ export default function Player() {
               <div
                 ref={volumeBarRef}
                 onClick={handleVolumeClick}
-                className="w-16 md:w-24 h-1 md:h-1.5 bg-surface-container-high rounded-full relative cursor-pointer group hover:h-2 transition-all"
+                className={`${
+                  isQueueOpen ? "w-12 lg:w-16" : "w-16 md:w-20 lg:w-24"
+                } h-1 md:h-1.5 bg-[#414141] rounded-full relative cursor-pointer group hover:h-2 transition-all flex-shrink-0`}
               >
                 <div
                   className="absolute left-0 top-0 bottom-0 bg-primary rounded-full transition-all duration-100"
@@ -931,7 +944,7 @@ export default function Player() {
             </div>
 
             {/* Minimize 'X' Button right at the edge of the right side (Image 5) */}
-            <div className="pl-1 md:pl-2 border-l border-white/10">
+            <div className="flex-shrink-0 pl-1 md:pl-1.5 border-l border-[#282828]">
               <button
                 onClick={() => {
                   if (lyricsMode === "full") {
@@ -940,7 +953,7 @@ export default function Player() {
                     setPlayerMode("mini");
                   }
                 }}
-                className="p-1.5 md:p-2 rounded-full hover:bg-surface-container text-outline hover:text-white transition-colors flex items-center justify-center group"
+                className="p-1.5 md:p-2 rounded-full hover:bg-white/5 text-outline hover:text-white transition-colors flex items-center justify-center group flex-shrink-0"
                 title="Minimize player"
                 aria-label="Minimize player"
               >

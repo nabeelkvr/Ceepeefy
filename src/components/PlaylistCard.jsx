@@ -79,14 +79,14 @@ export default function PlaylistCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`w-[135px] sm:w-[150px] md:w-[165px] lg:w-[175px] flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1 ${className}`}
+      className={`w-[135px] sm:w-[150px] md:w-[165px] lg:w-[175px] p-2 rounded-xl flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-200 hover:bg-[#1A1A1A] hover:-translate-y-0.5 hover:shadow-md ${className}`}
     >
       {/* Square Artwork (Refined Rounded-[10px]) */}
       <div
-        className={`relative aspect-square w-full rounded-[10px] overflow-hidden bg-[#101010] shadow-md transition-all duration-200 ${
+        className={`relative aspect-square w-full rounded-[10px] overflow-hidden bg-[#181818] shadow-md transition-all duration-200 ${
           isPlaylistPlaying
-            ? "ring-2 ring-primary shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.35)]"
-            : "ring-1 ring-white/10 group-hover:ring-white/25"
+            ? "ring-2 ring-primary shadow-[0_0_14px_rgba(var(--color-primary-rgb),0.35)]"
+            : "ring-1 ring-white/5 group-hover:ring-white/10"
         }`}
       >
         {playlist.isCustom || !playlist.coverUrl ? (
@@ -135,7 +135,7 @@ export default function PlaylistCard({
 
         {/* Animated equalizer if playing */}
         {isPlaylistPlaying && (
-          <div className="absolute top-1.5 left-1.5 px-1 py-0.5 rounded-sm bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-0.5">
+          <div className="absolute top-1.5 left-1.5 px-1 py-0.5 rounded-sm bg-black/80 backdrop-blur-md border border-[#282828] flex items-center gap-0.5">
             <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse" />
             <span className="w-0.5 h-3 bg-primary rounded-full animate-pulse delay-75" />
             <span className="w-0.5 h-1.5 bg-primary rounded-full animate-pulse delay-150" />
@@ -154,7 +154,7 @@ export default function PlaylistCard({
           {playlist.title}
         </h3>
         <p
-          className="text-[10px] sm:text-[11px] text-neutral-400 line-clamp-2 leading-snug mt-0.5"
+          className="text-[10px] sm:text-[11px] text-[#B3B3B3] line-clamp-2 leading-snug mt-0.5"
           title={descriptionText}
         >
           {descriptionText}

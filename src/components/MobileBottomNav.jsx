@@ -56,7 +56,7 @@ export default function MobileBottomNav() {
   return (
     <nav
       aria-label="Mobile Navigation"
-      className="fixed bottom-0 inset-x-0 h-16 pb-safe box-content bg-[#080808] border-t border-[#1b1b1b] z-40 flex items-center justify-around px-2 md:hidden select-none shadow-[0_-12px_32px_rgba(0,0,0,0.95)]"
+      className="fixed bottom-0 inset-x-0 h-16 pb-safe box-content bg-[#020202] border-t border-[#141414] z-40 flex items-center justify-around px-2 md:hidden select-none shadow-[0_-12px_32px_rgba(0,0,0,0.95)]"
     >
       {navItems.map((item) => (
         <Link
@@ -64,13 +64,13 @@ export default function MobileBottomNav() {
           href={item.href}
           onClick={handleNavClick}
           className={`flex flex-col items-center justify-center flex-1 py-1 transition-all group ${
-            item.isActive ? "text-primary font-bold" : "text-outline hover:text-white"
+            item.isActive ? "text-white font-bold" : "text-[#B3B3B3] hover:text-white"
           }`}
         >
           <div className="relative flex items-center justify-center">
             <span
               className={`material-symbols-outlined text-[23px] transition-transform group-active:scale-90 ${
-                item.isActive ? "text-primary drop-shadow-[0_0_8px_rgba(76,215,246,0.6)]" : ""
+                item.isActive ? "text-white" : "text-[#B3B3B3] group-hover:text-white"
               }`}
             >
               {item.icon}
@@ -78,13 +78,13 @@ export default function MobileBottomNav() {
           </div>
           <span
             className={`text-[10px] tracking-tight mt-0.5 transition-colors ${
-              item.isActive ? "text-primary font-bold" : "text-outline"
+              item.isActive ? "text-white font-bold" : "text-[#B3B3B3]"
             }`}
           >
             {item.label}
           </span>
           {item.isActive && (
-            <span className="w-1 h-1 bg-primary rounded-full shadow-[0_0_6px_#4cd7f6] mt-0.5" />
+            <span className="w-1 h-1 bg-primary rounded-full mt-0.5" />
           )}
         </Link>
       ))}

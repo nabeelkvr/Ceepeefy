@@ -6,13 +6,13 @@ export default function Navbar({ onToggleMobileSidebar, isMobileSidebarOpen }) {
   const { activeTab, setActiveTab, searchQuery, setSearchQuery } = useMusic();
 
   return (
-    <header className="h-16 px-4 md:px-8 flex items-center justify-between bg-[#050505]/90 backdrop-blur-md sticky top-0 z-20 border-b border-[#1b1b1b]">
+    <header className="h-16 px-4 md:px-8 flex items-center justify-between bg-[#000000]/95 backdrop-blur-md sticky top-0 z-20 border-b border-[#181818]">
       {/* Left: Navigation Buttons & Mobile Menu */}
       <div className="flex items-center gap-3">
         {/* Mobile menu trigger */}
         <button
           onClick={onToggleMobileSidebar}
-          className="md:hidden p-2 text-spotify-subtext hover:text-white bg-[#141414] rounded-full transition-colors"
+          className="md:hidden p-2 text-spotify-subtext hover:text-white bg-[#181818] rounded-full transition-colors"
           aria-label="Toggle navigation menu"
         >
           {isMobileSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -45,7 +45,7 @@ export default function Navbar({ onToggleMobileSidebar, isMobileSidebarOpen }) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="What do you want to play?"
-              className="bg-[#101010] hover:bg-[#161616] focus:bg-[#1a1a1a] text-white text-sm rounded-full pl-10 pr-4 py-2 w-48 sm:w-72 md:w-80 outline-none border border-[#1b1b1b] focus:border-white/20 transition-all placeholder:text-neutral-400"
+              className="bg-[#181818] hover:bg-[#242424] focus:bg-[#242424] text-white text-sm rounded-full pl-10 pr-4 py-2 w-48 sm:w-72 md:w-80 outline-none border border-[#282828] focus:border-white/20 transition-all placeholder:text-[#8A8A8A]"
               autoFocus
             />
             {searchQuery && (
@@ -65,14 +65,14 @@ export default function Navbar({ onToggleMobileSidebar, isMobileSidebarOpen }) {
         {activeTab !== "search" && (
           <button
             onClick={() => setActiveTab("search")}
-            className="sm:hidden p-2 text-spotify-subtext hover:text-white bg-[#141414] rounded-full"
+            className="sm:hidden p-2 text-spotify-subtext hover:text-white bg-[#181818] rounded-full"
             title="Search"
           >
             <Search className="w-4 h-4" />
           </button>
         )}
 
-        <div className="flex items-center gap-2 bg-black/60 hover:bg-black/90 p-1 pr-3 rounded-full border border-[#1b1b1b] cursor-pointer transition-colors group">
+        <div className="flex items-center gap-2 bg-black/60 hover:bg-black/90 p-1 pr-3 rounded-full border border-[#282828] cursor-pointer transition-colors group">
           <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-black font-bold text-xs shadow-sm">
             <User className="w-4 h-4 text-black" />
           </div>

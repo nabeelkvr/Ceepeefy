@@ -251,13 +251,12 @@ export default function PlaylistsPage() {
               >
                 {/* Square Artwork (Rounded-[10px]) */}
                 <div
-                  className={`relative aspect-square w-full rounded-[10px] overflow-hidden bg-[#161922] shadow-md transition-all duration-200 ${
-                    isPlaylistPlaying
+                  className={`relative aspect-square w-full rounded-[10px] overflow-hidden bg-[#161922] shadow-md transition-all duration-200 ${isPlaylistPlaying
                       ? "ring-2 ring-primary shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.35)]"
                       : isPinned
-                      ? "ring-1.5 ring-primary/60 shadow-[0_0_12px_rgba(var(--color-primary-rgb),0.2)]"
-                      : "ring-1 ring-white/10 group-hover:ring-white/25"
-                  }`}
+                        ? "ring-1.5 ring-primary/60 shadow-[0_0_12px_rgba(var(--color-primary-rgb),0.2)]"
+                        : "ring-1 ring-white/10 group-hover:ring-white/25"
+                    }`}
                 >
                   {pl.isCustom || !pl.coverUrl ? (
                     <PlaylistCover
@@ -310,11 +309,10 @@ export default function PlaylistsPage() {
                         e.stopPropagation();
                         togglePinPlaylist(pl.id, pl);
                       }}
-                      className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full backdrop-blur-md border flex items-center justify-center transition-all cursor-pointer ${
-                        isPinned
+                      className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full backdrop-blur-md border flex items-center justify-center transition-all cursor-pointer ${isPinned
                           ? "bg-primary text-black border-primary shadow-[0_0_10px_rgba(76,215,246,0.4)]"
                           : "bg-black/70 text-white/80 border-white/10 hover:text-white hover:bg-black/90 hover:scale-105"
-                      }`}
+                        }`}
                       title={isPinned ? "Unpin playlist" : "Pin playlist to top"}
                     >
                       <span className={`material-symbols-outlined text-[12px] sm:text-[13px] ${isPinned ? "rotate-45" : ""}`}>
@@ -343,18 +341,16 @@ export default function PlaylistsPage() {
 
                   {/* Floating Play Button on Hover */}
                   <div
-                    className={`absolute inset-0 bg-black/35 flex items-end justify-end p-1.5 sm:p-2 transition-all duration-200 ${
-                      isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                    }`}
+                    className={`absolute inset-0 bg-black/35 flex items-end justify-end p-1.5 sm:p-2 transition-all duration-200 ${isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                      }`}
                   >
                     <button
                       type="button"
                       onClick={(e) => handlePlaylistPlay(pl, e)}
-                      className={`w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-110 active:scale-95 ${
-                        isPlaylistPlaying
+                      className={`w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-110 active:scale-95 ${isPlaylistPlaying
                           ? "translate-y-0 scale-100 shadow-[0_0_14px_rgba(var(--color-primary-rgb),0.6)]"
                           : "translate-y-2 group-hover:translate-y-0 scale-95 group-hover:scale-100"
-                      }`}
+                        }`}
                       title={isPlaylistPlaying ? "Pause Playlist" : "Play Playlist"}
                       aria-label={isPlaylistPlaying ? "Pause Playlist" : "Play Playlist"}
                     >
@@ -431,9 +427,8 @@ export default function PlaylistsPage() {
                         setEditingTitle(pl.title || "");
                       }}
                       title={pl.isCustom ? `${pl.title} (Double-click to rename)` : pl.title}
-                      className={`text-xs sm:text-[13px] font-bold truncate transition-colors leading-tight mt-0.5 ${
-                        isPlaylistPlaying ? "text-primary font-extrabold" : "text-white group-hover:text-primary"
-                      }`}
+                      className={`text-xs sm:text-[13px] font-bold truncate transition-colors leading-tight mt-0.5 ${isPlaylistPlaying ? "text-primary font-extrabold" : "text-white group-hover:text-primary"
+                        }`}
                     >
                       {pl.title}
                     </h3>

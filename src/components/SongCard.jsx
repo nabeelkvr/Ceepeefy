@@ -24,7 +24,7 @@ export default function SongCard({
   onPlay,
   className = "",
   playlistId = null,
-  imageRounded = "rounded-[10px]",
+  imageRounded = "rounded-[6px]",
 }) {
   const { currentTrack, isPlaying, playTrack, togglePlay } = useMusic();
 
@@ -73,14 +73,14 @@ export default function SongCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`w-[140px] sm:w-[155px] md:w-[170px] lg:w-[180px] flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1 ${className}`}
+      className={`w-[154px] sm:w-[165px] md:w-[176px] lg:w-[184px] p-0 flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-200 hover:-translate-y-0.5 ${className}`}
     >
-      {/* Rectangular Portrait Artwork (Aspect 4/5) */}
+      {/* Portrait Artwork (Reduced height aspect-[4/5]) */}
       <div
-        className={`relative aspect-[4/5] w-full ${imageRounded} overflow-hidden bg-[#101010] shadow-lg transition-all duration-200 ${
+        className={`relative aspect-[4/5] w-full ${imageRounded} overflow-hidden bg-[#181818] shadow-md transition-all duration-200 ${
           isCurrent
-            ? "ring-2 ring-primary shadow-[0_0_18px_rgba(var(--color-primary-rgb),0.4)]"
-            : "ring-1 ring-white/10 group-hover:ring-white/30"
+            ? "ring-2 ring-primary shadow-[0_0_14px_rgba(var(--color-primary-rgb),0.35)]"
+            : "ring-1 ring-white/5 group-hover:ring-white/10"
         }`}
       >
         <img
@@ -97,7 +97,7 @@ export default function SongCard({
 
         {/* Hover Circular Play Button Overlay */}
         <div
-          className={`absolute inset-0 bg-black/35 flex items-end justify-end p-2 sm:p-2.5 transition-all duration-200 ${
+          className={`absolute inset-0 bg-black/30 flex items-end justify-end p-2.5 transition-all duration-200 ${
             isCurrentPlaying
               ? "opacity-100"
               : "opacity-0 group-hover:opacity-100"
@@ -106,15 +106,15 @@ export default function SongCard({
           <button
             type="button"
             onClick={handlePlayButtonClick}
-            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_16px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-110 active:scale-95 ${
+            className={`w-8.5 h-8.5 sm:w-9.5 sm:h-9.5 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_16px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-105 active:scale-95 ${
               isCurrentPlaying
-                ? "translate-y-0 scale-100 shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.6)]"
+                ? "translate-y-0 scale-100 shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.5)]"
                 : "translate-y-2 group-hover:translate-y-0 scale-95 group-hover:scale-100"
             }`}
             title={isCurrentPlaying ? "Pause" : "Play"}
             aria-label={isCurrentPlaying ? "Pause" : "Play"}
           >
-            <span className="material-symbols-outlined text-[20px] sm:text-[22px]">
+            <span className="material-symbols-outlined text-[19px] sm:text-[21px]">
               {isCurrentPlaying ? "pause" : "play_arrow"}
             </span>
           </button>
@@ -122,7 +122,7 @@ export default function SongCard({
 
         {/* Playing Animated Equalizer Bar in top-left */}
         {isCurrentPlaying && (
-          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-0.5">
+          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-[#282828] flex items-center gap-0.5">
             <span className="w-0.5 h-2.5 bg-primary rounded-full animate-pulse" />
             <span className="w-0.5 h-3.5 bg-primary rounded-full animate-pulse delay-75" />
             <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse delay-150" />
@@ -130,31 +130,29 @@ export default function SongCard({
         )}
       </div>
 
-      {/* Structure matching Image 1 & 4:
-          Row 1: ARTIST NAME (uppercase / muted) + 3 dots menu on the right edge
-          Row 2: Song Title (bold white) */}
+      {/* Details: Artist + Menu & Song Title (Close and tight under artist) */}
       <div className="flex flex-col mt-1.5 min-w-0">
-        {/* Row 1: Artist + 3 dots right beneath the artwork border */}
-        <div className="flex items-center justify-between gap-1 min-w-0">
+        {/* Row 1: Artist + 3 dots right beneath the artwork */}
+        <div className="flex items-center justify-between gap-1 min-w-0 leading-none">
           <p
-            className="text-[10px] sm:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate flex-1"
+            className="text-[10px] sm:text-[10.5px] font-semibold text-[#8E8E8E] uppercase tracking-wider truncate flex-1 leading-none"
             title={track.artist}
           >
             {track.artist}
           </p>
-          <div className="flex-shrink-0 -mr-1">
+          <div className="flex-shrink-0 -mr-0.5 leading-none">
             <SongOptionsMenu
               track={track}
               playlistId={playlistId}
-              iconClassName="text-[16px] sm:text-[17px]"
-              buttonClassName="p-0.5 text-neutral-400 hover:text-white opacity-80 group-hover:opacity-100 transition-opacity cursor-pointer"
+              iconClassName="text-[15px] sm:text-[16px]"
+              buttonClassName="p-0 text-[#8E8E8E] hover:text-white opacity-70 group-hover:opacity-100 transition-opacity cursor-pointer leading-none"
             />
           </div>
         </div>
 
-        {/* Row 2: Song Title */}
+        {/* Row 2: Song Title - Brought up tight and close under artist */}
         <h3
-          className={`text-xs sm:text-sm font-bold truncate transition-colors leading-tight -mt-0.5 ${
+          className={`text-[13px] sm:text-[14px] font-bold truncate transition-colors leading-tight mt-0.5 ${
             isCurrent ? "text-primary font-extrabold" : "text-white group-hover:text-primary"
           }`}
           title={track.title}

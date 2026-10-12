@@ -353,7 +353,7 @@ export default function LocalPlaylistDetailView({
           onClick={() => setIsDeleteModalOpen(false)}
         >
           <div
-            className="w-full max-w-sm bg-[#101010] border border-red-500/30 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-150"
+            className="w-full max-w-sm bg-[#181818] border border-red-500/30 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-12 h-12 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto">

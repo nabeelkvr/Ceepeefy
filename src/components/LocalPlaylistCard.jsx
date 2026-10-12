@@ -69,7 +69,7 @@ export default function LocalPlaylistCard({
 
           {isMenuOpen && (
             <div
-              className="absolute right-0 mt-1 w-36 bg-[#101010]/95 backdrop-blur-2xl border border-[#1b1b1b] rounded-xl shadow-[0_15px_35px_rgba(0,0,0,0.9)] p-1 z-30 animate-in fade-in duration-150"
+              className="absolute right-0 mt-1 w-36 bg-[#181818] backdrop-blur-2xl border border-[#282828] rounded-xl shadow-[0_15px_35px_rgba(0,0,0,0.9)] p-1 z-30 animate-in fade-in duration-150"
               onClick={(e) => e.stopPropagation()}
             >
               <button

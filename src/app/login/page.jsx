@@ -100,13 +100,8 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[#000000] relative overflow-hidden select-none">
-      {/* Dynamic Background Glows */}
-      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-secondary/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(76,215,246,0.15),rgba(255,255,255,0))]" />
-
       {/* Main Login Card */}
-      <div className="relative w-full max-w-md bg-[#101010]/95 backdrop-blur-2xl border border-[#1b1b1b] rounded-3xl p-7 md:p-9 shadow-2xl overflow-hidden flex flex-col gap-6 z-10 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-md bg-[#181818] backdrop-blur-2xl border border-[#282828] rounded-3xl p-7 md:p-9 shadow-2xl overflow-hidden flex flex-col gap-6 z-10 animate-in fade-in zoom-in-95 duration-200">
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center gap-3">
           <div className="flex items-center gap-2.5">

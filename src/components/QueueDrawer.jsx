@@ -41,7 +41,7 @@ export default function QueueDrawer() {
       <div
         key={`${track.id}-${displayIndex}-${isManual ? "m" : "a"}`}
         onClick={() => playFromQueue(track, displayIndex)}
-        className="group flex items-center gap-3 p-2 rounded-xl hover:bg-surface-container/70 transition-all cursor-pointer border border-transparent hover:border-white/5"
+        className="group flex items-center gap-3 p-2 rounded-xl hover:bg-[#121212] transition-all cursor-pointer border border-transparent hover:border-[#1c1c1c]"
       >
         <span className="text-xs font-mono text-outline w-5 text-center flex-shrink-0">
           {displayIndex + 1}
@@ -101,11 +101,11 @@ export default function QueueDrawer() {
       {/* Compact Right-Side Panel: strictly 360px-400px wide, docked to the right edge */}
       <aside 
         onTouchMove={(e) => e.stopPropagation()}
-        className="fixed inset-y-0 right-0 z-[80] w-full sm:w-[380px] md:static md:w-[380px] lg:w-[400px] flex-shrink-0 md:z-30 border-l border-[#1b1b1b] bg-[#080808]/98 backdrop-blur-2xl flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-0 overscroll-contain touch-pan-y select-none"
-        style={{ overscrollBehavior: "contain", overscrollBehaviorY: "contain" }}
+        className="fixed inset-y-0 right-0 z-[80] w-full sm:w-[380px] md:static md:w-[380px] lg:w-[400px] flex-shrink-0 md:z-30 border-l border-[#1c1c1c] bg-[#050505] backdrop-blur-2xl flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-0 overscroll-contain touch-pan-y select-none"
+        style={{ overscrollBehavior: "contain", overscrollBehaviorY: "contain", backgroundColor: "#050505" }}
       >
         {/* Header matching Image 1 */}
-        <div className="h-16 px-5 border-b border-[#1b1b1b] flex items-center justify-between flex-shrink-0">
+        <div className="h-16 px-5 border-b border-[#1c1c1c] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="material-symbols-outlined text-primary text-[24px]">
               playlist_play
@@ -142,7 +142,7 @@ export default function QueueDrawer() {
               <span className="text-[11px] uppercase tracking-wider text-outline font-bold">
                 NOW PLAYING
               </span>
-              <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#121212] border border-[#1b1b1b] shadow-[0_0_20px_rgba(76,215,246,0.08)]">
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#0e0e0e] border border-[#1c1c1c] shadow-[0_0_20px_rgba(76,215,246,0.08)]">
                 <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 relative bg-surface-container-high shadow-md">
                   <img
                     src={currentTrack.coverUrl || currentTrack.thumbnail || currentTrack.image || "/icon-192.png"}
@@ -206,7 +206,7 @@ export default function QueueDrawer() {
                       className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full border transition-all duration-200 cursor-pointer ${
                         isAutoplayEnabled
                           ? "bg-primary/10 text-primary border-primary/40 shadow-[0_0_12px_rgba(76,215,246,0.15)]"
-                          : "bg-surface-container/60 text-outline hover:text-white border-[#1b1b1b]"
+                          : "bg-[#181818] text-outline hover:text-white border-[#282828]"
                       }`}
                       title="Toggle intelligent autoplay recommendations"
                     >
@@ -227,7 +227,7 @@ export default function QueueDrawer() {
               )}
 
               {isAutoplayEnabled && (
-                <div className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl bg-surface-container/30 border border-dashed border-white/10 text-outline text-[11px] mt-2 select-none">
+                <div className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl bg-[#181818] border border-dashed border-[#282828] text-outline text-[11px] mt-2 select-none">
                   <InfinityIcon size={13} className="text-primary flex-shrink-0" />
                   <span>Autoplay is on. Similar songs will play next.</span>
                 </div>

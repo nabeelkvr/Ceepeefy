@@ -68,13 +68,13 @@ export default function RecommendationCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`group flex items-center gap-2 sm:gap-2.5 p-1.5 sm:p-2 rounded-xl transition-all duration-200 cursor-pointer select-none bg-transparent hover:bg-white/[0.06] active:bg-white/[0.09] min-w-0 ${
-        isCurrent ? "bg-white/[0.04]" : ""
+      className={`group flex items-center gap-2 sm:gap-2.5 p-1.5 sm:p-2 rounded-xl transition-all duration-200 cursor-pointer select-none bg-transparent hover:bg-[#242424] active:bg-[#2A2A2A] min-w-0 ${
+        isCurrent ? "bg-[#181818]" : ""
       } ${className}`}
       title={`Play ${track.title} by ${artistName}`}
     >
       {/* 1. Left: Compact Square Cover Art with Smooth Rounded Edges (rounded-xl) */}
-      <div className="relative w-11 h-11 sm:w-12 sm:h-12 md:w-12.5 md:h-12.5 rounded-xl overflow-hidden bg-[#101010] flex-shrink-0 shadow-sm border border-white/5">
+      <div className="relative w-11 h-11 sm:w-12 sm:h-12 md:w-12.5 md:h-12.5 rounded-xl overflow-hidden bg-[#181818] flex-shrink-0 shadow-sm border border-[#282828]">
         <img
           src={coverUrl}
           alt={track.title}
@@ -131,7 +131,7 @@ export default function RecommendationCard({
           {track.title}
         </h4>
         <p
-          className="text-[10px] sm:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate mt-0.5 leading-snug"
+          className="text-[10px] sm:text-[11px] font-semibold text-[#B3B3B3] uppercase tracking-wider truncate mt-0.5 leading-snug"
           title={subtitle}
         >
           {subtitle}

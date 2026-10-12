@@ -31,6 +31,8 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
   const [customSearchQuery, setCustomSearchQuery] = useState("");
   const [customSearchResults, setCustomSearchResults] = useState([]);
   const [isSearchingCustom, setIsSearchingCustom] = useState(false);
+  const [customSearchError, setCustomSearchError] = useState("");
+  const [hasPerformedCustomSearch, setHasPerformedCustomSearch] = useState(false);
 
   // Result summary after import
   const [importedPlaylist, setImportedPlaylist] = useState(null);
@@ -271,33 +273,59 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
     }
   };
 
+  // Helper: Perform custom candidate search via shared JioSaavn search pipeline
+  const performCustomSearch = async (queryToSearch) => {
+    const q = (queryToSearch || "").trim();
+    if (!q) return;
+
+    setIsSearchingCustom(true);
+    setCustomSearchError("");
+    setHasPerformedCustomSearch(true);
+
+    try {
+      const res = await fetch(`/api/spotify/match?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCustomSearchResults(Array.isArray(data.candidates) ? data.candidates : []);
+      } else {
+        setCustomSearchError("Search request failed. Please check your network and retry.");
+        setCustomSearchResults([]);
+      }
+    } catch (err) {
+      console.warn("Custom search error:", err);
+      setCustomSearchError("Network error while searching JioSaavn. Please try again.");
+      setCustomSearchResults([]);
+    } finally {
+      setIsSearchingCustom(false);
+    }
+  };
+
   // Action: Open alternative picker for track
   const openAlternativePicker = (index) => {
     setEditingItemIndex(index);
     const item = matchedItems[index];
-    setCustomSearchQuery(
-      item ? `${item.spotifyTrack.name} ${item.spotifyTrack.primaryArtist || ""}`.trim() : ""
-    );
+    const rawName = item?.spotifyTrack?.name || "";
+    const cleanTitle = rawName
+      .replace(/\s*[\(\[](?:feat\.?|ft\.?|with|from)[^\)\]]*[\)\]]/gi, "")
+      .replace(/\s*-\s*(?:remix|version|acoustic|edit|soundtrack|original).*$/gi, "")
+      .trim();
+    const artist = item?.spotifyTrack?.primaryArtist || "";
+    const initialQuery = cleanTitle && artist ? `${cleanTitle} ${artist}`.trim() : (cleanTitle || rawName);
+    setCustomSearchQuery(initialQuery);
     setCustomSearchResults([]);
+    setCustomSearchError("");
+    setHasPerformedCustomSearch(false);
+
+    if (initialQuery) {
+      performCustomSearch(initialQuery);
+    }
   };
 
   // Action: Search custom JioSaavn candidates
   const handleCustomSearch = async (e) => {
     e?.preventDefault();
     if (!customSearchQuery.trim()) return;
-
-    setIsSearchingCustom(true);
-    try {
-      const res = await fetch(`/api/spotify/match?q=${encodeURIComponent(customSearchQuery.trim())}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCustomSearchResults(data.candidates || []);
-      }
-    } catch (err) {
-      console.warn("Custom search error:", err);
-    } finally {
-      setIsSearchingCustom(false);
-    }
+    await performCustomSearch(customSearchQuery.trim());
   };
 
   // Action: Select alternative candidate
@@ -1056,24 +1084,81 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
             </form>
 
             {/* Candidates List */}
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {/* Show Custom Search Results first if any */}
-              {customSearchResults.length > 0 && (
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {/* Search Loading Indicator */}
+              {isSearchingCustom && (
+                <div className="py-8 text-center text-xs text-outline flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  <span>Searching full JioSaavn catalog...</span>
+                </div>
+              )}
+
+              {/* Search Error State */}
+              {!isSearchingCustom && customSearchError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">error</span>
+                    <span>{customSearchError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => performCustomSearch(customSearchQuery)}
+                    className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-semibold"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {/* No Results Empty State */}
+              {!isSearchingCustom && !customSearchError && hasPerformedCustomSearch && customSearchResults.length === 0 && (
+                <div className="p-4 rounded-xl bg-surface-container/50 border border-outline-variant/20 text-center space-y-1">
+                  <p className="text-xs font-medium text-white">No matching songs found on JioSaavn</p>
+                  <p className="text-[11px] text-outline">
+                    No results for "{customSearchQuery}". Try searching with just the song title or an alternate spelling.
+                  </p>
+                </div>
+              )}
+
+              {/* Show Custom Search Results */}
+              {!isSearchingCustom && customSearchResults.length > 0 && (
                 <div className="space-y-1.5 pb-2">
-                  <p className="text-[11px] font-mono text-primary font-bold">Search Results:</p>
+                  <p className="text-[11px] font-mono text-primary font-bold flex items-center justify-between">
+                    <span>Search Results ({customSearchResults.length}):</span>
+                    <span className="text-[10px] text-outline font-normal">Click to select match</span>
+                  </p>
                   {customSearchResults.map((cand) => (
                     <div
                       key={cand.id}
                       onClick={() => selectAlternative(editingItemIndex, cand)}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container hover:bg-surface-container-highest border border-outline-variant/20 hover:border-primary/50 cursor-pointer transition-all"
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container hover:bg-surface-container-highest border border-outline-variant/20 hover:border-primary/50 cursor-pointer transition-all gap-3"
                     >
+                      {/* Album Cover Thumbnail */}
+                      <div className="w-10 h-10 rounded-lg overflow-hidden bg-surface-container-highest flex-shrink-0 relative">
+                        {cand.coverUrl || cand.image ? (
+                          <img
+                            src={cand.coverUrl || cand.image}
+                            alt={cand.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-outline">
+                            <span className="material-symbols-outlined text-[18px]">music_note</span>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-bold text-white truncate">{cand.title}</p>
                         <p className="text-[11px] text-outline truncate">
-                          {cand.artist} • {cand.album} ({cand.durationFormatted || "3:30"})
+                          {cand.artist} • {cand.album || "Single"} ({cand.durationFormatted || "3:30"})
                         </p>
                       </div>
-                      <button className="px-3 py-1 rounded-lg bg-primary/20 text-primary hover:bg-primary hover:text-surface-container-lowest text-xs font-semibold">
+
+                      <button className="px-3.5 py-1.5 rounded-lg bg-primary/20 text-primary hover:bg-primary hover:text-surface-container-lowest text-xs font-semibold flex-shrink-0 transition-all cursor-pointer">
                         Select
                       </button>
                     </div>
@@ -1082,38 +1167,58 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
               )}
 
               {/* Top candidates discovered by algorithm */}
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-mono text-outline font-bold">Suggested Candidates:</p>
-                {[
-                  matchedItems[editingItemIndex].matchedTrack,
-                  ...(matchedItems[editingItemIndex].alternatives || []),
-                ]
-                  .filter(Boolean)
-                  .map((cand, cIdx) => (
-                    <div
-                      key={cand.id || cIdx}
-                      onClick={() => selectAlternative(editingItemIndex, cand)}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container hover:bg-surface-container-highest border border-outline-variant/20 hover:border-primary/50 cursor-pointer transition-all"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-bold text-white truncate">{cand.title}</p>
-                          {cand.matchScore && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-container-highest text-primary font-mono">
-                              {cand.matchScore}%
-                            </span>
+              {(!hasPerformedCustomSearch || customSearchResults.length === 0) && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-mono text-outline font-bold">Suggested Candidates:</p>
+                  {[
+                    matchedItems[editingItemIndex].matchedTrack,
+                    ...(matchedItems[editingItemIndex].alternatives || []),
+                  ]
+                    .filter(Boolean)
+                    .map((cand, cIdx) => (
+                      <div
+                        key={cand.id || cIdx}
+                        onClick={() => selectAlternative(editingItemIndex, cand)}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container hover:bg-surface-container-highest border border-outline-variant/20 hover:border-primary/50 cursor-pointer transition-all gap-3"
+                      >
+                        {/* Artwork */}
+                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-surface-container-highest flex-shrink-0 relative">
+                          {cand.coverUrl || cand.image ? (
+                            <img
+                              src={cand.coverUrl || cand.image}
+                              alt={cand.title}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-outline">
+                              <span className="material-symbols-outlined text-[18px]">music_note</span>
+                            </div>
                           )}
                         </div>
-                        <p className="text-[11px] text-outline truncate">
-                          {cand.artist} • {cand.album} ({cand.durationFormatted || "3:30"})
-                        </p>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-white truncate">{cand.title}</p>
+                            {cand.matchScore && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-container-highest text-primary font-mono">
+                                {cand.matchScore}%
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-outline truncate">
+                            {cand.artist} • {cand.album || "Single"} ({cand.durationFormatted || "3:30"})
+                          </p>
+                        </div>
+                        <button className="px-3.5 py-1.5 rounded-lg bg-primary/20 text-primary hover:bg-primary hover:text-surface-container-lowest text-xs font-semibold flex-shrink-0 transition-all cursor-pointer">
+                          Select
+                        </button>
                       </div>
-                      <button className="px-3 py-1 rounded-lg bg-primary/20 text-primary hover:bg-primary hover:text-surface-container-lowest text-xs font-semibold">
-                        Select
-                      </button>
-                    </div>
-                  ))}
-              </div>
+                    ))}
+                </div>
+              )}
             </div>
 
             <div className="pt-3 border-t border-outline-variant/20 flex justify-end">

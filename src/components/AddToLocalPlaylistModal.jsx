@@ -40,11 +40,11 @@ export default function AddToLocalPlaylistModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm bg-[#101010] border border-[#1b1b1b] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        className="w-full max-w-sm bg-[#181818] border border-[#282828] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1b1b1b] bg-surface-container-high/40">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#282828] bg-surface-container-high/40">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-[20px]">
               playlist_add

@@ -2245,7 +2245,7 @@ export const NOCTURNE_PLAYLISTS = [
   }
 ];
 
-import { CURATED_GENRES } from "./genreData";
+import { CURATED_GENRES } from "./genreData.js";
 export { CURATED_GENRES };
 export const NOCTURNE_GENRES = CURATED_GENRES;
 

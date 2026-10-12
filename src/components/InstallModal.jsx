@@ -15,7 +15,7 @@ export default function InstallModal() {
       onClick={closeInstallModal}
     >
       <div
-        className="w-full max-w-md bg-[#101010] border border-[#1b1b1b] rounded-2xl p-6 shadow-2xl relative text-on-surface"
+        className="w-full max-w-md bg-[#181818] border border-[#282828] rounded-2xl p-6 shadow-2xl relative text-on-surface"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
@@ -45,7 +45,7 @@ export default function InstallModal() {
         </div>
 
         {/* Benefits List */}
-        <div className="space-y-2.5 mb-6 text-xs text-on-surface-variant bg-[#141414] p-3.5 rounded-xl border border-[#1b1b1b]">
+        <div className="space-y-2.5 mb-6 text-xs text-on-surface-variant bg-[#242424] p-3.5 rounded-xl border border-[#282828]">
           <div className="flex items-center gap-2.5">
             <span className="material-symbols-outlined text-primary text-base">offline_pin</span>
             <span>Offline music playback & instant app loading</span>
@@ -112,7 +112,7 @@ export default function InstallModal() {
                 <p>
                   To install Ceepeefy on your desktop or Android browser:
                 </p>
-                <p className="bg-[#141414] p-3 rounded-xl border border-[#1b1b1b] text-xs text-white">
+                <p className="bg-[#242424] p-3 rounded-xl border border-[#282828] text-xs text-white">
                   Click the <strong>Install</strong> icon in the address bar (Chrome / Edge), or select <strong>"Add to Home screen"</strong> from your browser menu.
                 </p>
                 <button

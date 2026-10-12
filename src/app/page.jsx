@@ -44,10 +44,10 @@ const FEATURED_PLAYLIST_COLLECTION = [
     playlistId: "chill-vibes",
     badgeIcon: "music_note",
     badgeLabel: "Chill Vibes",
-    badgeClass: "bg-[#6366f1]/25 text-[#c7d2fe] border-[#818cf8]/40",
+    badgeClass: "bg-[#6366f1]/20 text-[#c7d2fe] border-[#818cf8]/30",
     buttonBg: "from-[#6366f1] to-[#818cf8]",
-    cardBorder: "border-[#6366f1]/30 hover:border-[#818cf8]/70 hover:shadow-[0_0_30px_rgba(99,102,241,0.3)]",
-    cardGradient: "from-[#0f0c29]/95 via-[#1b143f]/85 to-[#0b0819]/90",
+    cardBorder: "border-[#292929] hover:border-[#818cf8]/50",
+    cardGradient: "from-[#1a1c24]/95 via-[#16171d]/85 to-[#121212]/95",
     title: "Chill Vibes",
     subtitle: "Relax • Unwind • Feel Good",
     image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80",
@@ -57,10 +57,10 @@ const FEATURED_PLAYLIST_COLLECTION = [
     playlistId: "top-hits-2025",
     badgeIcon: "local_fire_department",
     badgeLabel: "Top Hits",
-    badgeClass: "bg-[#f43f5e]/25 text-[#fecdd3] border-[#fb7185]/40",
+    badgeClass: "bg-[#f43f5e]/20 text-[#fecdd3] border-[#fb7185]/30",
     buttonBg: "from-[#f43f5e] to-[#fb7185]",
-    cardBorder: "border-[#f43f5e]/30 hover:border-[#fb7185]/70 hover:shadow-[0_0_30px_rgba(244,63,94,0.3)]",
-    cardGradient: "from-[#200511]/95 via-[#3b0821]/85 to-[#12020a]/90",
+    cardBorder: "border-[#292929] hover:border-[#fb7185]/50",
+    cardGradient: "from-[#241a1e]/95 via-[#1d1619]/85 to-[#121212]/95",
     title: "Top Hits 2025",
     subtitle: "Trending Now",
     image: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=80",
@@ -70,10 +70,10 @@ const FEATURED_PLAYLIST_COLLECTION = [
     playlistId: "gym-power",
     badgeIcon: "star",
     badgeLabel: "Workout",
-    badgeClass: "bg-[#059669]/25 text-[#a7f3d0] border-[#34d399]/40",
+    badgeClass: "bg-[#059669]/20 text-[#a7f3d0] border-[#34d399]/30",
     buttonBg: "from-[#059669] to-[#10b981]",
-    cardBorder: "border-[#059669]/30 hover:border-[#34d399]/70 hover:shadow-[0_0_30px_rgba(16,185,129,0.3)]",
-    cardGradient: "from-[#021f18]/95 via-[#06382b]/85 to-[#01140f]/90",
+    cardBorder: "border-[#292929] hover:border-[#34d399]/50",
+    cardGradient: "from-[#18221d]/95 via-[#151c18]/85 to-[#121212]/95",
     title: "Gym Power",
     subtitle: "Be Stronger Every Day",
     image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=800&auto=format&fit=crop&q=80",
@@ -83,10 +83,10 @@ const FEATURED_PLAYLIST_COLLECTION = [
     playlistId: "love-ballads",
     badgeIcon: "favorite",
     badgeLabel: "Romantic",
-    badgeClass: "bg-[#c026d3]/25 text-[#f5d0fe] border-[#e879f9]/40",
+    badgeClass: "bg-[#c026d3]/20 text-[#f5d0fe] border-[#e879f9]/30",
     buttonBg: "from-[#c026d3] to-[#d946ef]",
-    cardBorder: "border-[#c026d3]/30 hover:border-[#e879f9]/70 hover:shadow-[0_0_30px_rgba(217,70,239,0.3)]",
-    cardGradient: "from-[#1d0628]/95 via-[#350b4a]/85 to-[#0f0215]/90",
+    cardBorder: "border-[#292929] hover:border-[#e879f9]/50",
+    cardGradient: "from-[#221824]/95 via-[#1c151e]/85 to-[#121212]/95",
     title: "Love Ballads",
     subtitle: "For Special Moments",
     image: "https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=800&auto=format&fit=crop&q=80",
@@ -380,11 +380,6 @@ export default function HomePage() {
 
   return (
     <div className="relative w-full overflow-hidden px-3 sm:px-6 md:px-8 flex flex-col gap-6 md:gap-10 pt-3 md:pt-6">
-      {/* Ambient Glowing Backdrops */}
-      <div className="absolute -top-40 right-10 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[150px] pointer-events-none -z-10" />
-      <div className="absolute top-96 -left-20 w-[500px] h-[500px] bg-secondary-container/15 rounded-full blur-[160px] pointer-events-none -z-10" />
-      <div className="absolute bottom-40 right-1/4 w-[450px] h-[450px] bg-tertiary/5 rounded-full blur-[140px] pointer-events-none -z-10" />
-
       {/* Section 1: Recently played songs - Single-row header */}
       <section className="flex flex-col gap-3.5 md:gap-4.5">
         <div className="flex items-center justify-between">
@@ -420,14 +415,14 @@ export default function HomePage() {
         {displayRecentlyPlayed.length > 0 ? (
           <div
             ref={recentsContainerRef}
-            className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4.5 pb-2 pt-1 -mx-2 px-2"
+            className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-1.5 sm:gap-2 md:gap-2.5 pb-2 pt-1 -mx-2 px-2"
           >
             {displayRecentlyPlayed.map((track) => (
               <SongCard
                 key={track.id}
                 track={track}
                 trackList={displayRecentlyPlayed}
-                imageRounded="rounded-md"
+                imageRounded="rounded-[6px]"
                 onPlay={() => handleTrackClick(track)}
               />
             ))}
@@ -497,14 +492,14 @@ export default function HomePage() {
               <div
                 key={card.id}
                 onClick={handleCardClick}
-                className={`relative h-32 sm:h-48 lg:h-52 rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br ${card.cardGradient} border ${card.cardBorder} transition-all duration-300 hover:scale-[1.02] shadow-md sm:shadow-xl group cursor-pointer flex flex-col justify-between p-2.5 sm:p-5 select-none`}
+                className={`relative h-32 sm:h-48 lg:h-52 rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br ${card.cardGradient} border ${card.cardBorder} transition-all duration-200 hover:-translate-y-1 shadow-md sm:shadow-lg group cursor-pointer flex flex-col justify-between p-2.5 sm:p-5 select-none`}
               >
                 {/* Background Image with Ambient Smooth Mask */}
                 <div
                   className="absolute right-0 top-0 bottom-0 w-3/5 sm:w-7/12 h-full overflow-hidden select-none pointer-events-none"
                   style={{
-                    maskImage: "linear-gradient(to left, rgba(0,0,0,0.95) 30%, rgba(0,0,0,0) 100%)",
-                    WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,0.95) 30%, rgba(0,0,0,0) 100%)",
+                    maskImage: "linear-gradient(to left, rgba(0,0,0,1) 35%, rgba(0,0,0,0) 100%)",
+                    WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,1) 35%, rgba(0,0,0,0) 100%)",
                   }}
                 >
                   <img
@@ -532,7 +527,7 @@ export default function HomePage() {
                   <h3 className="text-xs sm:text-lg lg:text-xl font-bold text-white tracking-tight leading-tight drop-shadow-md truncate">
                     {card.title}
                   </h3>
-                  <p className="text-[9.5px] sm:text-xs font-normal text-white/75 mt-0.5 drop-shadow-sm truncate max-w-full hidden sm:block">
+                  <p className="text-[9.5px] sm:text-xs font-normal text-[#B3B3B3] mt-0.5 drop-shadow-sm truncate max-w-full hidden sm:block">
                     {card.subtitle}
                   </p>
 

@@ -80,11 +80,11 @@ export default function SpotifySyncModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl max-h-[88vh] bg-[#101010] border border-[#1b1b1b] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+        className="w-full max-w-xl max-h-[88vh] bg-[#181818] border border-[#282828] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1b1b1b] bg-surface-container-high/40">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#282828] bg-surface-container-high/40">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 flex items-center justify-center flex-shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.25)]">
               <span className="material-symbols-outlined text-[22px]">sync</span>

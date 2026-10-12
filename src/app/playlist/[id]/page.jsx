@@ -573,11 +573,10 @@ export default function PlaylistPage() {
           <button
             type="button"
             onClick={() => togglePinPlaylist(playlist.id, playlist)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full border text-xs font-semibold backdrop-blur-md transition-all cursor-pointer shadow-lg active:scale-95 ${
-              isPlaylistPinned(playlist.id)
+            className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full border text-xs font-semibold backdrop-blur-md transition-all cursor-pointer shadow-lg active:scale-95 ${isPlaylistPinned(playlist.id)
                 ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_16px_rgba(245,158,11,0.35)]"
                 : "bg-surface-container-high/80 text-outline hover:text-amber-300 hover:bg-surface-container-highest border-white/10 hover:border-amber-500/40"
-            }`}
+              }`}
             title={isPlaylistPinned(playlist.id) ? "Unpin playlist from library" : "Pin playlist to top of library"}
           >
             <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${isPlaylistPinned(playlist.id) ? "rotate-45 text-amber-300" : ""}`}>
@@ -621,11 +620,10 @@ export default function PlaylistPage() {
                 e.stopPropagation();
                 toggleLike(playlist);
               }}
-              className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full backdrop-blur-md border flex items-center justify-center transition-all duration-200 z-10 cursor-pointer shadow-lg active:scale-90 ${
-                isLiked(playlist.id)
+              className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full backdrop-blur-md border flex items-center justify-center transition-all duration-200 z-10 cursor-pointer shadow-lg active:scale-90 ${isLiked(playlist.id)
                   ? "bg-rose-500/30 text-rose-400 border-rose-500/60 shadow-[0_0_12px_rgba(244,63,94,0.4)]"
                   : "bg-black/60 text-white/80 border-white/15 hover:text-rose-400 hover:bg-black/80 hover:scale-105"
-              }`}
+                }`}
               title={isLiked(playlist.id) ? "Liked playlist" : "Add playlist to favorites"}
               aria-label={isLiked(playlist.id) ? "Liked playlist" : "Add playlist to favorites"}
             >
@@ -721,11 +719,10 @@ export default function PlaylistPage() {
                     type="button"
                     onClick={handleStartSync}
                     disabled={isSyncing}
-                    className={`p-1.5 rounded-lg border transition-all cursor-pointer flex-shrink-0 flex items-center justify-center ${
-                      isSyncing
+                    className={`p-1.5 rounded-lg border transition-all cursor-pointer flex-shrink-0 flex items-center justify-center ${isSyncing
                         ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse"
                         : "text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 hover:border-emerald-500/50 shadow-sm"
-                    }`}
+                      }`}
                     title="Sync with Spotify"
                     aria-label="Sync with Spotify"
                   >
@@ -777,11 +774,10 @@ export default function PlaylistPage() {
             type="button"
             onClick={handleShufflePlay}
             disabled={tracks.length === 0}
-            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-40 ${
-              isShuffle
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-40 ${isShuffle
                 ? "bg-primary/25 text-primary border-primary/50 shadow-[0_0_16px_rgba(76,215,246,0.4)]"
                 : "bg-surface-container-high/60 text-outline hover:text-primary hover:bg-surface-container border-white/10 hover:border-primary/40 hover:shadow-[0_0_12px_rgba(76,215,246,0.2)]"
-            }`}
+              }`}
             title="Shuffle and play random track"
           >
             <span className="material-symbols-outlined text-[18px] sm:text-[20px]">shuffle</span>
@@ -791,11 +787,10 @@ export default function PlaylistPage() {
           <button
             type="button"
             onClick={handleOpenAddSongs}
-            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 ${
-              isAddSongsOpen
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 ${isAddSongsOpen
                 ? "bg-primary text-surface-container-lowest border-primary shadow-[0_0_18px_rgba(76,215,246,0.5)]"
                 : "bg-surface-container-high/60 text-outline hover:text-white hover:bg-surface-container border-white/10 hover:border-white/20"
-            }`}
+              }`}
             title="Search and add songs to this playlist"
           >
             <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
@@ -809,11 +804,10 @@ export default function PlaylistPage() {
               type="button"
               onClick={handleStartSync}
               disabled={isSyncing}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed ${
-                isSyncing
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed ${isSyncing
                   ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/50 shadow-[0_0_18px_rgba(16,185,129,0.4)] animate-pulse"
                   : "bg-surface-container-high/60 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border-white/10 hover:border-emerald-500/40 shadow-sm hover:shadow-[0_0_15px_rgba(16,185,129,0.25)]"
-              }`}
+                }`}
               title="Sync with Spotify"
               aria-label="Sync with Spotify"
             >
@@ -845,8 +839,8 @@ export default function PlaylistPage() {
                 </button>
 
                 {isOfflineMenuOpen && (
-                  <div className="absolute top-full left-0 mt-2 w-52 bg-[#101010]/98 backdrop-blur-2xl border border-[#1b1b1b] rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-3 py-1.5 text-[11px] text-outline border-b border-[#1b1b1b] mb-1">
+                  <div className="absolute top-full left-0 mt-2 w-52 bg-[#181818] backdrop-blur-2xl border border-[#282828] rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 text-[11px] text-outline border-b border-[#282828] mb-1">
                       {downloadedTrackCount} of {totalTrackCount} songs offline
                     </div>
                     <button
@@ -933,7 +927,7 @@ export default function PlaylistPage() {
       {/* Delete Confirmation Modal Dialog */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-sm bg-[#101010] border border-red-500/30 rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex flex-col gap-4">
+          <div className="w-full max-w-sm bg-[#181818] border border-red-500/30 rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex flex-col gap-4">
             <div className="w-12 h-12 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto">
               <span className="material-symbols-outlined text-[26px]">delete</span>
             </div>
@@ -1189,9 +1183,8 @@ export default function PlaylistPage() {
                         e.stopPropagation();
                         toggleLike(track.id);
                       }}
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${
-                        isLiked(track.id) ? "text-primary shadow-[0_0_12px_rgba(76,215,246,0.3)]" : "text-outline hover:text-white"
-                      }`}
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${isLiked(track.id) ? "text-primary shadow-[0_0_12px_rgba(76,215,246,0.3)]" : "text-outline hover:text-white"
+                        }`}
                       title={isLiked(track.id) ? "Remove from favorites" : "Add to favorites"}
                     >
                       <span
@@ -1502,13 +1495,12 @@ export default function PlaylistPage() {
       {/* Floating Sync Notification Toast */}
       {syncNotice && (
         <div
-          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[120] px-4 py-2.5 rounded-full shadow-[0_15px_35px_rgba(0,0,0,0.85)] backdrop-blur-xl border flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200 select-none ${
-            syncNotice.type === "error"
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[120] px-4 py-2.5 rounded-full shadow-[0_15px_35px_rgba(0,0,0,0.85)] backdrop-blur-xl border flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200 select-none ${syncNotice.type === "error"
               ? "bg-red-950/95 text-red-200 border-red-500/50"
               : syncNotice.type === "info"
-              ? "bg-[#0d1f38]/95 text-cyan-300 border-cyan-500/50"
-              : "bg-emerald-950/95 text-emerald-200 border-emerald-500/50"
-          }`}
+                ? "bg-[#0d1f38]/95 text-cyan-300 border-cyan-500/50"
+                : "bg-emerald-950/95 text-emerald-200 border-emerald-500/50"
+            }`}
         >
           <span className="material-symbols-outlined text-[18px]">
             {syncNotice.type === "error" ? "error" : syncNotice.type === "info" ? "info" : "check_circle"}

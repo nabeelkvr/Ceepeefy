@@ -1,4 +1,12 @@
-import CryptoJS from "crypto-js";
+import {
+  searchJioSaavnSongs,
+  cleanHtmlText,
+  cleanStr,
+  normalizeSongTitle,
+  formatDuration,
+  decryptMediaUrl,
+  JIOSAAVN_HEADERS,
+} from "./jiosaavnSearchService.js";
 
 /**
  * In-memory LRU-like cache for candidate search queries to prevent redundant external API hits.
@@ -7,53 +15,50 @@ import CryptoJS from "crypto-js";
 const candidateCache = new Map();
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
-function decryptMediaUrl(encryptedUrl) {
-  try {
-    const key = CryptoJS.enc.Utf8.parse("38346591");
-    const decrypted = CryptoJS.DES.decrypt(
-      { ciphertext: CryptoJS.enc.Base64.parse(encryptedUrl) },
-      key,
-      {
-        mode: CryptoJS.mode.ECB,
-        padding: CryptoJS.pad.Pkcs7,
-      }
-    );
-    return decrypted.toString(CryptoJS.enc.Utf8);
-  } catch {
-    return null;
-  }
+export function cleanHtml(str) {
+  return cleanHtmlText(str);
 }
 
-function cleanHtml(str) {
-  if (!str) return "";
-  return str
-    .replace(/<[^>]*>/g, "")
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .trim();
+export function cleanAlphaNum(str) {
+  return cleanStr(str);
 }
 
 /**
  * Normalizes title for search & comparison:
- * Removes (feat. ...), [with ...], (from "movie"), soundtrack tags, punctuation.
+ * Removes (feat. ...), [with ...], (from "movie"), soundtrack tags,
+ * trailing hyphen tags (- From movie, - Single, - Remastered), and punctuation.
  */
 export function normalizeTitle(t) {
   if (!t) return "";
-  return t
+  return cleanHtmlText(t)
     .toLowerCase()
     .replace(/&quot;/g, "")
     .replace(/&#039;/g, "")
     .replace(/&#39;/g, "")
     .replace(/&amp;/g, "&")
-    .replace(/\s*[\(\[](?:from|feat\.?|with|soundtrack|version|remix|acoustic|karaoke|live|original motion picture)[^\)\]]*[\)\]]/gi, "")
+    .replace(/\s*[\(\[](?:from|feat\.?|ft\.?|with|soundtrack|version|remix|acoustic|karaoke|live|original motion picture|single|remastered|ost)[^\)\]]*[\)\]]/gi, "")
+    .replace(/\s*-\s*(?:from|feat\.?|ft\.?|with|soundtrack|version|remix|acoustic|karaoke|live|original motion picture|single|remastered|ost).*$/gi, "")
     .replace(/[^a-z0-9\s]/gi, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+/**
+ * Extracts core song title before subtitles or delimiters (e.g. "Arabic Kuthu - Halamithi Habibo" -> "Arabic Kuthu")
+ */
+export function getCoreTitle(t) {
+  if (!t) return "";
+  const cleaned = cleanHtmlText(t)
+    .replace(/\s*[\(\[](?:from|feat\.?|ft\.?|with|soundtrack|version|remix|acoustic|karaoke|live|original motion picture|single|remastered|ost)[^\)\]]*[\)\]]/gi, "")
+    .replace(/\s*-\s*(?:from|feat\.?|ft\.?|with|soundtrack|version|remix|acoustic|karaoke|live|original motion picture|single|remastered|ost).*$/gi, "")
+    .trim();
+
+  // If there is a delimiter separating sub-titles, take the primary prefix if length >= 2
+  const parts = cleaned.split(/\s*[-–—:]\s*/);
+  if (parts.length > 1 && parts[0].trim().length >= 2) {
+    return parts[0].trim();
+  }
+  return cleaned;
 }
 
 /**
@@ -61,7 +66,7 @@ export function normalizeTitle(t) {
  */
 export function normalizeArtist(a) {
   if (!a) return "";
-  return a
+  return cleanHtmlText(a)
     .toLowerCase()
     .replace(/[^a-z0-9\s]/gi, " ")
     .trim()
@@ -96,74 +101,108 @@ export function stringSimilarity(s1, s2) {
 }
 
 /**
- * Common Indian language transliteration and spelling mappings.
+ * Common Indian language transliteration and spelling mappings across Malayalam, Tamil, Telugu, Hindi, Kannada.
  */
 const TRANSLITERATION_MAP = {
-  "kannazhaga": "kannazhagaa",
+  chembarathi: "chembaruthi",
+  chimikkathi: "chembarathi",
+  kannazhaga: "kannazhagaa",
   "vaathi coming": "vathi coming",
-  "jimikki": "entammede jimikki",
-  "aaradhike": "aaradhike ambili",
+  jimikki: "entammede jimikki",
+  aaradhike: "aaradhike ambili",
   "rowdy baby": "rowdy baby maari 2",
   "arabic kuthu": "arabic kuthu halamithi habibo",
   "tum hi ho": "tum hi ho aashiqui 2",
+  chaleya: "chaleya jawan",
 };
 
 /**
  * Stage A: Generate progressive queries for JioSaavn candidate retrieval.
+ * Sequence:
+ * 1. Clean core title + primary artist
+ * 2. Exact Spotify song title + primary artist
+ * 3. Normalized song title + primary artist
+ * 4. Core song title without featuring credits, punctuation, or unnecessary suffixes
+ * 5. Core title + secondary/featured artist
+ * 6. Core title + album or movie name (when not a generic playlist title)
+ * 7. Alternate spellings and transliterations
+ * 8. Broader title-only search
  */
 export function generateProgressiveQueries(track) {
-  const title = (track.name || track.title || "").trim();
+  const rawTitle = (track.name || track.title || "").trim();
   const artists = Array.isArray(track.artists) ? track.artists : [track.primaryArtist || track.artist || ""];
   const primaryArtist = (typeof artists[0] === "string" ? artists[0] : artists[0]?.name || "").trim();
   const secondaryArtist = (typeof artists[1] === "string" ? artists[1] : artists[1]?.name || "").trim();
-  const album = (track.album?.name || track.album || "").trim();
-  const normTitle = normalizeTitle(title);
+  const rawAlbum = (track.album?.name || track.album || "").trim();
+  const normTitle = normalizeTitle(rawTitle);
+  const coreTitle = getCoreTitle(rawTitle);
+
+  // Check if album is a genuine album name vs generic playlist name
+  const isGenericPlaylist = /\b(trending now|top hits|top 50|today|playlist|hits 20|chart|viral)\b/i.test(rawAlbum);
+  const album = isGenericPlaylist ? "" : rawAlbum;
 
   const queries = [];
 
-  // Query 1: Exact original title + primary artist
-  if (title && primaryArtist) {
-    queries.push(`${title} ${primaryArtist}`.trim());
+  // Query 1: Clean core title + primary artist (e.g. "Arabic Kuthu Anirudh Ravichander", "Chaleya Arijit Singh")
+  if (coreTitle && primaryArtist) {
+    queries.push(`${coreTitle} ${primaryArtist}`.trim());
   }
 
-  // Query 2: Normalized title + primary artist
-  if (normTitle && normTitle !== title.toLowerCase() && primaryArtist) {
+  // Query 2: Exact raw title + primary artist
+  if (rawTitle && primaryArtist && rawTitle.toLowerCase() !== coreTitle.toLowerCase()) {
+    queries.push(`${rawTitle} ${primaryArtist}`.trim());
+  }
+
+  // Query 3: Normalized title + primary artist
+  if (normTitle && normTitle !== coreTitle.toLowerCase() && primaryArtist) {
     queries.push(`${normTitle} ${primaryArtist}`.trim());
   }
 
-  // Query 3: Title + secondary credited artist
-  if (title && secondaryArtist) {
-    queries.push(`${title} ${secondaryArtist}`.trim());
+  // Query 4: Core title alone (crucial for finding songs on JioSaavn where title query ranks top)
+  if (coreTitle) {
+    queries.push(coreTitle);
   }
 
-  // Query 4: Original title + album/movie name
-  if (title && album && album.toLowerCase() !== title.toLowerCase()) {
-    queries.push(`${title} ${album}`.trim());
+  // Query 5: Core title + secondary credited/featured artist
+  if (coreTitle && secondaryArtist) {
+    queries.push(`${coreTitle} ${secondaryArtist}`.trim());
   }
 
-  // Query 5: Alternate spelling / transliteration
-  const lowerTitle = title.toLowerCase();
+  // Query 6: Core title + album or movie name
+  if (coreTitle && album && album.toLowerCase() !== coreTitle.toLowerCase()) {
+    queries.push(`${coreTitle} ${album}`.trim());
+  }
+
+  // Query 7: Alternate spelling / transliteration
+  const lowerTitle = rawTitle.toLowerCase();
   for (const [key, alt] of Object.entries(TRANSLITERATION_MAP)) {
     if (lowerTitle.includes(key)) {
       queries.push(`${alt} ${primaryArtist}`.trim());
+      queries.push(alt);
       break;
     }
   }
 
-  // Query 6: Normalized title alone
-  if (normTitle) {
+  // Query 8: Normalized title alone
+  if (normTitle && normTitle !== coreTitle.toLowerCase()) {
     queries.push(normTitle);
   }
 
-  // Query 7: Broad title alone
-  queries.push(title);
+  // Query 9: Full raw title
+  if (rawTitle && rawTitle !== coreTitle) {
+    queries.push(rawTitle);
+  }
 
-  // Return unique queries
+  // Return unique, non-empty queries
   return [...new Set(queries.filter(Boolean))];
 }
 
 /**
- * Searches JioSaavn for candidate tracks with in-memory caching.
+ * Searches JioSaavn for candidate tracks using the unified reference search catalog.
+ * Guarantees that EVERY song discoverable on Ceepeefy's main Search page is also returned here.
+ *
+ * @param {string} query
+ * @returns {Promise<Array<any>>}
  */
 export async function searchJioSaavnCandidates(query) {
   const cleanQ = (query || "").trim();
@@ -176,51 +215,26 @@ export async function searchJioSaavnCandidates(query) {
   }
 
   try {
-    const url = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&q=${encodeURIComponent(cleanQ)}&p=1&n=12`;
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "application/json, text/plain, */*",
-      },
-      next: { revalidate: 300 },
-    });
+    const songs = await searchJioSaavnSongs(cleanQ);
 
-    if (!res.ok) return [];
-    const data = await res.json();
-    const results = data.results || [];
-
-    const candidates = results.map((s) => {
-      let directAudioUrl = null;
-      const encUrl = s.more_info?.encrypted_media_url || s.encrypted_media_url;
-      if (encUrl) {
-        const rawDecrypted = decryptMediaUrl(encUrl);
-        if (rawDecrypted && rawDecrypted.startsWith("http")) {
-          directAudioUrl = rawDecrypted.replace(/_96\.mp4/, "_320.mp4");
-        }
-      }
-
-      const durSec = parseInt(s.duration || s.more_info?.duration || "0", 10);
-      const cleanTitle = cleanHtml(s.song || s.title);
-      const cleanArtist = cleanHtml(s.primary_artists || s.singers || s.music || "Various Artists");
-      const cleanAlbum = cleanHtml(s.album || s.more_info?.album || "");
-
-      return {
-        id: String(s.id),
-        title: cleanTitle,
-        artist: cleanArtist,
-        primary_artists: cleanArtist,
-        singers: cleanArtist,
-        album: cleanAlbum,
-        album_id: s.albumid || s.more_info?.album_id || "",
-        duration: durSec,
-        durationFormatted: formatDuration(durSec),
-        audioUrl: directAudioUrl,
-        coverUrl: (s.image || "").replace(/50x50|150x150/, "500x500"),
-        year: s.year || s.more_info?.year || null,
-        language: (s.language || s.more_info?.language || "").toLowerCase(),
-      };
-    });
+    const candidates = songs.map((s) => ({
+      id: String(s.id),
+      title: s.title,
+      artist: s.artist,
+      primary_artists: s.artist,
+      singers: s.artist,
+      music: "",
+      all_artists: s.artist,
+      album: s.album || "",
+      album_id: s.album_id || "",
+      duration: s.duration || 0,
+      durationFormatted: s.durationFormatted || formatDuration(s.duration || 0),
+      audioUrl: s.audioUrl || null,
+      coverUrl: s.coverUrl || s.image || "",
+      year: s.year || null,
+      playCount: s.playCount || 0,
+      language: (s.language || "").toLowerCase(),
+    }));
 
     candidateCache.set(cacheKey, { timestamp: Date.now(), data: candidates });
     if (candidateCache.size > 500) {
@@ -236,14 +250,127 @@ export async function searchJioSaavnCandidates(query) {
 }
 
 /**
- * Stage C: 5-signal scoring engine.
- * - Title similarity: 40%
- * - Artist similarity: 25%
- * - Duration similarity: 15%
- * - Album/movie similarity: 10%
- * - Version & Language consistency: 10%
+ * Checks whether the Spotify track and the API candidate have the same song title and artist.
+ * When this returns true, the candidate is recognized as an exact match.
+ */
+export function isSameSongAndArtist(spotifyTrack, candidate) {
+  const sourceRaw = (spotifyTrack.name || spotifyTrack.title || "").trim();
+  const candRaw = (candidate.title || candidate.song || "").trim();
+  if (!sourceRaw || !candRaw) return false;
+
+  const normSource = normalizeTitle(sourceRaw);
+  const normCand = normalizeTitle(candRaw);
+  const alphaSource = cleanAlphaNum(normSource);
+  const alphaCand = cleanAlphaNum(normCand);
+
+  const coreSource = cleanAlphaNum(getCoreTitle(sourceRaw));
+  const coreCand = cleanAlphaNum(getCoreTitle(candRaw));
+
+  // 1. Title match condition
+  let titleMatches = false;
+
+  if (alphaSource && alphaCand && alphaSource === alphaCand) {
+    titleMatches = true;
+  } else if (coreSource && coreCand && coreSource === coreCand && coreSource.length >= 2) {
+    titleMatches = true;
+  } else if (coreSource && alphaCand && (alphaCand === coreSource || (coreSource.length >= 4 && alphaCand.startsWith(coreSource)))) {
+    titleMatches = true;
+  } else if (coreCand && alphaSource && (alphaSource === coreCand || (coreCand.length >= 4 && alphaSource.startsWith(coreCand)))) {
+    titleMatches = true;
+  } else {
+    const titleSim = stringSimilarity(normSource, normCand);
+    if (titleSim >= 0.80) {
+      titleMatches = true;
+    }
+  }
+
+  if (!titleMatches) return false;
+
+  // 2. Artist match condition
+  const spotifyArtistsList = [];
+  if (spotifyTrack.primaryArtist) spotifyArtistsList.push(spotifyTrack.primaryArtist);
+  if (Array.isArray(spotifyTrack.artists)) {
+    for (const a of spotifyTrack.artists) {
+      const name = typeof a === "string" ? a : a?.name;
+      if (name) spotifyArtistsList.push(name);
+    }
+  }
+  if (spotifyTrack.artist) spotifyArtistsList.push(spotifyTrack.artist);
+
+  const candArtistsList = [];
+  if (candidate.primary_artists) candArtistsList.push(candidate.primary_artists);
+  if (candidate.singers) candArtistsList.push(candidate.singers);
+  if (candidate.artist) candArtistsList.push(candidate.artist);
+  if (candidate.music) candArtistsList.push(candidate.music);
+  if (candidate.all_artists) candArtistsList.push(candidate.all_artists);
+
+  const normSourceArtists = spotifyArtistsList
+    .map(normalizeArtist)
+    .filter(Boolean);
+  const normCandArtists = candArtistsList
+    .map(normalizeArtist)
+    .filter(Boolean);
+
+  let artistMatches = false;
+
+  for (const sArt of normSourceArtists) {
+    if (!sArt || sArt.length < 2) continue;
+    const sAlpha = cleanAlphaNum(sArt);
+    for (const cArt of normCandArtists) {
+      if (!cArt || cArt.length < 2) continue;
+      const cAlpha = cleanAlphaNum(cArt);
+
+      if (sAlpha === cAlpha) {
+        artistMatches = true;
+        break;
+      }
+      if (sAlpha.length >= 3 && cAlpha.includes(sAlpha)) {
+        artistMatches = true;
+        break;
+      }
+      if (cAlpha.length >= 3 && sAlpha.includes(cAlpha)) {
+        artistMatches = true;
+        break;
+      }
+      if (stringSimilarity(sArt, cArt) >= 0.70) {
+        artistMatches = true;
+        break;
+      }
+    }
+    if (artistMatches) break;
+  }
+
+  // Token-level check (e.g. "Anirudh", "Arijit", "Rahman", "Shilpa", "Super Subu", "Lil", "Payyan")
+  if (!artistMatches) {
+    const sTokens = new Set(
+      normSourceArtists
+        .flatMap((a) => a.split(/\s+/))
+        .filter((t) => t.length > 2)
+    );
+    const cTokens = new Set(
+      normCandArtists
+        .flatMap((a) => a.split(/\s+/))
+        .filter((t) => t.length > 2)
+    );
+    for (const t of sTokens) {
+      if (cTokens.has(t)) {
+        artistMatches = true;
+        break;
+      }
+    }
+  }
+
+  return titleMatches && artistMatches;
+}
+
+/**
+ * Stage C: Intelligent candidate scoring engine.
+ * - When candidate has the same title and same artist, guarantees 98-100 match score and exact match status.
+ * - Otherwise scores via 5-signal relevance engine.
  */
 export function scoreCandidate(spotifyTrack, candidate) {
+  const isExact = isSameSongAndArtist(spotifyTrack, candidate);
+
   const sourceTitle = spotifyTrack.name || spotifyTrack.title || "";
   const normSourceTitle = normalizeTitle(sourceTitle);
   const normCandTitle = normalizeTitle(candidate.title || "");
@@ -253,11 +380,26 @@ export function scoreCandidate(spotifyTrack, candidate) {
   const normSourceArtist = normalizeArtist(primaryArtist);
   const normCandArtist = normalizeArtist(candidate.artist || candidate.primary_artists || candidate.singers || "");
 
+  // If same song and artist match is confirmed:
+  if (isExact) {
+    const finalScore = candidate.audioUrl ? 100 : 98;
+    return {
+      score: finalScore,
+      isExactMatch: true,
+      details: {
+        titleScore: 45,
+        artistScore: 40,
+        durationScore: 10,
+        albumScore: 5,
+        versionPenalty: 0,
+      },
+    };
+  }
+
   // 1. Title Similarity (40%)
   const titleSim = stringSimilarity(normSourceTitle, normCandTitle);
   let titleScore = titleSim * 40;
 
-  // Exact title bonus
   if (normSourceTitle === normCandTitle && normSourceTitle.length > 2) {
     titleScore = 40;
   }
@@ -265,7 +407,6 @@ export function scoreCandidate(spotifyTrack, candidate) {
   // 2. Artist Similarity (25%)
   let artistSim = stringSimilarity(normSourceArtist, normCandArtist);
 
-  // Containment check (e.g. "Anirudh Ravichander" within "Anirudh Ravichander, Super Subu")
   if (
     normSourceArtist.length > 3 &&
     normCandArtist.length > 3 &&
@@ -274,7 +415,6 @@ export function scoreCandidate(spotifyTrack, candidate) {
     artistSim = Math.max(artistSim, 0.95);
   }
 
-  // Check additional credited artists
   if (artistSim < 0.85 && Array.isArray(spotifyTrack.artists)) {
     for (const art of spotifyTrack.artists) {
       const artName = typeof art === "string" ? art : art?.name || "";
@@ -293,19 +433,18 @@ export function scoreCandidate(spotifyTrack, candidate) {
 
   if (sourceDurationSec > 0 && candDurationSec > 0) {
     const diff = Math.abs(sourceDurationSec - candDurationSec);
-    if (diff <= 3) durationScore = 15;
-    else if (diff <= 8) durationScore = 13;
-    else if (diff <= 15) durationScore = 10;
-    else if (diff <= 30) durationScore = 6;
-    else if (diff <= 60) durationScore = 2;
+    if (diff <= 5) durationScore = 15;
+    else if (diff <= 12) durationScore = 13;
+    else if (diff <= 25) durationScore = 10;
+    else if (diff <= 45) durationScore = 6;
+    else if (diff <= 75) durationScore = 3;
     else durationScore = 0;
   } else {
-    // Missing duration gives neutral default so it doesn't arbitrarily disqualify
     durationScore = 8;
   }
 
   // 4. Album / Movie Similarity (10%)
-  let albumScore = 5; // neutral baseline
+  let albumScore = 5;
   const sourceAlbum = spotifyTrack.album?.name || spotifyTrack.album || "";
   const candAlbum = candidate.album || "";
   if (sourceAlbum && candAlbum) {
@@ -341,13 +480,13 @@ export function scoreCandidate(spotifyTrack, candidate) {
     Math.min(100, Math.round(titleScore + artistScore + durationScore + albumScore + versionScore - versionPenalty))
   );
 
-  // Critical Safeguard: If title similarity is below 0.3 or artist has complete mismatch, cap score below 60
   if (titleSim < 0.35 || (normSourceArtist.length > 2 && artistSim === 0)) {
-    totalScore = Math.min(totalScore, 55);
+    totalScore = Math.min(totalScore, 45);
   }
 
   return {
     score: totalScore,
+    isExactMatch: false,
     details: {
       titleScore: Math.round(titleScore),
       artistScore: Math.round(artistScore),
@@ -360,6 +499,7 @@ export function scoreCandidate(spotifyTrack, candidate) {
 
 /**
  * Matches a single Spotify track to JioSaavn candidates.
+ * Accumulates candidates across progressive query tiers without dropping valid candidates.
  */
 export async function matchSingleTrack(spotifyTrack) {
   const queries = generateProgressiveQueries(spotifyTrack);
@@ -374,8 +514,22 @@ export async function matchSingleTrack(spotifyTrack) {
         allCandidates.push(c);
       }
     }
-    // If we already have strong candidates, we don't need to exhaust all query tiers
-    if (allCandidates.length >= 8) break;
+
+    // Check if a definitive or high-confidence match is discovered
+    const hasDefinitiveMatch = allCandidates.some((c) => {
+      if (isSameSongAndArtist(spotifyTrack, c)) return true;
+      const sc = scoreCandidate(spotifyTrack, c);
+      return sc.score >= 85;
+    });
+
+    if (hasDefinitiveMatch) {
+      break;
+    }
+
+    // Prevent excessive candidate pools while ensuring sufficient depth
+    if (allCandidates.length >= 60) {
+      break;
+    }
   }
 
   if (allCandidates.length === 0) {
@@ -392,26 +546,50 @@ export async function matchSingleTrack(spotifyTrack) {
       const scoring = scoreCandidate(spotifyTrack, cand);
       return {
         ...cand,
+        isExactMatch: scoring.isExactMatch,
         matchScore: scoring.score,
         matchDetails: scoring.details,
       };
     })
-    .sort((a, b) => b.matchScore - a.matchScore);
+    .sort((a, b) => {
+      // 1. Exact match takes highest priority
+      if (a.isExactMatch && !b.isExactMatch) return -1;
+      if (!a.isExactMatch && b.isExactMatch) return 1;
+      // 2. Higher match score
+      if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+      // 3. Audio URL available
+      if (a.audioUrl && !b.audioUrl) return -1;
+      if (!a.audioUrl && b.audioUrl) return 1;
+      // 4. Higher popularity / play count
+      return (b.playCount || 0) - (a.playCount || 0);
+    });
 
   const bestCandidate = scoredCandidates[0];
-  const alternatives = scoredCandidates.slice(1, 5);
+  const alternatives = scoredCandidates.slice(1, 10);
 
   let status = "unmatched";
-  if (bestCandidate && bestCandidate.matchScore >= 90) {
-    status = "matched";
-  } else if (bestCandidate && bestCandidate.matchScore >= 75) {
-    status = "review";
+  let matchedTrack = null;
+
+  if (bestCandidate) {
+    if (bestCandidate.isExactMatch || bestCandidate.matchScore >= 80) {
+      status = "matched";
+      matchedTrack = bestCandidate;
+    } else if (bestCandidate.matchScore >= 50) {
+      status = "review";
+      matchedTrack = bestCandidate;
+    } else {
+      // Low confidence (< 50%): keep status as unmatched.
+      // Do NOT substitute an unrelated song as matchedTrack.
+      // Candidate remains available in alternatives for manual selection.
+      status = "unmatched";
+      matchedTrack = null;
+    }
   }
 
   return {
     status,
     score: bestCandidate ? bestCandidate.matchScore : 0,
-    matchedTrack: bestCandidate || null,
+    matchedTrack,
     alternatives,
   };
 }
@@ -469,11 +647,4 @@ export async function matchPlaylistTracks(tracks, onProgress) {
 
   await Promise.all(workers);
   return results;
-}
-
-function formatDuration(secs) {
-  if (isNaN(secs) || secs <= 0) return "3:30";
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  return `${m}:${s < 10 ? "0" : ""}${s}`;
 }

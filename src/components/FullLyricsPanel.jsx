@@ -30,17 +30,17 @@ export default function FullLyricsPanel() {
 
   return (
     <div
-      className="absolute inset-0 z-30 flex flex-col bg-gradient-to-b from-[#0a0a0a]/95 via-[#050505]/98 to-[#000000] backdrop-blur-3xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden select-none border-l border-[#1b1b1b]"
+      className="absolute inset-0 z-30 flex flex-col bg-[#000000] backdrop-blur-3xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden select-none border-l border-[#282828]"
       style={{
         backgroundImage: currentTrack.coverUrl
-          ? `radial-gradient(ellipse 70% 50% at 20% 25%, rgba(76,215,246,0.12), transparent 70%), radial-gradient(ellipse 50% 60% at 85% 80%, rgba(168,85,247,0.08), transparent 80%)`
+          ? `radial-gradient(ellipse 70% 50% at 20% 25%, rgba(76,215,246,0.06), transparent 70%)`
           : undefined,
       }}
     >
       {/* Ambient Blurred Artwork Glow */}
       {currentTrack.coverUrl && (
         <div
-          className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-20 blur-[100px] pointer-events-none"
+          className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-15 blur-[100px] pointer-events-none"
           style={{
             backgroundImage: `url(${currentTrack.coverUrl})`,
             backgroundSize: "cover",
@@ -49,9 +49,9 @@ export default function FullLyricsPanel() {
       )}
 
       {/* Header Bar */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-surface-container-lowest/40 backdrop-blur-md z-10 flex-shrink-0">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-[#282828] bg-[#121212]/80 backdrop-blur-md z-10 flex-shrink-0">
         <div className="flex items-center gap-4 min-w-0">
-          <div className="relative w-11 h-11 rounded-xl overflow-hidden shadow-lg border border-white/10 flex-shrink-0">
+          <div className="relative w-11 h-11 rounded-xl overflow-hidden shadow-lg border border-[#282828] flex-shrink-0">
             <img
               src={currentTrack.coverUrl}
               alt={currentTrack.title}

@@ -101,12 +101,12 @@ export default function Header({ onToggleMobileMenu }) {
   };
 
   return (
-    <header className="h-16 bg-surface-container-lowest/80 backdrop-blur-xl z-40 flex items-center justify-between px-4 md:px-8 border-b border-white/5 shadow-md flex-shrink-0">
+    <header className="h-16 bg-[#020202] z-40 flex items-center justify-between px-4 md:px-8 border-b border-[#141414] shadow-sm flex-shrink-0">
       {/* Left: Title & Mobile menu button */}
       <div className="flex items-center gap-2.5 sm:gap-3">
         <button
           onClick={onToggleMobileMenu}
-          className="md:hidden text-outline hover:text-white p-1 rounded-lg hover:bg-surface-container transition-colors"
+          className="md:hidden text-[#B3B3B3] hover:text-white p-1 rounded-lg hover:bg-[#181818] transition-colors"
           title="Toggle Navigation Menu"
         >
           <span className="material-symbols-outlined text-[24px]">menu</span>
@@ -140,7 +140,7 @@ export default function Header({ onToggleMobileMenu }) {
       {/* Middle: Search bar with shortcut & live debouncing (Hidden on mobile and on /search) */}
       {!pathname?.startsWith("/search") ? (
         <div className="hidden md:flex flex-1 max-w-xl mx-3 md:mx-8">
-          <div className="flex items-center gap-2.5 px-3.5 py-1.5 md:py-2 rounded-full bg-surface-container/80 border border-white/10 text-on-surface w-full shadow-inner focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all group">
+          <div className="flex items-center gap-2.5 px-3.5 py-1.5 md:py-2 rounded-full bg-[#181818] hover:bg-[#242424] focus-within:bg-[#242424] border border-[#292929] text-white w-full transition-all group">
             <button
               type="button"
               onClick={() => {
@@ -152,7 +152,7 @@ export default function Header({ onToggleMobileMenu }) {
                   }
                 }
               }}
-              className="text-outline group-focus-within:text-primary transition-colors flex items-center justify-center cursor-pointer"
+              className="text-[#B3B3B3] group-hover:text-white group-focus-within:text-white transition-colors flex items-center justify-center cursor-pointer"
               title="Search"
             >
               <span className="material-symbols-outlined text-[18px]">
@@ -171,18 +171,18 @@ export default function Header({ onToggleMobileMenu }) {
                 }
               }}
               placeholder="Search by title, artist, or album..."
-              className="bg-transparent border-none outline-none text-xs md:text-sm text-on-surface placeholder:text-outline/70 w-full"
+              className="bg-transparent border-none outline-none text-xs md:text-sm text-white placeholder:text-[#8A8A8A] w-full"
             />
             {localQuery && (
               <button
                 onClick={handleClear}
-                className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-outline hover:text-white flex items-center justify-center transition-colors flex-shrink-0"
+                className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-[#8A8A8A] hover:text-white flex items-center justify-center transition-colors flex-shrink-0"
                 title="Clear search"
               >
                 <span className="material-symbols-outlined text-[14px]">close</span>
               </button>
             )}
-            <kbd className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-mono text-outline bg-surface-container-high rounded border border-white/5 select-none flex-shrink-0">
+            <kbd className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-mono text-[#8A8A8A] bg-[#242424] rounded border border-[#282828] select-none flex-shrink-0">
               ⌘K
             </kbd>
           </div>
@@ -193,11 +193,11 @@ export default function Header({ onToggleMobileMenu }) {
 
       {/* Right: Actions and Avatar */}
       <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 relative">
-        {/* Mobile Quick Search Button (Image 1 & 2 match) */}
+        {/* Mobile Quick Search Button */}
         {pathname !== "/search" && (
           <Link
             href="/search"
-            className="md:hidden w-8 h-8 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/5 flex items-center justify-center text-outline hover:text-white transition-colors"
+            className="md:hidden w-8 h-8 rounded-full bg-[#181818] hover:bg-[#242424] border border-[#282828] flex items-center justify-center text-[#B3B3B3] hover:text-white transition-colors"
             title="Search"
           >
             <span className="material-symbols-outlined text-[19px]">search</span>
@@ -211,16 +211,16 @@ export default function Header({ onToggleMobileMenu }) {
               setIsNotificationsOpen((prev) => !prev);
               setIsProfileOpen(false);
             }}
-            className="relative w-8 h-8 md:w-9 md:h-9 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/5 flex items-center justify-center text-on-surface-variant hover:text-white transition-colors cursor-pointer"
+            className="relative w-8 h-8 md:w-9 md:h-9 rounded-full bg-[#181818] hover:bg-[#242424] border border-[#282828] flex items-center justify-center text-[#B3B3B3] hover:text-white transition-colors cursor-pointer"
             title="Notifications"
           >
             <span className="material-symbols-outlined text-[19px]">notifications</span>
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary shadow-[0_0_6px_#4cd7f6]" />
+            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary" />
           </button>
 
           {isNotificationsOpen && (
-            <div className="absolute top-12 right-0 w-72 sm:w-80 bg-[#101010]/95 backdrop-blur-2xl border border-[#1b1b1b] rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.65)] z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10">
+            <div className="absolute top-12 right-0 w-72 sm:w-80 bg-[#181818] border border-[#282828] rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.85)] z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#282828]">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary text-[18px]">notifications</span>
                   <span className="text-xs font-bold text-white">Notifications</span>
@@ -228,18 +228,18 @@ export default function Header({ onToggleMobileMenu }) {
                 <span className="text-[10px] text-primary font-mono">3 New</span>
               </div>
               <div className="flex flex-col gap-2">
-                <div className="p-2.5 rounded-xl bg-surface-container/70 border border-white/5 flex items-start gap-2.5">
+                <div className="p-2.5 rounded-xl bg-[#242424] border border-[#282828] flex items-start gap-2.5">
                   <span className="material-symbols-outlined text-primary text-[18px] mt-0.5">graphic_eq</span>
                   <div className="flex flex-col">
                     <span className="text-xs font-semibold text-white">Lossless Studio Audio Active</span>
-                    <span className="text-[10px] text-outline">Streaming at bit-perfect 24-bit/192kHz master quality.</span>
+                    <span className="text-[10px] text-[#8A8A8A]">Streaming at bit-perfect 24-bit/192kHz master quality.</span>
                   </div>
                 </div>
-                <div className="p-2.5 rounded-xl bg-surface-container/70 border border-white/5 flex items-start gap-2.5">
+                <div className="p-2.5 rounded-xl bg-[#242424] border border-[#282828] flex items-start gap-2.5">
                   <span className="material-symbols-outlined text-secondary text-[18px] mt-0.5">queue_music</span>
                   <div className="flex flex-col">
                     <span className="text-xs font-semibold text-white">New Curated Mixes</span>
-                    <span className="text-[10px] text-outline">Ambient Cyberpunk & Nocturne Beats updated today.</span>
+                    <span className="text-[10px] text-[#8A8A8A]">Ambient Cyberpunk & Nocturne Beats updated today.</span>
                   </div>
                 </div>
               </div>
@@ -252,7 +252,7 @@ export default function Header({ onToggleMobileMenu }) {
           <button
             type="button"
             onClick={promptInstall}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_12px_rgba(76,215,246,0.15)]"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#181818] hover:bg-[#242424] border border-[#282828] text-primary text-xs font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
             title="Install Ceepeefy App"
           >
             <span className="material-symbols-outlined text-[17px]">download</span>
@@ -268,7 +268,7 @@ export default function Header({ onToggleMobileMenu }) {
             setIsNotificationsOpen(false);
             setIsSettingsModalOpen(true);
           }}
-          className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-surface-container/80 hover:bg-surface-container-high border border-white/5 flex items-center justify-center text-on-surface-variant hover:text-white transition-colors cursor-pointer"
+          className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-[#181818] hover:bg-[#242424] border border-[#282828] flex items-center justify-center text-[#B3B3B3] hover:text-white transition-colors cursor-pointer"
           title="Audio & App Settings"
         >
           <span className="material-symbols-outlined text-[19px]">settings</span>
@@ -282,8 +282,8 @@ export default function Header({ onToggleMobileMenu }) {
               setIsProfileOpen((prev) => !prev);
             }}
             className={`w-8 h-8 md:w-9 md:h-9 rounded-full p-0.5 cursor-pointer transition-all ${user
-                ? "bg-gradient-to-tr from-primary via-cyan-300 to-secondary shadow-[0_0_14px_rgba(76,215,246,0.45)] hover:scale-105"
-                : "bg-gradient-to-tr from-primary to-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.4)] hover:scale-105"
+              ? "bg-gradient-to-tr from-primary via-cyan-300 to-secondary shadow-[0_0_14px_rgba(76,215,246,0.45)] hover:scale-105"
+              : "bg-gradient-to-tr from-primary to-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.4)] hover:scale-105"
               }`}
             title={user ? `Profile (${user.name})` : "Profile (New to Ceepeefy)"}
           >

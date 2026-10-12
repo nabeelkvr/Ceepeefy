@@ -46,8 +46,8 @@ export default function DeviceModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-surface-container-low/95 border border-white/10 rounded-2xl p-6 shadow-2xl overflow-hidden flex flex-col gap-5">
-        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+      <div className="relative w-full max-w-md bg-[#181818] border border-[#282828] rounded-2xl p-6 shadow-2xl overflow-hidden flex flex-col gap-5">
+        <div className="flex items-center justify-between pb-3 border-b border-[#282828]">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-[22px]">devices</span>
             <h3 className="text-base font-bold text-white tracking-tight">Connect to a Device</h3>
@@ -73,7 +73,7 @@ export default function DeviceModal() {
                 className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
                   isSelected
                     ? "bg-primary/15 border-primary text-white shadow-[0_0_15px_rgba(76,215,246,0.2)]"
-                    : "bg-surface-container/60 border-white/5 hover:bg-surface-container hover:border-white/15 text-on-surface-variant"
+                    : "bg-surface-container/60 border-[#282828] hover:bg-surface-container hover:border-[#414141] text-on-surface-variant"
                 }`}
               >
                 <div className="flex items-center gap-3">

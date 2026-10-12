@@ -126,13 +126,9 @@ export default function AuthModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-[#101010]/95 border border-[#1b1b1b] rounded-2xl p-6 md:p-7 shadow-2xl overflow-hidden flex flex-col gap-5">
-        {/* Subtle decorative glow */}
-        <div className="absolute -top-12 -right-12 w-32 h-32 bg-primary/20 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-secondary/15 rounded-full blur-2xl pointer-events-none" />
-
+      <div className="relative w-full max-w-md bg-[#181818] border border-[#282828] rounded-2xl p-6 md:p-7 shadow-2xl overflow-hidden flex flex-col gap-5">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-[#1b1b1b]">
+        <div className="flex items-center justify-between pb-3 border-b border-[#282828]">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
               <span className="material-symbols-outlined text-[20px]">

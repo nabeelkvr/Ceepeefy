@@ -44,7 +44,7 @@ export default function ProfileDropdown({ isOpen, onClose }) {
   return (
     <div
       ref={dropdownRef}
-      className="absolute top-12 right-0 w-80 sm:w-84 bg-[#101010]/95 backdrop-blur-2xl border border-[#1b1b1b] rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.65)] overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+      className="absolute top-12 right-0 w-80 sm:w-84 bg-[#181818] border border-[#282828] rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150"
     >
       {!user ? (
         /* GUEST STATE: Highlight "New to Ceepeefy?" & "Sign Up" */

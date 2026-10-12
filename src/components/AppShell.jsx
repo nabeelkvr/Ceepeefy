@@ -122,9 +122,8 @@ export default function AppShell({ children }) {
       {/* Skeleton Loading Screen Overlay: visible immediately on Mobile PWA & Web until fonts and layout ready */}
       {showSkeleton && (
         <div
-          className={`fixed inset-0 z-[100] transition-opacity duration-300 ease-out pointer-events-none ${
-            isAppReady ? "opacity-0" : "opacity-100 pointer-events-auto"
-          }`}
+          className={`fixed inset-0 z-[100] transition-opacity duration-300 ease-out pointer-events-none ${isAppReady ? "opacity-0" : "opacity-100 pointer-events-auto"
+            }`}
           aria-hidden={isAppReady}
         >
           <AppSkeleton />
@@ -133,9 +132,8 @@ export default function AppShell({ children }) {
 
       {/* Actual Application Content */}
       <div
-        className={`flex-1 flex flex-col h-full w-full overflow-hidden transition-opacity duration-300 ${
-          isAppReady ? "opacity-100" : "opacity-0 invisible"
-        }`}
+        className={`flex-1 flex flex-col h-full w-full overflow-hidden transition-opacity duration-300 ${isAppReady ? "opacity-100" : "opacity-0 invisible"
+          }`}
       >
         {/* Upper area: Sidebar + Main Content */}
         <div className="flex-1 flex overflow-hidden relative">
@@ -164,7 +162,7 @@ export default function AppShell({ children }) {
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-w-0 bg-transparent overflow-hidden relative transition-colors duration-500">
             <Header onToggleMobileMenu={() => setIsMobileSidebarOpen((prev) => !prev)} />
-            <main className={`flex-1 overflow-y-auto ${currentTrack ? "pb-[calc(9.5rem+env(safe-area-inset-bottom,0px))] md:pb-28" : "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8"} scroll-smooth transition-[padding] duration-300`}>
+            <main className={`main-content flex-1 overflow-y-auto ${currentTrack ? "pb-[calc(9.5rem+env(safe-area-inset-bottom,0px))] md:pb-28" : "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8"} scroll-smooth transition-[padding] duration-300`}>
               {children}
             </main>
 
