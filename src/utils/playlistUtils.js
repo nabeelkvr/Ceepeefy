@@ -119,3 +119,67 @@ export function formatPlaylistTracksAndDurationUppercase(tracks = [], fallbackDu
   return `${trackLabel} , ${durationLabel}`;
 }
 
+/**
+ * Reads and optimizes a user-selected local photo file to a base64 data URL.
+ * Preserves high visual fidelity while keeping memory & storage footprint light.
+ * @param {File|Blob} file 
+ * @param {number} maxSize Max dimension in pixels (default: 600)
+ * @param {number} quality Compression quality from 0 to 1 (default: 0.85)
+ * @returns {Promise<string>} Base64 data URL
+ */
+export function processLocalImage(file, maxSize = 600, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error("No file provided"));
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read image file"));
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result;
+      if (!dataUrl || typeof dataUrl !== "string") {
+        return reject(new Error("Invalid file content"));
+      }
+
+      if (typeof window === "undefined" || !window.Image) {
+        return resolve(dataUrl);
+      }
+
+      const img = new Image();
+      img.onerror = () => resolve(dataUrl);
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width <= maxSize && height <= maxSize && file.size < 250 * 1024) {
+          return resolve(dataUrl);
+        }
+
+        if (width > height) {
+          if (width > maxSize) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(dataUrl);
+
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          const optimized = canvas.toDataURL("image/jpeg", quality);
+          resolve(optimized);
+        } catch {
+          resolve(dataUrl);
+        }
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}

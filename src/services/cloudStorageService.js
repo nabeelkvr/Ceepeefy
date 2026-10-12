@@ -70,7 +70,10 @@ export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
 
     // 4. Assemble UI-compatible playlist objects
     const assembled = playlistsData.map((pl) => {
-      const plTracks = tracksByPlaylist[pl.id] || [];
+      // Prioritize pl.tracks if stored directly on the row, then fallback to playlist_tracks join
+      const plTracks = (Array.isArray(pl.tracks) && pl.tracks.length > 0)
+        ? pl.tracks
+        : (tracksByPlaylist[pl.id] || []);
       const isSelfMix = pl.badge === "SELF MIX" || pl.badge_variant === "cyan" || plTracks.some((t) => t.isCloud || t.source === "supabase-cloud");
 
       return {
@@ -89,17 +92,59 @@ export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
         spec: pl.spec || "24-Bit • 192kHz",
         badge: pl.badge || (isSelfMix ? "SELF MIX" : "CUSTOM"),
         badgeVariant: pl.badge_variant || (isSelfMix ? "cyan" : "purple"),
-        stat: "1 Like",
+        stat: `${plTracks.length} tracks`,
         coverUrl: pl.cover_url || "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
+        customCover: pl.cover_url,
         tracks: plTracks,
         isCustom: true,
         isSelfMix: isSelfMix,
+        source: pl.source || (pl.badge === "SPOTIFY" ? "spotify_import" : "custom"),
+        sourceMeta: pl.source_meta || pl.sourceMeta || null,
       };
     });
 
     return assembled;
   } catch (err) {
     console.error("[CloudService] Exception in fetchUserPlaylistsFromCloud:", err);
+    return null;
+  }
+};
+
+/**
+ * Fetches tracks for a single playlist on-demand from Supabase
+ * @param {string} playlistId
+ * @returns {Promise<Array|null>}
+ */
+export const fetchPlaylistTracksFromCloud = async (playlistId) => {
+  if (!supabase || !isSupabaseConfigured() || !playlistId) return null;
+  try {
+    // 1. Try reading directly from user_playlists if tracks JSONB column exists
+    const { data: plData } = await supabase
+      .from("user_playlists")
+      .select("tracks, source, source_meta")
+      .eq("id", playlistId)
+      .maybeSingle();
+
+    if (plData?.tracks && Array.isArray(plData.tracks) && plData.tracks.length > 0) {
+      return plData.tracks;
+    }
+
+    // 2. Otherwise query playlist_tracks
+    const { data: tracksData, error } = await supabase
+      .from("playlist_tracks")
+      .select("*")
+      .eq("playlist_id", playlistId)
+      .order("position", { ascending: true });
+
+    if (error || !tracksData || tracksData.length === 0) return null;
+
+    return tracksData.map((row) => {
+      return row.track_data && typeof row.track_data === "object"
+        ? { ...row.track_data, id: row.track_id }
+        : { id: row.track_id, title: "Unknown Track", artist: "Unknown Artist" };
+    });
+  } catch (err) {
+    console.error("[CloudService] Error fetching single playlist tracks:", err);
     return null;
   }
 };
@@ -129,16 +174,31 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
       updated_at: new Date().toISOString(),
     };
 
-    const { error: plError } = await supabase
-      .from("user_playlists")
-      .upsert(record, { onConflict: "id" });
+    const fullRecord = {
+      ...record,
+      tracks: Array.isArray(playlist.tracks) ? playlist.tracks : [],
+      source: playlist.source || (playlist.badge === "SPOTIFY" ? "spotify_import" : "custom"),
+      source_meta: playlist.sourceMeta || null,
+    };
 
-    if (plError) {
-      console.error("[CloudService] Failed to upsert playlist:", plError.message);
+    let plResult = await supabase
+      .from("user_playlists")
+      .upsert(fullRecord, { onConflict: "id" });
+
+    // Fallback if user_playlists table does not have 'tracks' or 'source' columns yet
+    if (plResult.error && (plResult.error.message?.includes("column") || plResult.error.code === "42703")) {
+      console.warn("[CloudService] 'tracks' column might not exist in user_playlists; falling back to base record:", plResult.error.message);
+      plResult = await supabase
+        .from("user_playlists")
+        .upsert(record, { onConflict: "id" });
+    }
+
+    if (plResult.error) {
+      console.error("[CloudService] Failed to upsert playlist:", plResult.error.message);
       return false;
     }
 
-    // Upsert any existing tracks inside the playlist
+    // Persist tracks inside playlist_tracks table using safe delete + chunked insert
     if (Array.isArray(playlist.tracks) && playlist.tracks.length > 0) {
       const trackRecords = playlist.tracks.map((track, idx) => ({
         playlist_id: playlist.id,
@@ -148,12 +208,26 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
         added_at: new Date().toISOString(),
       }));
 
-      const { error: trError } = await supabase
+      // Delete existing tracks for this playlist to avoid onConflict constraint dependency
+      const { error: delError } = await supabase
         .from("playlist_tracks")
-        .upsert(trackRecords, { onConflict: "playlist_id,track_id" });
+        .delete()
+        .eq("playlist_id", playlist.id);
 
-      if (trError) {
-        console.error("[CloudService] Failed to upsert playlist_tracks during playlist save:", trError.message);
+      if (delError) {
+        console.warn("[CloudService] Notice on delete old playlist_tracks:", delError.message);
+      }
+
+      // Batch insert in chunks of 50
+      for (let i = 0; i < trackRecords.length; i += 50) {
+        const chunk = trackRecords.slice(i, i + 50);
+        const { error: trError } = await supabase
+          .from("playlist_tracks")
+          .insert(chunk);
+
+        if (trError) {
+          console.error("[CloudService] Failed to insert playlist_tracks chunk:", trError.message);
+        }
       }
     }
 
@@ -174,6 +248,12 @@ export const deletePlaylistFromCloud = async (playlistId, userId = DEFAULT_USER_
   if (!supabase || !isSupabaseConfigured() || !playlistId) return false;
 
   try {
+    // Delete playlist_tracks first in case cascade is not set in DB
+    await supabase
+      .from("playlist_tracks")
+      .delete()
+      .eq("playlist_id", playlistId);
+
     const { error } = await supabase
       .from("user_playlists")
       .delete()
@@ -211,9 +291,16 @@ export const addTrackToPlaylistCloud = async (playlistId, track, position = 0) =
       added_at: new Date().toISOString(),
     };
 
+    // Delete existing entry if present to prevent conflict
+    await supabase
+      .from("playlist_tracks")
+      .delete()
+      .eq("playlist_id", playlistId)
+      .eq("track_id", String(track.id));
+
     const { error } = await supabase
       .from("playlist_tracks")
-      .upsert(record, { onConflict: "playlist_id,track_id" });
+      .insert([record]);
 
     if (error) {
       console.error("[CloudService] Failed to add track to playlist_tracks:", error.message);
@@ -631,3 +718,58 @@ export const migrateLocalDataToSupabase = async (userId = DEFAULT_USER_ID) => {
     return { migrated: false, error: err.message };
   }
 };
+
+// ============================================================================
+// ACCOUNT-WIDE DATA BACKUP & RESTORE (user_account_data)
+// ============================================================================
+
+/**
+ * Saves complete account data snapshot (playlists, mixes, liked songs) to Supabase
+ * @param {Object} accountData
+ * @param {string} userId
+ * @returns {Promise<boolean>}
+ */
+export const saveAccountDataToCloud = async (accountData, userId = DEFAULT_USER_ID) => {
+  if (!supabase || !isSupabaseConfigured() || !userId || !accountData) return false;
+  try {
+    const record = {
+      user_id: userId,
+      account_data: accountData,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from("user_account_data")
+      .upsert(record, { onConflict: "user_id" });
+
+    if (error) {
+      // Table may not exist yet if user hasn't run the setup SQL
+      console.warn("[CloudService] user_account_data save notice:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+};
+
+/**
+ * Fetches complete account data snapshot from Supabase
+ * @param {string} userId
+ * @returns {Promise<Object|null>}
+ */
+export const fetchAccountDataFromCloud = async (userId = DEFAULT_USER_ID) => {
+  if (!supabase || !isSupabaseConfigured() || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("user_account_data")
+      .select("account_data, updated_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return data.account_data || null;
+  } catch (err) {
+    return null;
+  }
+};
+

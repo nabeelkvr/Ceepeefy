@@ -16,12 +16,15 @@ Follow these 5 simple steps to enable cross-device cloud audio uploads and playb
 
 ---
 
-## 2. Create the Database Table (`self_mixes`)
+## 2. Create the Database Tables
+
 1. In your Supabase dashboard, click **SQL Editor** from the left navigation.
-2. Click **"New query"**, paste the SQL script below, and click **"Run"** (Ctrl+Enter):
+2. Click **"New query"**, paste the complete SQL script below, and click **"Run"** (Ctrl+Enter):
 
 ```sql
--- Create the self_mixes table for cloud-stored audio tracks
+-- ============================================================================
+-- 1. SELF MIXES (Cloud Audio Storage & Playback)
+-- ============================================================================
 create table if not exists public.self_mixes (
   id text primary key,
   title text not null,
@@ -35,23 +38,90 @@ create table if not exists public.self_mixes (
   created_at timestamptz default now()
 );
 
--- Enable Row Level Security (RLS)
 alter table public.self_mixes enable row level security;
+create policy "Allow all on self_mixes" on public.self_mixes for all using (true) with check (true);
 
--- Allow reading all public self mixes
-create policy "Allow public read of self mixes"
-  on public.self_mixes for select
-  using (true);
+-- ============================================================================
+-- 2. USER PLAYLISTS (Imported & Custom Playlists with full tracks JSONB)
+-- ============================================================================
+create table if not exists public.user_playlists (
+  id text primary key,
+  user_id text not null default 'nabeeyl',
+  title text not null,
+  description text default '',
+  cover_url text,
+  curator text default 'You',
+  curator_avatar text default '',
+  badge text default 'CUSTOM',
+  badge_variant text default 'purple',
+  fidelity text default 'Personal Playlist • Hi-Res Lossless',
+  spec text default '24-Bit • 192kHz',
+  tracks jsonb default '[]'::jsonb,
+  source text default 'custom',
+  source_meta jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
 
--- Allow insert of self mixes
-create policy "Allow insert of self mixes"
-  on public.self_mixes for insert
-  with check (true);
+-- Ensure all columns exist for existing tables
+alter table public.user_playlists add column if not exists tracks jsonb default '[]'::jsonb;
+alter table public.user_playlists add column if not exists source text default 'custom';
+alter table public.user_playlists add column if not exists source_meta jsonb;
 
--- Allow delete of self mixes
-create policy "Allow delete of self mixes"
-  on public.self_mixes for delete
-  using (true);
+alter table public.user_playlists enable row level security;
+create policy "Allow all on user_playlists" on public.user_playlists for all using (true) with check (true);
+
+-- ============================================================================
+-- 3. PLAYLIST TRACKS (Relational track store for playlists)
+-- ============================================================================
+create table if not exists public.playlist_tracks (
+  playlist_id text not null,
+  track_id text not null,
+  position integer default 0,
+  track_data jsonb not null,
+  added_at timestamptz default now(),
+  primary key (playlist_id, track_id)
+);
+
+alter table public.playlist_tracks enable row level security;
+create policy "Allow all on playlist_tracks" on public.playlist_tracks for all using (true) with check (true);
+
+-- ============================================================================
+-- 4. USER ACCOUNT DATA (Full cross-device sync for playlists, mixes & likes)
+-- ============================================================================
+create table if not exists public.user_account_data (
+  user_id text primary key,
+  account_data jsonb not null,
+  updated_at timestamptz default now()
+);
+
+alter table public.user_account_data enable row level security;
+create policy "Allow all on user_account_data" on public.user_account_data for all using (true) with check (true);
+
+-- ============================================================================
+-- 5. LIKED SONGS & RECENTLY PLAYED
+-- ============================================================================
+create table if not exists public.liked_songs (
+  user_id text not null default 'nabeeyl',
+  track_id text not null,
+  track_data jsonb not null,
+  created_at timestamptz default now(),
+  primary key (user_id, track_id)
+);
+
+alter table public.liked_songs enable row level security;
+create policy "Allow all on liked_songs" on public.liked_songs for all using (true) with check (true);
+
+create table if not exists public.recently_played (
+  id uuid default gen_random_uuid() primary key,
+  user_id text not null default 'nabeeyl',
+  track_id text not null,
+  track_data jsonb not null,
+  played_at timestamptz default now()
+);
+
+alter table public.recently_played enable row level security;
+create policy "Allow all on recently_played" on public.recently_played for all using (true) with check (true);
 ```
 
 ---

@@ -4,7 +4,11 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMusic } from "../../context/MusicContext";
-import { formatPlaylistDuration, formatPlaylistTracksAndDurationUppercase } from "../../utils/playlistUtils";
+import {
+  formatPlaylistDuration,
+  formatPlaylistTracksAndDurationUppercase,
+  processLocalImage,
+} from "../../utils/playlistUtils";
 import PlaylistCover from "../../components/PlaylistCover";
 import SpotifyImportModal from "../../components/SpotifyImportModal";
 
@@ -18,8 +22,10 @@ export default function PlaylistsPage() {
     customPlaylists,
     addedPlaylists,
     createPlaylist,
+    deletePlaylist,
     deleteCustomPlaylist,
     removeAddedPlaylist,
+    updatePlaylistCover,
     isPlaylistPinned,
     togglePinPlaylist,
     renamePlaylist,
@@ -32,6 +38,37 @@ export default function PlaylistsPage() {
   const [newTitle, setNewTitle] = useState("");
   const [editingPlaylistId, setEditingPlaylistId] = useState(null);
   const [editingTitle, setEditingTitle] = useState("");
+
+  const coverFileInputRef = React.useRef(null);
+  const [targetCoverPlaylistId, setTargetCoverPlaylistId] = useState(null);
+  const [isProcessingCover, setIsProcessingCover] = useState(false);
+
+  const handleOpenCoverPicker = (playlistId, e) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    setTargetCoverPlaylistId(String(playlistId));
+    if (coverFileInputRef.current) {
+      coverFileInputRef.current.value = "";
+      coverFileInputRef.current.click();
+    }
+  };
+
+  const handleCoverFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetCoverPlaylistId) return;
+    try {
+      setIsProcessingCover(true);
+      const dataUrl = await processLocalImage(file);
+      if (updatePlaylistCover) {
+        updatePlaylistCover(targetCoverPlaylistId, dataUrl);
+      }
+    } catch (err) {
+      console.error("Failed to update playlist cover:", err);
+    } finally {
+      setIsProcessingCover(false);
+      setTargetCoverPlaylistId(null);
+    }
+  };
 
   // Unified playlist collection
   const allPlaylists = React.useMemo(() => {
@@ -236,6 +273,7 @@ export default function PlaylistsPage() {
             const targetUrl = isAlbum ? `/album/${pl.id}` : `/playlist/${pl.id}`;
 
             const coverUrl =
+              pl.customCover ||
               pl.coverUrl ||
               pl.image ||
               (Array.isArray(pl.images) && pl.images[0]?.url) ||
@@ -258,26 +296,24 @@ export default function PlaylistsPage() {
                         : "ring-1 ring-white/10 group-hover:ring-white/25"
                     }`}
                 >
-                  {pl.isCustom || !pl.coverUrl ? (
-                    <PlaylistCover
-                      tracks={tracks}
-                      fallbackUrl={coverUrl}
-                      alt={pl.title}
-                      className="w-full h-full object-cover rounded-[10px] group-hover:scale-105 transition-transform duration-500"
-                    />
-                  ) : (
-                    <img
-                      src={coverUrl}
-                      alt={pl.title}
-                      loading="lazy"
-                      decoding="async"
-                      onError={(e) => {
-                        e.currentTarget.src =
-                          "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
-                      }}
-                      className="w-full h-full object-cover rounded-[10px] group-hover:scale-105 transition-transform duration-500"
-                    />
-                  )}
+                  <PlaylistCover
+                    tracks={tracks}
+                    coverUrl={pl.customCover || pl.coverUrl || pl.image}
+                    fallbackUrl={coverUrl}
+                    alt={pl.title}
+                    className="w-full h-full object-cover rounded-[10px] group-hover:scale-105 transition-transform duration-500"
+                  />
+
+                  {/* Change Cover quick button on hover */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleOpenCoverPicker(pl.id, e)}
+                    className="absolute bottom-2 left-2 z-10 opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-white/20 text-[9px] font-bold text-white/90 hover:text-white hover:bg-black/95 flex items-center gap-1 transition-all cursor-pointer shadow-md"
+                    title="Change cover with local photo"
+                  >
+                    <span className="material-symbols-outlined text-[12px] text-cyan-300">photo_camera</span>
+                    <span>Cover</span>
+                  </button>
 
                   {/* Badges top-left */}
                   <div className="absolute top-1.5 left-1.5 flex items-center gap-1 z-10">
@@ -320,13 +356,25 @@ export default function PlaylistsPage() {
                       </span>
                     </button>
 
+                    {/* Change Cover Photo Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenCoverPicker(pl.id, e)}
+                      className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-white/80 hover:text-cyan-300 hover:bg-black/90 hover:scale-105 flex items-center justify-center transition-all cursor-pointer"
+                      title="Change cover with local photo"
+                    >
+                      <span className="material-symbols-outlined text-[13px] sm:text-[14px]">photo_camera</span>
+                    </button>
+
                     {/* Delete / Remove button */}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        if (pl.isCustom) {
+                        if (deletePlaylist) {
+                          deletePlaylist(pl.id);
+                        } else if (pl.isCustom) {
                           deleteCustomPlaylist(pl.id);
                         } else {
                           removeAddedPlaylist(pl.id);
@@ -529,6 +577,15 @@ export default function PlaylistsPage() {
       <SpotifyImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+      />
+
+      {/* Hidden Cover Image File Picker */}
+      <input
+        ref={coverFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleCoverFileSelected}
       />
     </div>
   );

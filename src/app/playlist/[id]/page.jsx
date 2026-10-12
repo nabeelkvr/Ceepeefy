@@ -25,7 +25,7 @@ const POPULAR_RECOMMENDED_POOL = [
 import DownloadButton from "../../../components/DownloadButton";
 import SongOptionsMenu from "../../../components/SongOptionsMenu";
 import PlaylistCover from "../../../components/PlaylistCover";
-import { formatPlaylistDuration } from "../../../utils/playlistUtils";
+import { formatPlaylistDuration, processLocalImage } from "../../../utils/playlistUtils";
 import { searchMusicTracks } from "../../../services/audioService";
 import useDebounce from "../../../hooks/useDebounce";
 import {
@@ -66,7 +66,9 @@ export default function PlaylistPage() {
     formatTime,
     customPlaylists,
     createPlaylist,
+    deletePlaylist,
     deleteCustomPlaylist,
+    updatePlaylistCover,
     selfMixes,
     deleteSelfMix,
     addTrackToPlaylist,
@@ -80,6 +82,8 @@ export default function PlaylistPage() {
     syncingPlaylistIds,
     fetchSpotifySyncPlan,
     commitSpotifySync,
+    fetchPlaylistTracksFromCloud,
+    syncAccountDataWithCloud,
     user,
   } = useMusic();
 
@@ -117,6 +121,26 @@ export default function PlaylistPage() {
   const [justAddedIds, setJustAddedIds] = useState(new Set());
   const addSongsSectionRef = useRef(null);
   const searchAddInputRef = useRef(null);
+
+  const coverImageInputRef = useRef(null);
+  const [isUpdatingCover, setIsUpdatingCover] = useState(false);
+
+  const handleCoverImageChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !playlistId) return;
+    try {
+      setIsUpdatingCover(true);
+      const dataUrl = await processLocalImage(file);
+      if (updatePlaylistCover) {
+        updatePlaylistCover(playlistId, dataUrl);
+      }
+      setRemotePlaylist((prev) => (prev ? { ...prev, coverUrl: dataUrl, customCover: dataUrl } : prev));
+    } catch (err) {
+      console.error("Failed to update playlist cover image:", err);
+    } finally {
+      setIsUpdatingCover(false);
+    }
+  };
 
   const localMatch =
     customPlaylists?.find((p) => String(p.id) === String(playlistId)) ||
@@ -159,8 +183,46 @@ export default function PlaylistPage() {
 
   const tracks = playlist?.tracks || (isCustomPlaylist ? [] : NOCTURNE_TRACKS);
 
+  // Automatic track recovery from cloud when empty on secondary computer
+  const [isRecoveringTracks, setIsRecoveringTracks] = useState(false);
+  useEffect(() => {
+    const currentTracks = playlist?.tracks || [];
+    if (isCustomPlaylist && playlistId && currentTracks.length === 0 && !isRecoveringTracks) {
+      let cancelled = false;
+      setIsRecoveringTracks(true);
+
+      const fetchCloud = fetchPlaylistTracksFromCloud || (async () => null);
+      fetchCloud(playlistId)
+        .then((cloudTracks) => {
+          if (cancelled) return;
+          if (Array.isArray(cloudTracks) && cloudTracks.length > 0) {
+            setRemotePlaylist((prev) => ({
+              ...(prev || playlist),
+              id: playlistId,
+              tracks: cloudTracks,
+              songsCount: cloudTracks.length,
+              duration: formatPlaylistDuration(cloudTracks),
+            }));
+            syncAccountDataWithCloud?.(currentUserId);
+          }
+        })
+        .catch((err) => console.warn("Cloud track auto-recovery notice:", err))
+        .finally(() => {
+          if (!cancelled) setIsRecoveringTracks(false);
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [playlistId, isCustomPlaylist, playlist?.tracks?.length]);
+
   const isSpotifyLinked = Boolean(
-    playlist?.source === "spotify_import" || playlist?.sourceMeta?.spotifyId
+    playlist?.source === "spotify_import" ||
+    playlist?.sourceMeta?.spotifyId ||
+    playlist?.sourceMeta?.spotifyUrl ||
+    playlist?.badge === "SPOTIFY" ||
+    playlist?.fidelity?.toLowerCase().includes("imported")
   );
 
   const isSyncing = Boolean(syncingPlaylistIds?.has(playlist?.id) || isFetchingSync);
@@ -590,28 +652,39 @@ export default function PlaylistPage() {
 
         <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 max-w-6xl">
           {/* Cover Art with Love button on upper right edge */}
-          <div className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group mx-auto md:mx-0">
-            {isCustomPlaylist || !playlist.coverUrl ? (
-              <PlaylistCover
-                tracks={tracks}
-                fallbackUrl={playlist.coverUrl}
-                alt={playlist.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-            ) : (
-              <img
-                src={playlist.coverUrl}
-                alt={playlist.title}
-                loading="lazy"
-                decoding="async"
-                onError={(e) => {
-                  e.currentTarget.src =
-                    "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
-                }}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-            )}
-            <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div
+            onClick={() => coverImageInputRef.current?.click()}
+            className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group mx-auto md:mx-0 cursor-pointer"
+            title="Click to change playlist cover with local photo"
+          >
+            {/* Hidden file input for cover photo */}
+            <input
+              ref={coverImageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleCoverImageChange}
+            />
+
+            <PlaylistCover
+              tracks={tracks}
+              coverUrl={playlist.customCover || playlist.coverUrl}
+              fallbackUrl={playlist.coverUrl}
+              alt={playlist.title}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+
+            {/* Hover overlay with Camera Icon and Change Cover label */}
+            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 z-20 pointer-events-none">
+              <div className="w-10 h-10 rounded-full bg-black/80 border border-white/25 flex items-center justify-center text-cyan-300 shadow-xl group-hover:scale-110 transition-transform">
+                <span className="material-symbols-outlined text-[22px]">
+                  {isUpdatingCover ? "sync" : "photo_camera"}
+                </span>
+              </div>
+              <span className="text-[10px] sm:text-[11px] font-bold text-white tracking-wider uppercase bg-black/80 px-2.5 py-0.5 rounded-full border border-white/20 shadow-md">
+                {isUpdatingCover ? "Updating..." : "Change Cover"}
+              </span>
+            </div>
 
             {/* Love / Like Button in right side upper edge of playlist image */}
             <button
@@ -955,7 +1028,11 @@ export default function PlaylistPage() {
                     deleteSelfMix(playlist.id);
                     router.push("/self-mix");
                   } else {
-                    deleteCustomPlaylist(playlist.id);
+                    if (deletePlaylist) {
+                      deletePlaylist(playlist.id);
+                    } else {
+                      deleteCustomPlaylist(playlist.id);
+                    }
                     router.push("/playlists");
                   }
                 }}
@@ -1024,16 +1101,52 @@ export default function PlaylistPage() {
                 <span className="material-symbols-outlined text-4xl text-outline">queue_music</span>
                 <p className="text-white font-bold text-base">This playlist is empty</p>
                 <p className="text-xs text-outline max-w-sm">
-                  Add recommended tracks below or search songs to build your personalized playlist.
+                  Add recommended tracks below, restore your tracks from cloud storage, or search songs to build your personalized playlist.
                 </p>
-                <button
-                  type="button"
-                  onClick={handleOpenAddSongs}
-                  className="mt-2 px-5 py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[18px]">add_circle</span>
-                  <span>Add Songs</span>
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenAddSongs}
+                    className="px-5 py-2.5 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                    <span>Add Songs</span>
+                  </button>
+                  {isSpotifyLinked && (
+                    <button
+                      type="button"
+                      disabled={isSyncing}
+                      onClick={handleStartSync}
+                      className="px-5 py-2.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 font-bold text-xs shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">{isSyncing ? "sync" : "refresh"}</span>
+                      <span>{isSyncing ? "Syncing..." : "Re-sync from Spotify"}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={isRecoveringTracks}
+                    onClick={() => {
+                      setIsRecoveringTracks(true);
+                      const fetchCloud = fetchPlaylistTracksFromCloud || (async () => null);
+                      fetchCloud(playlistId).then((cloudTracks) => {
+                        if (Array.isArray(cloudTracks) && cloudTracks.length > 0) {
+                          setRemotePlaylist((prev) => ({
+                            ...(prev || playlist),
+                            tracks: cloudTracks,
+                            songsCount: cloudTracks.length,
+                            duration: formatPlaylistDuration(cloudTracks),
+                          }));
+                        }
+                        syncAccountDataWithCloud?.(currentUserId);
+                      }).finally(() => setIsRecoveringTracks(false));
+                    }}
+                    className="px-4 py-2.5 rounded-full bg-white/5 text-white/80 border border-white/10 hover:bg-white/10 font-bold text-xs hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">cloud_download</span>
+                    <span>{isRecoveringTracks ? "Checking Cloud..." : "Sync Songs from Cloud"}</span>
+                  </button>
+                </div>
               </div>
             )
           ) : (

@@ -52,6 +52,9 @@ import {
   recordRecentlyPlayedToCloud,
   clearRecentlyPlayedInCloud,
   migrateLocalDataToSupabase,
+  fetchPlaylistTracksFromCloud,
+  saveAccountDataToCloud,
+  fetchAccountDataFromCloud,
 } from "../services/cloudStorageService";
 import {
   deleteSelfMixFromCloud,
@@ -241,34 +244,188 @@ export const MusicProvider = ({ children }) => {
       // 1. Run one-time migration if not yet completed
       await migrateLocalDataToSupabase(userId);
 
-      // 2. Query fresh cloud data from Supabase
-      const [cloudPlaylists, cloudLiked, cloudRecents, cloudSelfMixes] = await Promise.all([
+      // 2. Query fresh cloud data from Supabase (individual tables + central account snapshot)
+      const [cloudPlaylists, cloudLiked, cloudRecents, cloudSelfMixes, cloudAccountData] = await Promise.all([
         fetchUserPlaylistsFromCloud(userId),
         fetchLikedSongsFromCloud(userId),
         fetchRecentlyPlayedFromCloud(userId),
         fetchSelfMixesFromCloud(userId).catch(() => []),
+        fetchAccountDataFromCloud(userId).catch(() => null),
       ]);
 
-      // 3. Apply state updates if queries were successful
-      if (cloudPlaylists !== null) {
-        const customOnly = cloudPlaylists.filter((pl) => !pl.isSelfMix && pl.badge !== "SELF MIX");
-        const selfMixPlaylists = cloudPlaylists.filter((pl) => pl.isSelfMix || pl.badge === "SELF MIX");
-        setCustomPlaylists(customOnly);
-        if (selfMixPlaylists.length > 0) {
-          setSelfMixes((prev) => {
-            const map = new Map();
-            selfMixPlaylists.forEach((p) => map.set(String(p.id), { ...p, isSelfMix: true }));
-            (prev || []).forEach((p) => {
-              if (!map.has(String(p.id))) map.set(String(p.id), p);
+      // 3. Apply state updates non-destructively: NEVER overwrite playlists with tracks by empty playlists
+      if (cloudPlaylists !== null || cloudAccountData?.customPlaylists) {
+        setCustomPlaylists((prev) => {
+          const localList = Array.isArray(prev) ? prev : [];
+          const localMap = new Map(localList.map((p) => [String(p.id), p]));
+
+          const acctList = Array.isArray(cloudAccountData?.customPlaylists) ? cloudAccountData.customPlaylists : [];
+          const acctMap = new Map(acctList.map((p) => [String(p.id), p]));
+
+          const cloudList = Array.isArray(cloudPlaylists)
+            ? cloudPlaylists.filter((pl) => !pl.isSelfMix && pl.badge !== "SELF MIX")
+            : [];
+          const cloudMap = new Map(cloudList.map((p) => [String(p.id), p]));
+
+          const allIds = new Set([
+            ...cloudList.map((p) => String(p.id)),
+            ...acctList.map((p) => String(p.id)),
+            ...localList.map((p) => String(p.id)),
+          ]);
+
+          const merged = [];
+          for (const id of allIds) {
+            const cl = cloudMap.get(id);
+            const ac = acctMap.get(id);
+            const lc = localMap.get(id);
+            const base = cl || ac || lc;
+
+            // Prioritize non-empty tracks from any available source
+            let tracks = (cl?.tracks && cl.tracks.length > 0)
+              ? cl.tracks
+              : (ac?.tracks && ac.tracks.length > 0)
+                ? ac.tracks
+                : (lc?.tracks && lc.tracks.length > 0)
+                  ? lc.tracks
+                  : [];
+
+            // If local or account snapshot had tracks, but cloud row didn't, heal Supabase in background!
+            if (tracks.length > 0 && (!cl?.tracks || cl.tracks.length === 0)) {
+              savePlaylistToCloud({ ...base, tracks }, userId).catch(() => {});
+            }
+
+            merged.push({
+              ...base,
+              tracks,
+              songsCount: tracks.length,
+              duration: formatPlaylistDuration(tracks),
+              subtitle: base.subtitle?.replace(/\d+\s+tracks/, `${tracks.length} tracks`) || `By ${base.curator || "You"} • ${tracks.length} tracks`,
+              source: base.source || ac?.source || lc?.source || (base.badge === "SPOTIFY" ? "spotify_import" : "custom"),
+              sourceMeta: base.sourceMeta || ac?.sourceMeta || lc?.sourceMeta || null,
+              coverUrl: base.coverUrl || ac?.coverUrl || lc?.coverUrl,
+              customCover: base.customCover || ac?.customCover || lc?.customCover || base.coverUrl,
+              isCustom: true,
             });
-            return Array.from(map.values());
+          }
+
+          try {
+            const accountStorageKey = getAccountStorageKey("userData", userId);
+            const stored = JSON.parse(localStorage.getItem(accountStorageKey) || "{}");
+            localStorage.setItem(accountStorageKey, JSON.stringify({ ...stored, customPlaylists: merged }));
+          } catch {}
+
+          return merged;
+        });
+      }
+
+      // 4. Merge self-mixes across cloud tables, central account data, and local storage
+      const selfMixPlaylists = Array.isArray(cloudPlaylists)
+        ? cloudPlaylists.filter((pl) => pl.isSelfMix || pl.badge === "SELF MIX")
+        : [];
+      const acctMixes = Array.isArray(cloudAccountData?.selfMixes) ? cloudAccountData.selfMixes : [];
+
+      setSelfMixes((prev) => {
+        const localList = Array.isArray(prev) ? prev : [];
+        const localMap = new Map(localList.map((m) => [String(m.id), m]));
+        const acctMap = new Map(acctMixes.map((m) => [String(m.id), m]));
+        const cloudMap = new Map(selfMixPlaylists.map((m) => [String(m.id), m]));
+
+        const allMixIds = new Set([
+          ...selfMixPlaylists.map((m) => String(m.id)),
+          ...acctMixes.map((m) => String(m.id)),
+          ...localList.map((m) => String(m.id)),
+        ]);
+
+        const mergedMixes = [];
+        for (const id of allMixIds) {
+          const cl = cloudMap.get(id);
+          const ac = acctMap.get(id);
+          const lc = localMap.get(id);
+          const base = cl || ac || lc;
+
+          let tracks = (cl?.tracks && cl.tracks.length > 0)
+            ? cl.tracks
+            : (ac?.tracks && ac.tracks.length > 0)
+              ? ac.tracks
+              : (lc?.tracks && lc.tracks.length > 0)
+                ? lc.tracks
+                : [];
+
+          if (tracks.length > 0 && (!cl?.tracks || cl.tracks.length === 0)) {
+            savePlaylistToCloud({ ...base, tracks, isSelfMix: true }, userId).catch(() => {});
+          }
+
+          mergedMixes.push({
+            ...base,
+            isSelfMix: true,
+            isCustom: true,
+            tracks,
+            songsCount: tracks.length,
+            duration: formatPlaylistDuration(tracks),
+            subtitle: `By ${base.curator || "You"} • ${tracks.length} tracks`,
           });
         }
+
+        // Also merge orphan cloud tracks from self_mixes storage table
+        if (Array.isArray(cloudSelfMixes) && cloudSelfMixes.length > 0) {
+          const existingTrackIds = new Set(
+            mergedMixes.flatMap((m) => (m.tracks || []).map((t) => String(t.id)))
+          );
+          const orphanCloudTracks = cloudSelfMixes.filter(
+            (cm) => !existingTrackIds.has(String(cm.id))
+          );
+          if (orphanCloudTracks.length > 0) {
+            const cloudArchivePlaylist = {
+              id: "cloud-archive-playlist",
+              title: "Cloud Audio Tracks",
+              subtitle: `By You • ${orphanCloudTracks.length} tracks`,
+              description: "Audio tracks synced from Supabase cloud storage",
+              curator: "You",
+              coverUrl: orphanCloudTracks[0]?.cover_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+              tracks: orphanCloudTracks.map((cm) => ({
+                id: cm.id,
+                title: cm.title,
+                artist: `@${cm.owner || userId}`,
+                album: "Cloud Audio",
+                audioUrl: cm.audio_url,
+                duration: cm.duration || 180,
+                durationFormatted: cm.duration_formatted || "3:00",
+                coverUrl: cm.cover_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+                isCloud: true,
+                isLocal: false,
+                source: "supabase-cloud",
+                fileName: cm.file_name,
+                fileSize: cm.file_size,
+                badge: "Cloud Mix",
+                badgeType: "cyan",
+              })),
+              isSelfMix: true,
+              isCustom: true,
+            };
+            return [cloudArchivePlaylist, ...mergedMixes.filter((m) => m.id !== "cloud-archive-playlist")];
+          }
+        }
+
+        return mergedMixes;
+      });
+
+      // 5. Merge liked songs
+      if (cloudLiked !== null || cloudAccountData?.likedSongIds) {
+        const mergedLikedIds = Array.from(new Set([
+          ...(cloudLiked?.likedSongIds || []),
+          ...(cloudAccountData?.likedSongIds || []),
+        ]));
+        const mergedLikedMap = {
+          ...(cloudAccountData?.likedSongsMap || {}),
+          ...(cloudLiked?.likedSongsMap || {}),
+        };
+        if (mergedLikedIds.length > 0) {
+          setLikedSongIds(mergedLikedIds);
+          setLikedSongsMap(mergedLikedMap);
+        }
       }
-      if (cloudLiked !== null) {
-        setLikedSongIds(cloudLiked.likedSongIds || []);
-        setLikedSongsMap(cloudLiked.likedSongsMap || {});
-      }
+
+      // 6. Recently played tracks
       if (cloudRecents !== null) {
         const valid = cloudRecents
           .map(normalizeTrack)
@@ -276,50 +433,10 @@ export const MusicProvider = ({ children }) => {
         setRecentlyPlayedTracks(valid);
         setRecentlyPlayed(valid.map((t) => t.id));
       }
-      if (Array.isArray(cloudSelfMixes) && cloudSelfMixes.length > 0) {
-        setSelfMixes((prev) => {
-          const currentList = Array.isArray(prev) ? prev : [];
-          const existingTrackIds = new Set(
-            currentList.flatMap((m) => (m.tracks || []).map((t) => String(t.id)))
-          );
-          const orphanCloudTracks = cloudSelfMixes.filter(
-            (cm) => !existingTrackIds.has(String(cm.id))
-          );
-          if (orphanCloudTracks.length === 0) return currentList;
 
-          const cloudArchivePlaylist = {
-            id: "cloud-archive-playlist",
-            title: "Cloud Audio Tracks",
-            subtitle: `By You • ${orphanCloudTracks.length} tracks`,
-            description: "Audio tracks synced from Supabase cloud storage",
-            curator: "You",
-            coverUrl: orphanCloudTracks[0]?.cover_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-            tracks: orphanCloudTracks.map((cm) => ({
-              id: cm.id,
-              title: cm.title,
-              artist: `@${cm.owner || userId}`,
-              album: "Cloud Audio",
-              audioUrl: cm.audio_url,
-              duration: cm.duration || 180,
-              durationFormatted: cm.duration_formatted || "3:00",
-              coverUrl: cm.cover_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-              isCloud: true,
-              isLocal: false,
-              source: "supabase-cloud",
-              fileName: cm.file_name,
-              fileSize: cm.file_size,
-              badge: "Cloud Mix",
-              badgeType: "cyan",
-            })),
-            isSelfMix: true,
-            isCustom: true,
-          };
-
-          return [
-            cloudArchivePlaylist,
-            ...currentList.filter((m) => m.id !== "cloud-archive-playlist"),
-          ];
-        });
+      // 7. Pinned playlists
+      if (Array.isArray(cloudAccountData?.pinnedPlaylistIds) && cloudAccountData.pinnedPlaylistIds.length > 0) {
+        setPinnedPlaylistIds((prev) => Array.from(new Set([...(prev || []), ...cloudAccountData.pinnedPlaylistIds])));
       }
     } catch (err) {
       console.error("[MusicContext] Cloud sync error:", err);
@@ -762,6 +879,14 @@ export const MusicProvider = ({ children }) => {
       localStorage.setItem("nocturne_liked_map", JSON.stringify(nextLikedMap));
       localStorage.setItem("nocturne_custom_playlists", JSON.stringify(nextPlaylists));
       localStorage.setItem("nocturne_recent_tracks", JSON.stringify(nextRecents));
+
+      // Debounce saving full account snapshot to Supabase for seamless cross-computer sync
+      if (typeof window !== "undefined") {
+        if (window._persistCloudTimer) clearTimeout(window._persistCloudTimer);
+        window._persistCloudTimer = setTimeout(() => {
+          saveAccountDataToCloud(accountData, DEFAULT_USER_ID).catch(() => {});
+        }, 1000);
+      }
     } catch (e) {
       console.warn("Failed to write account data to localStorage:", e);
     }
@@ -1025,6 +1150,7 @@ export const MusicProvider = ({ children }) => {
       badgeVariant: "emerald",
       stat: `${safeTracks.length} tracks`,
       coverUrl: finalCover,
+      customCover: finalCover,
       tracks: safeTracks,
       isCustom: true,
       source: "spotify_import",
@@ -1204,13 +1330,164 @@ export const MusicProvider = ({ children }) => {
   };
 
   const deleteCustomPlaylist = (id) => {
+    if (!id) return;
     const currentUserId = getAccountUserId(user);
-    setCustomPlaylists((prev) => prev.filter((p) => p.id !== id));
+    const idStr = String(id);
 
-    // Delete from Supabase cloud
-    deletePlaylistFromCloud(id, currentUserId).catch((err) => {
+    // 1. Remove from customPlaylists immediately and persist
+    setCustomPlaylists((prev) => {
+      const next = prev.filter((p) => String(p.id) !== idStr);
+      try {
+        localStorage.setItem(
+          getAccountStorageKey("ceepeefy_custom_playlists", currentUserId),
+          JSON.stringify(next)
+        );
+      } catch { }
+      try {
+        persistAccountData({ customPlaylists: next });
+      } catch { }
+      return next;
+    });
+
+    // 2. Remove from addedPlaylists immediately and persist
+    setAddedPlaylists((prev) => {
+      const next = prev.filter((p) => String(p.id) !== idStr);
+      try {
+        localStorage.setItem("ceepeefy_added_playlists", JSON.stringify(next));
+      } catch { }
+      return next;
+    });
+
+    // 3. Remove from pinnedPlaylistIds immediately and persist
+    setPinnedPlaylistIds((prev) => {
+      const next = prev.filter((pid) => String(pid) !== idStr);
+      try {
+        localStorage.setItem("ceepeefy_pinned_playlists", JSON.stringify(next));
+      } catch { }
+      return next;
+    });
+
+    // 4. Remove from selfMixes in case it was a selfMix
+    setSelfMixes((prev) => {
+      const next = prev.filter((m) => String(m.id) !== idStr);
+      try {
+        localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(next));
+        persistAccountData({ selfMixes: next });
+      } catch { }
+      return next;
+    });
+
+    // 5. Clean up local title/cover overrides
+    try {
+      const titles = JSON.parse(localStorage.getItem("ceepeefy_playlist_titles") || "{}");
+      if (titles[idStr]) {
+        delete titles[idStr];
+        localStorage.setItem("ceepeefy_playlist_titles", JSON.stringify(titles));
+      }
+      const covers = JSON.parse(localStorage.getItem("ceepeefy_playlist_covers") || "{}");
+      if (covers[idStr]) {
+        delete covers[idStr];
+        localStorage.setItem("ceepeefy_playlist_covers", JSON.stringify(covers));
+      }
+    } catch { }
+
+    // 6. Delete from Supabase cloud
+    deletePlaylistFromCloud(idStr, currentUserId).catch((err) => {
       console.error("[MusicContext] Failed to delete playlist from Supabase:", err);
     });
+  };
+
+  const deletePlaylist = (id) => {
+    deleteCustomPlaylist(id);
+  };
+
+  const updatePlaylistCover = (id, newCoverUrl) => {
+    if (!id || !newCoverUrl) return false;
+    const currentUserId = getAccountUserId(user);
+    const idStr = String(id);
+
+    // 1. Update in customPlaylists
+    let foundInCustom = false;
+    let updatedCustomPlaylist = null;
+    setCustomPlaylists((prev) => {
+      const idx = prev.findIndex((p) => String(p.id) === idStr);
+      if (idx !== -1) {
+        foundInCustom = true;
+        const current = prev[idx];
+        updatedCustomPlaylist = {
+          ...current,
+          coverUrl: newCoverUrl,
+          customCover: newCoverUrl,
+        };
+        const next = [...prev];
+        next[idx] = updatedCustomPlaylist;
+        try {
+          localStorage.setItem(
+            getAccountStorageKey("ceepeefy_custom_playlists", currentUserId),
+            JSON.stringify(next)
+          );
+          persistAccountData({ customPlaylists: next });
+        } catch { }
+        return next;
+      }
+      return prev;
+    });
+
+    if (foundInCustom && updatedCustomPlaylist) {
+      savePlaylistToCloud(updatedCustomPlaylist, currentUserId).catch((err) => {
+        console.warn("[MusicContext] Failed to sync updated cover to Supabase:", err);
+      });
+    }
+
+    // 2. Update in selfMixes
+    let foundInSelfMix = false;
+    let updatedSelfMix = null;
+    setSelfMixes((prev) => {
+      const idx = prev.findIndex((m) => String(m.id) === idStr);
+      if (idx !== -1) {
+        foundInSelfMix = true;
+        const current = prev[idx];
+        updatedSelfMix = {
+          ...current,
+          coverUrl: newCoverUrl,
+          customCover: newCoverUrl,
+        };
+        const next = [...prev];
+        next[idx] = updatedSelfMix;
+        try {
+          localStorage.setItem("ceepeefy_self_mixes", JSON.stringify(next));
+          persistAccountData({ selfMixes: next });
+        } catch { }
+        return next;
+      }
+      return prev;
+    });
+
+    if (foundInSelfMix && updatedSelfMix) {
+      savePlaylistToCloud(updatedSelfMix, currentUserId).catch((err) => {
+        console.warn("[MusicContext] Failed to sync updated self mix cover to Supabase:", err);
+      });
+    }
+
+    // 3. Update in addedPlaylists
+    setAddedPlaylists((prev) => {
+      const next = prev.map((p) =>
+        String(p.id) === idStr ? { ...p, coverUrl: newCoverUrl, customCover: newCoverUrl } : p
+      );
+      try {
+        localStorage.setItem("ceepeefy_added_playlists", JSON.stringify(next));
+      } catch { }
+      return next;
+    });
+
+    // 4. Save to persistent overrides map (works across all playlist types)
+    try {
+      const storedOverrides = JSON.parse(localStorage.getItem("ceepeefy_playlist_covers") || "{}");
+      storedOverrides[idStr] = newCoverUrl;
+      localStorage.setItem("ceepeefy_playlist_covers", JSON.stringify(storedOverrides));
+    } catch { }
+
+    return true;
   };
 
   const renamePlaylist = (id, newTitle) => {
@@ -3577,6 +3854,8 @@ export const MusicProvider = ({ children }) => {
         fetchSpotifySyncPlan,
         commitSpotifySync,
         deleteCustomPlaylist,
+        deletePlaylist,
+        updatePlaylistCover,
         renamePlaylist,
         bumpPlaylistToTop,
         createSelfMix,
@@ -3584,6 +3863,8 @@ export const MusicProvider = ({ children }) => {
         addLocalTracksToSelfMix,
         addTrackToPlaylist,
         removeTrackFromPlaylist,
+        syncAccountDataWithCloud,
+        fetchPlaylistTracksFromCloud,
 
         // Offline storage & playback helpers
         offlineTrackIds,

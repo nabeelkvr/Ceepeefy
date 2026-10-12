@@ -89,26 +89,13 @@ export default function PlaylistCard({
             : "ring-1 ring-white/5 group-hover:ring-white/10"
         }`}
       >
-        {playlist.isCustom || !playlist.coverUrl ? (
-          <PlaylistCover
-            tracks={tracks}
-            fallbackUrl={coverUrl}
-            alt={playlist.title}
-            className="w-full h-full object-cover rounded-[10px] group-hover:scale-105 transition-transform duration-500"
-          />
-        ) : (
-          <img
-            src={coverUrl}
-            alt={playlist.title}
-            loading="lazy"
-            decoding="async"
-            onError={(e) => {
-              e.currentTarget.src =
-                "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
-            }}
-            className="w-full h-full object-cover rounded-[10px] group-hover:scale-105 transition-transform duration-500"
-          />
-        )}
+        <PlaylistCover
+          tracks={tracks}
+          coverUrl={playlist.customCover || playlist.coverUrl || coverUrl}
+          fallbackUrl={coverUrl}
+          alt={playlist.title}
+          className="w-full h-full object-cover rounded-[10px] group-hover:scale-105 transition-transform duration-500"
+        />
 
         {/* Floating Play Button on Hover */}
         <div

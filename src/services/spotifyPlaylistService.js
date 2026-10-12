@@ -166,12 +166,23 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
       if (nextDataMatch) {
         const json = JSON.parse(nextDataMatch[1]);
         const entity = json?.props?.pageProps?.state?.data?.entity;
-
         if (entity && Array.isArray(entity.trackList)) {
-          const coverArt =
+          let coverArt =
             entity.coverArt?.sources?.[0]?.url ||
+            entity.coverArt?.sources?.[entity.coverArt?.sources?.length - 1]?.url ||
             entity.visualIdentity?.image?.[0]?.url ||
+            (Array.isArray(entity.images) && entity.images[0]?.url) ||
             "";
+
+          if (!coverArt && html) {
+            const ogMatch =
+              html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+              html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) ||
+              html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+            if (ogMatch && ogMatch[1]) {
+              coverArt = ogMatch[1];
+            }
+          }
 
           const validTracks = entity.trackList
             .map((t, index) => {

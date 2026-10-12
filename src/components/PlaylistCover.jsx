@@ -9,23 +9,61 @@ import React, { useState } from "react";
  * - 2-3 tracks: split 50/50 vertically (left: song 1, right: song 2)
  * - 4+ tracks: 2x2 collage (4 quadrants: song 1, 2, 3, 4)
  */
-export default function PlaylistCover({ tracks = [], fallbackUrl = "", className = "", alt = "Playlist Cover" }) {
+export default function PlaylistCover({
+  tracks = [],
+  fallbackUrl = "",
+  coverUrl = "",
+  className = "",
+  alt = "Playlist Cover",
+}) {
   const [loadedMap, setLoadedMap] = useState({});
 
   const validCovers = (tracks || [])
     .map((t) => t?.coverUrl || t?.thumbnail || t?.image)
     .filter(Boolean);
 
-  const defaultCover =
-    fallbackUrl ||
-    "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
+  const effectiveCover = coverUrl || fallbackUrl || "";
+
+  const isGenericPlaceholder =
+    !effectiveCover ||
+    effectiveCover.includes("images.unsplash.com/photo-1514525253161-7a46d19cd819") ||
+    effectiveCover.includes("images.unsplash.com/photo-1518609878373-06d740f60d8b") ||
+    effectiveCover.includes("images.unsplash.com/photo-1511671782779-c97d3d27a1d4") ||
+    effectiveCover.includes("images.unsplash.com/photo-1470225620780-dba8ba36b745");
 
   const handleLoad = (idx) => {
     setLoadedMap((prev) => ({ ...prev, [idx]: true }));
   };
 
+  // Case: Explicit cover image exists (from Spotify import, local photo upload, etc.)
+  if (effectiveCover && !isGenericPlaceholder) {
+    return (
+      <div className={`relative w-full h-full overflow-hidden bg-surface-container-highest ${className}`}>
+        {!loadedMap[0] && (
+          <div className="absolute inset-0 w-full h-full skeleton-shimmer bg-white/10 z-0" />
+        )}
+        <img
+          src={effectiveCover}
+          alt={alt}
+          loading="lazy"
+          onLoad={() => handleLoad(0)}
+          onError={(e) => {
+            e.currentTarget.src =
+              "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
+          }}
+          className={`w-full h-full object-cover transition-opacity duration-300 relative z-10 ${
+            loadedMap[0] ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      </div>
+    );
+  }
+
   // Case 0: No tracks, show fallback
   if (validCovers.length === 0) {
+    const defaultCover =
+      effectiveCover ||
+      "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
     return (
       <div className={`relative w-full h-full overflow-hidden bg-surface-container-highest ${className}`}>
         {!loadedMap[0] && (
