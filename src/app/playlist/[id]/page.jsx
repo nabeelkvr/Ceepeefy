@@ -25,8 +25,12 @@ const POPULAR_RECOMMENDED_POOL = [
 import DownloadButton from "../../../components/DownloadButton";
 import SongOptionsMenu from "../../../components/SongOptionsMenu";
 import PlaylistCover from "../../../components/PlaylistCover";
-import { formatPlaylistDuration, processLocalImage } from "../../../utils/playlistUtils";
-import { searchMusicTracks } from "../../../services/audioService";
+import {
+  formatPlaylistDuration,
+  processLocalImage,
+  PLAYLIST_CATEGORIES,
+  getPlaylistCategory,
+} from "../../../utils/playlistUtils";
 import useDebounce from "../../../hooks/useDebounce";
 import {
   saveLocalAudioFile,
@@ -78,6 +82,7 @@ export default function PlaylistPage() {
     downloadPlaylist,
     removePlaylistOffline,
     renamePlaylist,
+    updatePlaylistCategory,
     bumpPlaylistToTop,
     syncingPlaylistIds,
     fetchSpotifySyncPlan,
@@ -86,6 +91,8 @@ export default function PlaylistPage() {
     syncAccountDataWithCloud,
     user,
   } = useMusic();
+
+  const [isMoveToMenuOpen, setIsMoveToMenuOpen] = useState(false);
 
   const currentUserId = getAccountUserId(user);
 
@@ -620,6 +627,18 @@ export default function PlaylistPage() {
     };
   }, [debouncedSearchQuery]);
 
+  const currentCategory = getPlaylistCategory(playlist);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (isMoveToMenuOpen && !e.target.closest('[data-moveto-container="true"]')) {
+        setIsMoveToMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isMoveToMenuOpen]);
+
   const totalDurationStr = formatPlaylistDuration(tracks);
 
   if (isLoadingRemote && !localMatch && !remotePlaylist) {
@@ -671,6 +690,7 @@ export default function PlaylistPage() {
               coverUrl={playlist.customCover || playlist.coverUrl}
               fallbackUrl={playlist.coverUrl}
               alt={playlist.title}
+              isSpotify={Boolean(playlist.badge === "SPOTIFY" || playlist.source === "spotify_import" || playlist.sourceMeta?.spotifyId)}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
 
@@ -719,6 +739,10 @@ export default function PlaylistPage() {
               </span>
               <span className="px-2 py-0.5 rounded-md bg-tertiary/15 text-tertiary text-[9px] sm:text-[10px] font-mono font-bold">
                 {playlist.spec || "24-Bit • 192kHz"}
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-primary/15 text-primary text-[9px] sm:text-[10px] font-mono font-bold flex items-center gap-1">
+                <span className="material-symbols-outlined text-[11px]">folder</span>
+                {currentCategory}
               </span>
             </div>
 
@@ -980,6 +1004,57 @@ export default function PlaylistPage() {
                 </span>
               </button>
             </>
+          )}
+
+          {/* Move to Category Button */}
+          {isCustomPlaylist && (
+            <div className="relative" data-moveto-container="true">
+              <button
+                type="button"
+                onClick={() => setIsMoveToMenuOpen(!isMoveToMenuOpen)}
+                aria-label="Move to Category"
+                title={`Move to Category (Currently ${currentCategory})`}
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border transition-all active:scale-90 cursor-pointer flex-shrink-0 ${
+                  isMoveToMenuOpen
+                    ? "bg-primary text-black border-primary shadow-[0_0_15px_rgba(76,215,246,0.4)]"
+                    : "bg-surface-container-high/60 text-outline hover:text-primary hover:bg-surface-container border-white/10 hover:border-primary/40 shadow-sm"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[18px] sm:text-[20px]">drive_file_move</span>
+              </button>
+
+              {isMoveToMenuOpen && (
+                <div className="absolute top-full left-0 mt-2 z-50 w-44 bg-surface-container-highest/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl py-1.5 max-h-56 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1 text-[10px] font-bold text-outline uppercase tracking-wider border-b border-white/10 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[12px] text-primary">drive_file_move</span>
+                    <span>Move to</span>
+                  </div>
+                  {PLAYLIST_CATEGORIES.map((catName) => {
+                    const isCurrent = currentCategory === catName;
+                    return (
+                      <button
+                        key={catName}
+                        type="button"
+                        onClick={() => {
+                          updatePlaylistCategory(playlist.id, catName);
+                          setIsMoveToMenuOpen(false);
+                        }}
+                        className={`w-full px-3 py-1.5 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                          isCurrent
+                            ? "bg-primary/20 text-primary font-bold"
+                            : "text-white/90 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        <span>{catName}</span>
+                        {isCurrent && (
+                          <span className="material-symbols-outlined text-[14px] text-primary">check</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Delete Playlist Button */}

@@ -1054,7 +1054,7 @@ export const MusicProvider = ({ children }) => {
     persistAccountData();
   }, [likedSongIds, likedSongsMap, customPlaylists, recentlyPlayedTracks, selfMixes, user]);
 
-  const createPlaylist = (title) => {
+  const createPlaylist = (title, category = "Mixed") => {
     const currentUserId = getAccountUserId(user);
     if (!user || currentUserId !== DEFAULT_USER_ID) {
       openAuthModal("login");
@@ -1062,6 +1062,7 @@ export const MusicProvider = ({ children }) => {
     }
     const count = customPlaylists.length + 1;
     const cleanTitle = title?.trim() || `My Playlist #${count}`;
+    const cleanCategory = category?.trim() || "Mixed";
     const id = `playlist-custom-${Date.now()}`;
     const coverOptions = [
       "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
@@ -1089,8 +1090,15 @@ export const MusicProvider = ({ children }) => {
       stat: "1 Like",
       coverUrl,
       tracks: [],
-      isCustom: true
+      isCustom: true,
+      category: cleanCategory,
     };
+
+    try {
+      const stored = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+      stored[id] = cleanCategory;
+      localStorage.setItem("ceepeefy_playlist_categories", JSON.stringify(stored));
+    } catch {}
 
     setCustomPlaylists((prev) => [newPlaylist, ...prev]);
 
@@ -1108,10 +1116,12 @@ export const MusicProvider = ({ children }) => {
     coverUrl,
     tracks,
     sourceMeta,
+    category = "Mixed",
   }) => {
     const currentUserId = getAccountUserId(user);
     const count = customPlaylists.length + 1;
     const cleanTitle = title?.trim() || `Imported Playlist #${count}`;
+    const cleanCategory = category?.trim() || "Mixed";
     const id = `playlist-custom-${Date.now()}`;
 
     const safeTracks = Array.isArray(tracks)
@@ -1153,9 +1163,16 @@ export const MusicProvider = ({ children }) => {
       customCover: finalCover,
       tracks: safeTracks,
       isCustom: true,
+      category: cleanCategory,
       source: "spotify_import",
       sourceMeta: sourceMeta || null,
     };
+
+    try {
+      const stored = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+      stored[id] = cleanCategory;
+      localStorage.setItem("ceepeefy_playlist_categories", JSON.stringify(stored));
+    } catch {}
 
     setCustomPlaylists((prev) => {
       const updated = [newPlaylist, ...prev];
@@ -1171,6 +1188,56 @@ export const MusicProvider = ({ children }) => {
     });
 
     return newPlaylist;
+  };
+
+  const updatePlaylistCategory = (id, category) => {
+    if (!id || !category) return false;
+    const cleanCategory = String(category).trim();
+    const currentUserId = getAccountUserId(user);
+    const idStr = String(id);
+
+    // Save override to localStorage
+    try {
+      const storedCategories = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+      storedCategories[idStr] = cleanCategory;
+      localStorage.setItem("ceepeefy_playlist_categories", JSON.stringify(storedCategories));
+    } catch { }
+
+    // 1. Check customPlaylists
+    let foundInCustom = false;
+    let updatedCustomPlaylist = null;
+    setCustomPlaylists((prev) => {
+      const idx = prev.findIndex((p) => String(p.id) === idStr);
+      if (idx !== -1) {
+        foundInCustom = true;
+        const current = prev[idx];
+        updatedCustomPlaylist = {
+          ...current,
+          category: cleanCategory,
+        };
+        const next = [...prev];
+        next[idx] = updatedCustomPlaylist;
+        try {
+          persistAccountData({ customPlaylists: next });
+        } catch { }
+        return next;
+      }
+      return prev;
+    });
+
+    if (foundInCustom && updatedCustomPlaylist) {
+      savePlaylistToCloud(updatedCustomPlaylist, currentUserId).catch((err) => {
+        console.warn("[MusicContext] Failed to sync updated category to Supabase:", err);
+      });
+      return true;
+    }
+
+    // 2. Check addedPlaylists
+    setAddedPlaylists((prev) =>
+      prev.map((p) => (String(p.id) === idStr ? { ...p, category: cleanCategory } : p))
+    );
+
+    return true;
   };
 
   // Set of playlist IDs currently undergoing Spotify synchronization
@@ -3857,6 +3924,7 @@ export const MusicProvider = ({ children }) => {
         deletePlaylist,
         updatePlaylistCover,
         renamePlaylist,
+        updatePlaylistCategory,
         bumpPlaylistToTop,
         createSelfMix,
         deleteSelfMix,

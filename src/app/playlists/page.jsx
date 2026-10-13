@@ -8,6 +8,8 @@ import {
   formatPlaylistDuration,
   formatPlaylistTracksAndDurationUppercase,
   processLocalImage,
+  PLAYLIST_CATEGORIES,
+  getPlaylistCategory,
 } from "../../utils/playlistUtils";
 import PlaylistCover from "../../components/PlaylistCover";
 import SpotifyImportModal from "../../components/SpotifyImportModal";
@@ -29,19 +31,35 @@ export default function PlaylistsPage() {
     isPlaylistPinned,
     togglePinPlaylist,
     renamePlaylist,
+    updatePlaylistCategory,
     bumpPlaylistToTop,
   } = useMusic();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [selectedCreateCategory, setSelectedCreateCategory] = useState("Mixed");
+  const [isCreateMoveToOpen, setIsCreateMoveToOpen] = useState(false);
+  const [movingPlaylistId, setMovingPlaylistId] = useState(null);
   const [editingPlaylistId, setEditingPlaylistId] = useState(null);
   const [editingTitle, setEditingTitle] = useState("");
 
   const coverFileInputRef = React.useRef(null);
   const [targetCoverPlaylistId, setTargetCoverPlaylistId] = useState(null);
   const [isProcessingCover, setIsProcessingCover] = useState(false);
+
+  // Close Move to dropdowns on outside click
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (movingPlaylistId && !e.target.closest('[data-moveto-container="true"]')) {
+        setMovingPlaylistId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [movingPlaylistId]);
 
   const handleOpenCoverPicker = (playlistId, e) => {
     e?.preventDefault();
@@ -70,17 +88,26 @@ export default function PlaylistsPage() {
     }
   };
 
-  // Unified playlist collection
+  // Unified playlist collection with resolved category
   const allPlaylists = React.useMemo(() => {
+    let storedCategories = {};
+    if (typeof window !== "undefined") {
+      try {
+        storedCategories = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+      } catch {}
+    }
+
     const map = new Map();
     // 1. Add user custom playlists
     (customPlaylists || []).filter((pl) => !pl.isSelfMix).forEach((pl) => {
-      map.set(String(pl.id), { ...pl, isCustom: true });
+      const cat = getPlaylistCategory(pl);
+      map.set(String(pl.id), { ...pl, isCustom: true, category: cat });
     });
     // 2. Add pinned / added playlists (e.g. from search / curated)
     (addedPlaylists || []).filter((pl) => !pl.isSelfMix).forEach((pl) => {
       if (!map.has(String(pl.id))) {
-        map.set(String(pl.id), pl);
+        const cat = getPlaylistCategory(pl);
+        map.set(String(pl.id), { ...pl, category: cat });
       }
     });
     const list = Array.from(map.values());
@@ -96,6 +123,15 @@ export default function PlaylistsPage() {
 
   const filteredPlaylists = React.useMemo(() => {
     return allPlaylists.filter((pl) => {
+      // Category filter
+      if (activeCategory !== "All") {
+        const plCat = pl.category || "Mixed";
+        if (plCat !== activeCategory) {
+          return false;
+        }
+      }
+
+      // Search query filter
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
       return (
@@ -105,14 +141,15 @@ export default function PlaylistsPage() {
         pl.description?.toLowerCase().includes(q)
       );
     });
-  }, [allPlaylists, searchQuery]);
+  }, [allPlaylists, activeCategory, searchQuery]);
 
   const totalCount = allPlaylists.length;
 
   const handleCreateSubmit = (e) => {
     e?.preventDefault();
-    const created = createPlaylist(newTitle);
+    const created = createPlaylist(newTitle, selectedCreateCategory);
     setNewTitle("");
+    setIsCreateMoveToOpen(false);
     setShowCreateModal(false);
     if (created?.id) {
       router.push(`/playlist/${created.id}`);
@@ -206,6 +243,8 @@ export default function PlaylistsPage() {
             <button
               onClick={() => {
                 setNewTitle("");
+                setSelectedCreateCategory(activeCategory === "All" ? "Mixed" : activeCategory);
+                setIsCreateMoveToOpen(false);
                 setShowCreateModal(true);
               }}
               className="flex items-center gap-1.5 px-3.5 py-1.5 md:px-4 md:py-2 rounded-full bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_15px_rgba(76,215,246,0.4)] hover:brightness-110 active:scale-95 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer"
@@ -215,6 +254,26 @@ export default function PlaylistsPage() {
             </button>
           </div>
         </div>
+
+        {/* Category Filter Pills (Image 1 Structure: All, Mixed, Malayalam, Hindi, Tamil, English, Phonks, Bgms, Others) */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-2 pb-0.5">
+          {["All", ...PLAYLIST_CATEGORIES].map((cat) => {
+            const isSelected = activeCategory === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setActiveCategory(cat)}
+                className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all select-none whitespace-nowrap cursor-pointer min-h-[36px] sm:min-h-[40px] flex items-center justify-center ${isSelected
+                  ? "bg-white text-surface-container-lowest shadow-md font-bold scale-105"
+                  : "bg-surface-container/70 text-on-surface-variant hover:text-white hover:bg-surface-container-high border border-white/10"
+                  }`}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Unified Playlists Library Section */}
@@ -223,7 +282,7 @@ export default function PlaylistsPage() {
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-[20px]">queue_music</span>
             <h2 className="text-lg md:text-xl font-black text-white tracking-tight">
-              All Collections
+              {activeCategory === "All" ? "All Collections" : `${activeCategory} Collections`}
             </h2>
             <span className="text-[10px] md:text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary font-mono font-bold">
               {filteredPlaylists.length}
@@ -240,6 +299,8 @@ export default function PlaylistsPage() {
           <div
             onClick={() => {
               setNewTitle("");
+              setSelectedCreateCategory(activeCategory === "All" ? "Mixed" : activeCategory);
+              setIsCreateMoveToOpen(false);
               setShowCreateModal(true);
             }}
             className="w-full flex flex-col group cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1"
@@ -255,7 +316,7 @@ export default function PlaylistsPage() {
 
             <div className="flex flex-col min-w-0 mt-1.5">
               <p className="text-[10px] sm:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate leading-tight">
-                CUSTOM COLLECTION
+                {activeCategory === "All" ? "CUSTOM COLLECTION" : `${activeCategory.toUpperCase()} COLLECTION`}
               </p>
               <h3 className="text-xs sm:text-[13px] font-bold text-white group-hover:text-primary transition-colors truncate mt-0.5 leading-tight">
                 Create New Playlist
@@ -280,6 +341,7 @@ export default function PlaylistsPage() {
               "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
 
             const headerSubtitle = formatPlaylistTracksAndDurationUppercase(tracks, pl.duration);
+            const playlistCategory = pl.category || "Mixed";
 
             return (
               <div
@@ -301,6 +363,7 @@ export default function PlaylistsPage() {
                     coverUrl={pl.customCover || pl.coverUrl || pl.image}
                     fallbackUrl={coverUrl}
                     alt={pl.title}
+                    isSpotify={Boolean(pl.badge === "SPOTIFY" || pl.source === "spotify_import" || pl.sourceMeta?.spotifyId)}
                     className="w-full h-full object-cover rounded-[10px] group-hover:scale-105 transition-transform duration-500"
                   />
 
@@ -366,6 +429,67 @@ export default function PlaylistsPage() {
                       <span className="material-symbols-outlined text-[13px] sm:text-[14px]">photo_camera</span>
                     </button>
 
+                    {/* Move to Category Button with Dropdown */}
+                    <div className="relative" data-moveto-container="true">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setMovingPlaylistId(movingPlaylistId === pl.id ? null : pl.id);
+                        }}
+                        className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full backdrop-blur-md border flex items-center justify-center transition-all cursor-pointer ${movingPlaylistId === pl.id
+                            ? "bg-primary text-black border-primary shadow-[0_0_10px_rgba(76,215,246,0.4)]"
+                            : "bg-black/70 text-white/80 border-white/10 hover:text-cyan-300 hover:bg-black/90 hover:scale-105"
+                          }`}
+                        title={`Move to category (currently ${playlistCategory})`}
+                      >
+                        <span className="material-symbols-outlined text-[13px] sm:text-[14px]">
+                          drive_file_move
+                        </span>
+                      </button>
+
+                      {/* Dropdown displaying category names */}
+                      {movingPlaylistId === pl.id && (
+                        <div
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          className="absolute right-0 top-full mt-1.5 z-50 w-44 bg-surface-container-highest/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl py-1.5 max-h-56 overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
+                        >
+                          <div className="px-3 py-1 text-[10px] font-bold text-outline uppercase tracking-wider border-b border-white/10 flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-[12px] text-primary">drive_file_move</span>
+                            <span>Move to</span>
+                          </div>
+                          {PLAYLIST_CATEGORIES.map((catName) => {
+                            const isCurrent = playlistCategory === catName;
+                            return (
+                              <button
+                                key={catName}
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  updatePlaylistCategory(pl.id, catName);
+                                  setMovingPlaylistId(null);
+                                }}
+                                className={`w-full px-3 py-1.5 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${isCurrent
+                                    ? "bg-primary/20 text-primary font-bold"
+                                    : "text-white/90 hover:bg-white/10 hover:text-white"
+                                  }`}
+                              >
+                                <span>{catName}</span>
+                                {isCurrent && (
+                                  <span className="material-symbols-outlined text-[14px] text-primary">check</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Delete / Remove button */}
                     <button
                       type="button"
@@ -420,12 +544,12 @@ export default function PlaylistsPage() {
 
                 {/* Details: Uppercase Subtitle Above Title + Playlist Name */}
                 <div className="flex flex-col min-w-0 mt-1.5">
-                  {/* Row 1: Uppercase format above playlist name in recent played songs artist style */}
+                  {/* Row 1: Uppercase format above playlist name with Category prefix */}
                   <p
                     className="text-[10px] sm:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate leading-tight"
-                    title={headerSubtitle}
+                    title={`${playlistCategory.toUpperCase()} • ${headerSubtitle}`}
                   >
-                    {headerSubtitle}
+                    <span className="text-primary/90 font-bold">{playlistCategory.toUpperCase()}</span> • {headerSubtitle}
                   </p>
 
                   {/* Row 2: Playlist Name (double click to edit if custom) */}
@@ -485,6 +609,33 @@ export default function PlaylistsPage() {
               </div>
             );
           })}
+
+          {/* Empty state when category or filter has no playlists */}
+          {filteredPlaylists.length === 0 && (
+            <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-14 h-14 rounded-full bg-surface-container-high/80 border border-white/10 flex items-center justify-center text-primary mb-3 shadow-lg">
+                <span className="material-symbols-outlined text-[28px]">drive_file_move</span>
+              </div>
+              <h3 className="text-base font-bold text-white mb-1">
+                No playlists in "{activeCategory}" yet
+              </h3>
+              <p className="text-xs text-on-surface-variant max-w-sm mb-4">
+                Create a new playlist in {activeCategory} or move your existing playlists here.
+              </p>
+              <button
+                onClick={() => {
+                  setNewTitle("");
+                  setSelectedCreateCategory(activeCategory === "All" ? "Mixed" : activeCategory);
+                  setIsCreateMoveToOpen(false);
+                  setShowCreateModal(true);
+                }}
+                className="px-4 py-2 rounded-full bg-primary text-surface-container-lowest font-bold text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(76,215,246,0.3)] hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                <span>Create {activeCategory === "All" ? "" : activeCategory + " "}Playlist</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -492,7 +643,10 @@ export default function PlaylistsPage() {
       {showCreateModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-200"
-          onClick={() => setShowCreateModal(false)}
+          onClick={() => {
+            setShowCreateModal(false);
+            setIsCreateMoveToOpen(false);
+          }}
         >
           <div
             className="w-full max-w-md rounded-2xl bg-surface-container-high/95 border border-white/15 p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-200"
@@ -506,7 +660,10 @@ export default function PlaylistsPage() {
                 <h2 className="text-lg font-bold text-white">Create New Playlist</h2>
               </div>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setIsCreateMoveToOpen(false);
+                }}
                 className="p-1 rounded-full text-outline hover:text-white hover:bg-surface-container transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
@@ -535,6 +692,69 @@ export default function PlaylistsPage() {
                 />
               </div>
 
+              {/* Move to Category Selector */}
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-semibold text-outline uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px] text-primary">drive_file_move</span>
+                    Move to
+                  </span>
+                  <span className="text-[11px] text-primary font-bold">
+                    {selectedCreateCategory}
+                  </span>
+                </label>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateMoveToOpen(!isCreateMoveToOpen)}
+                    className="w-full flex items-center justify-between bg-surface-container-lowest border border-white/15 hover:border-white/30 rounded-xl px-3.5 py-2.5 text-xs text-white transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-primary">drive_file_move</span>
+                      <span className="text-on-surface-variant font-medium">Move to:</span>
+                      <span className="font-bold text-white px-2 py-0.5 rounded bg-primary/15 text-primary text-[11px]">
+                        {selectedCreateCategory}
+                      </span>
+                    </div>
+                    <span className={`material-symbols-outlined text-[18px] text-outline transition-transform duration-200 ${isCreateMoveToOpen ? "rotate-180" : ""}`}>
+                      expand_more
+                    </span>
+                  </button>
+
+                  {/* Dropdown displaying category names */}
+                  {isCreateMoveToOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-surface-container-highest/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl py-1.5 max-h-56 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                      {PLAYLIST_CATEGORIES.map((catName) => {
+                        const isCurrent = selectedCreateCategory === catName;
+                        return (
+                          <button
+                            key={catName}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCreateCategory(catName);
+                              setIsCreateMoveToOpen(false);
+                            }}
+                            className={`w-full px-3.5 py-2 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${isCurrent
+                                ? "bg-primary/20 text-primary font-bold"
+                                : "text-white/90 hover:bg-white/10 hover:text-white"
+                              }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-[15px] text-outline">folder</span>
+                              <span>{catName}</span>
+                            </div>
+                            {isCurrent && (
+                              <span className="material-symbols-outlined text-[16px] text-primary">check</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Quick Vibe Suggestions */}
               <div className="flex flex-col gap-1.5">
                 <span className="text-[11px] text-outline font-medium">Quick suggestions:</span>
@@ -555,7 +775,10 @@ export default function PlaylistsPage() {
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setIsCreateMoveToOpen(false);
+                  }}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-outline hover:text-white hover:bg-surface-container transition-colors cursor-pointer"
                 >
                   Cancel
@@ -577,6 +800,7 @@ export default function PlaylistsPage() {
       <SpotifyImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+        defaultCategory={activeCategory === "All" ? "Mixed" : activeCategory}
       />
 
       {/* Hidden Cover Image File Picker */}

@@ -15,6 +15,7 @@ export default function PlaylistCover({
   coverUrl = "",
   className = "",
   alt = "Playlist Cover",
+  isSpotify = false,
 }) {
   const [loadedMap, setLoadedMap] = useState({});
 
@@ -24,18 +25,28 @@ export default function PlaylistCover({
 
   const effectiveCover = coverUrl || fallbackUrl || "";
 
+  const isSpotifyCdn =
+    Boolean(effectiveCover) &&
+    (effectiveCover.includes("scdn.co") ||
+      effectiveCover.includes("spotifycdn.com") ||
+      effectiveCover.includes("spotify.com") ||
+      effectiveCover.includes("image-cdn"));
+
   const isGenericPlaceholder =
-    !effectiveCover ||
-    effectiveCover.includes("images.unsplash.com/photo-1514525253161-7a46d19cd819") ||
-    effectiveCover.includes("images.unsplash.com/photo-1518609878373-06d740f60d8b") ||
-    effectiveCover.includes("images.unsplash.com/photo-1511671782779-c97d3d27a1d4") ||
-    effectiveCover.includes("images.unsplash.com/photo-1470225620780-dba8ba36b745");
+    !isSpotify &&
+    !isSpotifyCdn &&
+    (!effectiveCover ||
+      effectiveCover.includes("images.unsplash.com/photo-1514525253161-7a46d19cd819") ||
+      effectiveCover.includes("images.unsplash.com/photo-1518609878373-06d740f60d8b") ||
+      effectiveCover.includes("images.unsplash.com/photo-1511671782779-c97d3d27a1d4") ||
+      effectiveCover.includes("images.unsplash.com/photo-1470225620780-dba8ba36b745"));
 
   const handleLoad = (idx) => {
     setLoadedMap((prev) => ({ ...prev, [idx]: true }));
   };
 
   // Case: Explicit cover image exists (from Spotify import, local photo upload, etc.)
+  // Never replace with a collage when the Spotify cover or explicit cover is available
   if (effectiveCover && !isGenericPlaceholder) {
     return (
       <div className={`relative w-full h-full overflow-hidden bg-surface-container-highest ${className}`}>
@@ -48,6 +59,7 @@ export default function PlaylistCover({
           loading="lazy"
           onLoad={() => handleLoad(0)}
           onError={(e) => {
+            // Graceful fallback if Spotify CDN image is blocked or expired
             e.currentTarget.src =
               "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
           }}

@@ -47,9 +47,120 @@ function cleanText(str) {
 }
 
 /**
- * Fetches playlist metadata and tracks from Spotify.
- * 1. Checks if official API credentials exist and retrieves playlist (with pagination up to 500 items).
- * 2. Falls back to public Spotify embed page if credentials are not configured or official API fails.
+/**
+ * Resolves the genuine high-resolution Spotify playlist artwork.
+ * Prioritizes Spotify's public oEmbed service, then falls back to open.spotify.com page metadata.
+ *
+ * @param {string} cleanId - Spotify playlist ID
+ * @returns {Promise<string|null>} The original playlist artwork URL, or null if unreachable
+ */
+export async function getSpotifyPlaylistCoverArt(cleanId) {
+  if (!cleanId) return null;
+
+  // Method 1: Spotify public oEmbed endpoint (unauthenticated, official, returns thumbnail_url)
+  try {
+    const oembedUrl = `https://open.spotify.com/oembed?url=https://open.spotify.com/playlist/${cleanId}`;
+    const res = await fetch(oembedUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.thumbnail_url && typeof data.thumbnail_url === "string" && data.thumbnail_url.startsWith("http")) {
+        console.log(`[Spotify Service] Retrieved cover art via oEmbed: ${data.thumbnail_url}`);
+        return data.thumbnail_url;
+      }
+    }
+  } catch (e) {
+    console.warn("[Spotify Service] oEmbed cover fetch notice:", e?.message || e);
+  }
+
+  // Method 2: Scrape og:image from the public playlist web page (open.spotify.com/playlist/...)
+  try {
+    const pageUrl = `https://open.spotify.com/playlist/${cleanId}`;
+    const res = await fetch(pageUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const ogMatch =
+        html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) ||
+        html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+      if (ogMatch && ogMatch[1] && !ogMatch[1].includes("default") && !ogMatch[1].includes("spotify-logo")) {
+        console.log(`[Spotify Service] Retrieved cover art via page og:image: ${ogMatch[1]}`);
+        return ogMatch[1];
+      }
+    }
+  } catch (e) {
+    console.warn("[Spotify Service] Web page cover scrape notice:", e?.message || e);
+  }
+
+  // Method 3: Scrape og:image from the public embed page
+  try {
+    const embedUrl = `https://open.spotify.com/embed/playlist/${cleanId}`;
+    const res = await fetch(embedUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const ogMatch =
+        html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      if (ogMatch && ogMatch[1]) {
+        return ogMatch[1];
+      }
+    }
+  } catch (e) {
+    console.warn("[Spotify Service] Embed cover scrape notice:", e?.message || e);
+  }
+
+  return null;
+}
+
+/**
+ * Helper to recursively search an object for a token string
+ */
+function extractTokenFromState(obj, depth = 0) {
+  if (!obj || depth > 5) return null;
+  if (typeof obj === "object") {
+    if (obj.accessToken && typeof obj.accessToken === "string" && obj.accessToken.length > 20) {
+      return obj.accessToken;
+    }
+    if (obj.token && typeof obj.token === "string" && obj.token.length > 20) {
+      return obj.token;
+    }
+    for (const key of Object.keys(obj)) {
+      if (typeof obj[key] === "object" && obj[key] !== null) {
+        const found = extractTokenFromState(obj[key], depth + 1);
+        if (found) return found;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Fetches playlist metadata and every available track from Spotify.
+ * 1. Checks if official API credentials exist and retrieves the playlist with FULL pagination
+ *    (fetches all available pages until all accessible tracks are retrieved, with retry/rate-limit handling).
+ * 2. Fetches and preserves the true Spotify playlist artwork via official API or public oEmbed/web fallback.
+ * 3. Falls back to public Spotify embed and JSON-LD parsing if credentials are not configured,
+ *    reporting accurate totals, partial status, and retaining all retrieved entries.
  */
 export async function getSpotifyPlaylistMetadata(playlistId) {
   if (!playlistId || typeof playlistId !== "string") {
@@ -62,9 +173,12 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
 
   const cleanId = playlistId.trim();
 
+  // Pre-fetch cover artwork via public oEmbed in parallel so we always have the genuine Spotify artwork
+  const publicCoverPromise = getSpotifyPlaylistCoverArt(cleanId);
+
   // Attempt 1: Official Spotify Web API if client credentials are configured
   try {
-    const token = await getSpotifyAccessToken();
+    let token = await getSpotifyAccessToken();
     if (token) {
       console.log(`[Spotify Playlist] Fetching via official API for ID: ${cleanId}`);
       const res = await fetch(`https://api.spotify.com/v1/playlists/${cleanId}?market=IN`, {
@@ -77,37 +191,112 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
 
       if (res.ok) {
         const data = await res.json();
+        const totalExpected = data.tracks?.total || 0;
         let allItems = Array.isArray(data.tracks?.items) ? [...data.tracks.items] : [];
         let nextUrl = data.tracks?.next;
         let pageCount = 1;
-        const maxPages = 5; // Support up to 500 songs safely
+        let hasPartialFailure = false;
+        let partialFailureReason = "";
 
-        while (nextUrl && pageCount < maxPages) {
-          try {
-            const nextRes = await fetch(nextUrl, {
-              headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-              cache: "no-store",
-            });
-            if (!nextRes.ok) break;
-            const nextData = await nextRes.json();
-            if (Array.isArray(nextData.items)) {
-              allItems.push(...nextData.items);
+        // Continue fetching EVERY available page until all accessible playlist entries are retrieved
+        while ((nextUrl || allItems.length < totalExpected) && !hasPartialFailure) {
+          const targetUrl =
+            nextUrl ||
+            `https://api.spotify.com/v1/playlists/${cleanId}/tracks?offset=${allItems.length}&limit=100&market=IN`;
+
+          let fetchSuccess = false;
+          let retryCount = 0;
+          const maxRetries = 3;
+
+          while (retryCount < maxRetries && !fetchSuccess) {
+            try {
+              const nextRes = await fetch(targetUrl, {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  Accept: "application/json",
+                },
+                cache: "no-store",
+              });
+
+              if (nextRes.status === 429) {
+                const retryAfterSec = parseInt(nextRes.headers.get("Retry-After") || "2", 10);
+                console.warn(
+                  `[Spotify Playlist] Rate limited (429). Retrying page ${pageCount + 1} after ${retryAfterSec}s...`
+                );
+                await new Promise((r) => setTimeout(r, Math.min(retryAfterSec * 1000, 5000)));
+                retryCount++;
+                continue;
+              }
+
+              if (nextRes.status === 401) {
+                console.warn("[Spotify Playlist] Token expired during pagination. Refreshing token...");
+                const refreshedToken = await getSpotifyAccessToken();
+                if (refreshedToken) {
+                  token = refreshedToken;
+                  retryCount++;
+                  continue;
+                } else {
+                  break;
+                }
+              }
+
+              if (!nextRes.ok) {
+                console.warn(`[Spotify Playlist] Pagination HTTP error ${nextRes.status} on page ${pageCount + 1}`);
+                retryCount++;
+                await new Promise((r) => setTimeout(r, 1000));
+                continue;
+              }
+
+              const nextData = await nextRes.json();
+              if (Array.isArray(nextData.items) && nextData.items.length > 0) {
+                allItems.push(...nextData.items);
+                nextUrl = nextData.next;
+                pageCount++;
+                fetchSuccess = true;
+              } else {
+                // No more items available from Spotify
+                nextUrl = null;
+                fetchSuccess = true;
+                break;
+              }
+            } catch (pageErr) {
+              console.warn(`[Spotify Playlist] Network error on page ${pageCount + 1}:`, pageErr?.message || pageErr);
+              retryCount++;
+              await new Promise((r) => setTimeout(r, 1000));
             }
-            nextUrl = nextData.next;
-            pageCount++;
-          } catch (pErr) {
-            console.warn("[Spotify Playlist] Pagination error:", pErr);
+          }
+
+          if (!fetchSuccess) {
+            console.error(
+              `[Spotify Playlist] Failed to fetch page ${pageCount + 1} after ${maxRetries} retries.`
+            );
+            hasPartialFailure = true;
+            partialFailureReason = `Pagination interrupted after retrieving ${allItems.length} of ${totalExpected} songs due to Spotify rate limits or network error.`;
             break;
           }
         }
 
+        // Resolve playlist cover: official images[0] or fallback to public oEmbed
+        const fallbackPublicCover = await publicCoverPromise.catch(() => null);
+        const resolvedPlaylistCover =
+          data.images?.[0]?.url ||
+          data.images?.[1]?.url ||
+          fallbackPublicCover ||
+          "";
+
         const validTracks = allItems
           .map((item, index) => {
             const t = item?.track || item;
-            if (!t || !t.name) return null;
+            if (!t || !t.name) return null; // Deleted or regionally unavailable Spotify track
             const primaryArtist = t.artists?.[0]?.name || "Unknown Artist";
-            const artistNames = Array.isArray(t.artists) ? t.artists.map((a) => a.name).filter(Boolean) : [primaryArtist];
-            const cover = t.album?.images?.[0]?.url || t.album?.images?.[1]?.url || data.images?.[0]?.url || "";
+            const artistNames = Array.isArray(t.artists)
+              ? t.artists.map((a) => a.name).filter(Boolean)
+              : [primaryArtist];
+            const trackCover =
+              t.album?.images?.[0]?.url ||
+              t.album?.images?.[1]?.url ||
+              t.album?.images?.[2]?.url ||
+              "";
 
             return {
               spotifyId: t.id || `spotify-track-${index}`,
@@ -118,9 +307,9 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
               album: cleanText(t.album?.name || ""),
               duration_ms: t.duration_ms || 0,
               durationFormatted: formatDuration(Math.round((t.duration_ms || 0) / 1000)),
-              coverUrl: cover,
+              coverUrl: trackCover,
               isrc: t.external_ids?.isrc || null,
-              spotifyUrl: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
+              spotifyUrl: t.external_urls?.spotify || (t.id ? `https://open.spotify.com/track/${t.id}` : ""),
               isLocal: Boolean(t.is_local),
             };
           })
@@ -134,9 +323,11 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
             name: cleanText(data.name || "Imported Playlist"),
             description: cleanText(data.description || ""),
             owner: data.owner?.display_name || "Spotify User",
-            coverUrl: data.images?.[0]?.url || (validTracks[0]?.coverUrl || ""),
-            totalTracks: data.tracks?.total || validTracks.length,
+            coverUrl: resolvedPlaylistCover,
+            totalTracks: totalExpected || validTracks.length,
             tracks: validTracks,
+            isPartial: hasPartialFailure,
+            partialError: partialFailureReason || null,
           },
         };
       } else {
@@ -147,20 +338,26 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
     console.warn("[Spotify Playlist] Official API error:", err?.message || err);
   }
 
-  // Attempt 2: Public Embed Endpoint fallback (extracts up to 50 tracks without credentials)
+  // Attempt 2: Public Embed & Web metadata fallback
   try {
-    console.log(`[Spotify Playlist] Fetching via public embed fallback for ID: ${cleanId}`);
+    console.log(`[Spotify Playlist] Fetching via public embed & metadata fallback for ID: ${cleanId}`);
     const embedUrl = `https://open.spotify.com/embed/playlist/${cleanId}`;
-    const embedRes = await fetch(embedUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
-      cache: "no-store",
-    });
+    const [embedRes, publicCover] = await Promise.all([
+      fetch(embedUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+        cache: "no-store",
+      }).catch((e) => {
+        console.warn("[Spotify Playlist] Embed fetch error:", e?.message || e);
+        return null;
+      }),
+      publicCoverPromise.catch(() => null),
+    ]);
 
-    if (embedRes.ok) {
+    if (embedRes && embedRes.ok) {
       const html = await embedRes.text();
       const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
       if (nextDataMatch) {
@@ -168,6 +365,7 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
         const entity = json?.props?.pageProps?.state?.data?.entity;
         if (entity && Array.isArray(entity.trackList)) {
           let coverArt =
+            publicCover ||
             entity.coverArt?.sources?.[0]?.url ||
             entity.coverArt?.sources?.[entity.coverArt?.sources?.length - 1]?.url ||
             entity.visualIdentity?.image?.[0]?.url ||
@@ -184,10 +382,55 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
             }
           }
 
-          const validTracks = entity.trackList
+          let allTracks = [...entity.trackList];
+
+          // Check if NextData embedded an anonymous bearer token that can paginate the tracks API
+          const anonymousToken = extractTokenFromState(json?.props?.pageProps);
+          if (anonymousToken && entity.trackList.length < (entity.totalLength || 9999)) {
+            console.log(`[Spotify Playlist] Found anonymous token, attempting pagination for ID: ${cleanId}`);
+            let offset = entity.trackList.length;
+            let canContinue = true;
+
+            while (canContinue && offset < (entity.totalLength || 1000)) {
+              try {
+                const apiRes = await fetch(
+                  `https://api.spotify.com/v1/playlists/${cleanId}/tracks?offset=${offset}&limit=100&market=IN`,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${anonymousToken}`,
+                      Accept: "application/json",
+                    },
+                    cache: "no-store",
+                  }
+                );
+                if (!apiRes.ok) break;
+                const apiData = await apiRes.json();
+                if (Array.isArray(apiData.items) && apiData.items.length > 0) {
+                  const mappedItems = apiData.items.map((it) => {
+                    const t = it?.track || it;
+                    return {
+                      title: t?.name,
+                      subtitle: (t?.artists || []).map((a) => a.name).join(", "),
+                      duration: t?.duration_ms,
+                      uri: t?.uri || (t?.id ? `spotify:track:${t.id}` : ""),
+                    };
+                  });
+                  allTracks.push(...mappedItems);
+                  offset += apiData.items.length;
+                  if (!apiData.next) canContinue = false;
+                } else {
+                  canContinue = false;
+                }
+              } catch (pErr) {
+                console.warn("[Spotify Playlist] Anonymous pagination error:", pErr);
+                break;
+              }
+            }
+          }
+
+          const validTracks = allTracks
             .map((t, index) => {
               if (!t || !t.title) return null;
-              // In embed data, subtitle usually holds artist name(s) e.g. "The Weeknd" or "Anirudh Ravichander, Super Subu"
               const subtitle = cleanText(t.subtitle || "");
               const artistNames = subtitle
                 ? subtitle.split(/,\s*/).map((a) => a.trim()).filter(Boolean)
@@ -203,11 +446,17 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
                 album: cleanText(entity.name || ""),
                 duration_ms: t.duration || 0,
                 durationFormatted: formatDuration(Math.round((t.duration || 0) / 1000)),
-                coverUrl: coverArt,
+                coverUrl: "", // Track cover will be matched accurately via JioSaavn
                 spotifyUrl: t.uri ? `https://open.spotify.com/track/${t.uri.replace("spotify:track:", "")}` : "",
               };
             })
             .filter(Boolean);
+
+          const totalPlaylistCount = entity.totalLength || validTracks.length;
+          const isPartial = totalPlaylistCount > validTracks.length;
+          const partialNotice = isPartial
+            ? `Retrieved ${validTracks.length} accessible songs via public web preview. For unrestricted full pagination of large playlists, configure SPOTIFY_CLIENT_ID in .env.local.`
+            : null;
 
           return {
             success: true,
@@ -218,8 +467,10 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
               description: cleanText(entity.subtitle || ""),
               owner: cleanText(entity.subtitle || "Spotify"),
               coverUrl: coverArt,
-              totalTracks: validTracks.length,
+              totalTracks: totalPlaylistCount,
               tracks: validTracks,
+              isPartial,
+              partialError: partialNotice,
             },
           };
         }

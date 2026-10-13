@@ -183,3 +183,50 @@ export function processLocalImage(file, maxSize = 600, quality = 0.85) {
     reader.readAsDataURL(file);
   });
 }
+
+/**
+ * Standard Playlist Categories as required:
+ * Mixed, Malayalam, Hindi, Tamil, English, Phonks, Bgms, Others
+ */
+export const PLAYLIST_CATEGORIES = [
+  "Mixed",
+  "Malayalam",
+  "Hindi",
+  "Tamil",
+  "English",
+  "Phonks",
+  "Bgms",
+  "Others",
+];
+
+/**
+ * Retrieves the resolved category for a playlist.
+ * Checks playlist object, stored overrides, and defaults to "Mixed".
+ * @param {object} playlist 
+ * @returns {string} Category name
+ */
+export function getPlaylistCategory(playlist) {
+  if (!playlist) return "Mixed";
+  if (playlist.category && PLAYLIST_CATEGORIES.includes(playlist.category)) {
+    return playlist.category;
+  }
+  if (typeof window !== "undefined" && playlist.id) {
+    try {
+      const stored = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+      if (stored[String(playlist.id)] && PLAYLIST_CATEGORIES.includes(stored[String(playlist.id)])) {
+        return stored[String(playlist.id)];
+      }
+    } catch {}
+  }
+
+  // Intelligent inference based on title or tags if uncategorized
+  const title = (playlist.title || "").toLowerCase();
+  if (title.includes("malayalam")) return "Malayalam";
+  if (title.includes("hindi")) return "Hindi";
+  if (title.includes("tamil")) return "Tamil";
+  if (title.includes("english")) return "English";
+  if (title.includes("phonk")) return "Phonks";
+  if (title.includes("bgm") || title.includes("theme") || title.includes("score") || title.includes("soundtrack")) return "Bgms";
+
+  return playlist.category || "Mixed";
+}

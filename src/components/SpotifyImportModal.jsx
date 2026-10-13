@@ -4,8 +4,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useMusic } from "../context/MusicContext";
 import { getTrackFingerprint, createSnapshotEntry } from "../services/spotifySyncService";
+import { PLAYLIST_CATEGORIES } from "../utils/playlistUtils";
 
-export default function SpotifyImportModal({ isOpen, onClose }) {
+export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = "Mixed" }) {
   const router = useRouter();
   const { importSpotifyPlaylist, playTrack, setQueue } = useMusic();
 
@@ -14,6 +15,8 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [manualText, setManualText] = useState("");
   const [manualTitle, setManualTitle] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("Mixed");
+  const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false);
 
   // Workflow states: "input" | "fetching" | "matching" | "preview" | "complete"
   const [stage, setStage] = useState("input");
@@ -40,6 +43,17 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
 
   const inputRef = useRef(null);
 
+  // Close Category picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (isCategoryPickerOpen && !e.target.closest('[data-moveto-container="true"]')) {
+        setIsCategoryPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isCategoryPickerOpen]);
+
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -47,6 +61,8 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
       setPlaylistUrl("");
       setManualText("");
       setManualTitle("");
+      setSelectedCategory(defaultCategory || "Mixed");
+      setIsCategoryPickerOpen(false);
       setErrorMessage("");
       setClipboardNotice("");
       setSourcePlaylist(null);
@@ -56,7 +72,7 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
       setImportReport(null);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultCategory]);
 
   // Close on Escape key
   useEffect(() => {
@@ -173,25 +189,42 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
     setMatchingProgress({ current: 0, total: tracks.length });
 
     try {
-      // We process matching in batches of 5 tracks to display live progress in the UI
-      const batchSize = 5;
+      // Process matching in batches with live UI progress tracking
+      const batchSize = 8;
       const allResults = [];
 
       for (let i = 0; i < tracks.length; i += batchSize) {
         const batch = tracks.slice(i, i + batchSize);
-        const matchRes = await fetch("/api/spotify/match", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tracks: batch }),
-        });
+        let retries = 0;
+        let batchMatches = null;
 
-        if (matchRes.ok) {
-          const matchData = await matchRes.json();
-          if (Array.isArray(matchData.matches)) {
-            allResults.push(...matchData.matches);
+        while (retries < 2 && !batchMatches) {
+          try {
+            const matchRes = await fetch("/api/spotify/match", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tracks: batch }),
+            });
+
+            if (matchRes.ok) {
+              const matchData = await matchRes.json();
+              if (Array.isArray(matchData.matches)) {
+                batchMatches = matchData.matches;
+              }
+            } else {
+              retries++;
+              await new Promise((r) => setTimeout(r, 500));
+            }
+          } catch (batchErr) {
+            retries++;
+            await new Promise((r) => setTimeout(r, 500));
           }
+        }
+
+        if (batchMatches) {
+          allResults.push(...batchMatches);
         } else {
-          // If a batch fails, add fallback unmatched items
+          // If a batch fails after retries, retain every track as unmatched with proper original data
           for (const t of batch) {
             allResults.push({
               spotifyTrack: t,
@@ -206,7 +239,7 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
         }
 
         setMatchingProgress({
-          current: Math.min(i + batchSize, tracks.length),
+          current: Math.min(i + batch.length, tracks.length),
           total: tracks.length,
         });
       }
@@ -429,6 +462,7 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
       coverUrl: sourcePlaylist?.coverUrl || tracksToImport[0]?.coverUrl,
       tracks: tracksToImport,
       spotifyUrl: spotifyLink,
+      category: selectedCategory,
       sourceMeta: {
         spotifyId: sourcePlaylist?.id || null,
         spotifyUrl: spotifyLink,
@@ -443,16 +477,21 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
         skippedCount,
         unresolvedCount,
         substitutedCount,
+        isPartial: Boolean(sourcePlaylist?.isPartial),
+        partialError: sourcePlaylist?.partialError || null,
       },
     });
 
     setImportedPlaylist(created);
     setImportReport({
-      total: matchedItems.length,
+      total: sourcePlaylist?.totalTracks || matchedItems.length,
+      retrieved: matchedItems.length,
       imported: importedCount,
       skipped: skippedCount,
       unresolved: unresolvedCount,
       substituted: substitutedCount,
+      isPartial: Boolean(sourcePlaylist?.isPartial),
+      partialError: sourcePlaylist?.partialError || null,
     });
     setStage("complete");
   };
@@ -543,6 +582,69 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
                 >
                   Paste Song Names / Tracklist
                 </button>
+              </div>
+
+              {/* Move to Category Selection */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-surface-container border border-outline-variant/20">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
+                    <span className="material-symbols-outlined text-[18px]">drive_file_move</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-white leading-tight">Move to Category</p>
+                    <p className="text-[11px] text-outline">Target category for imported playlist</p>
+                  </div>
+                </div>
+
+                <div className="relative" data-moveto-container="true">
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoryPickerOpen(!isCategoryPickerOpen)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-highest/80 hover:bg-surface-container-highest border border-outline-variant/30 hover:border-white/30 text-xs text-white transition-all cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-[#1DB954]">drive_file_move</span>
+                    <span className="text-outline">Move to:</span>
+                    <span className="font-bold text-white px-2 py-0.5 rounded bg-[#1DB954]/20 text-[#1DB954] text-[11px]">
+                      {selectedCategory}
+                    </span>
+                    <span className={`material-symbols-outlined text-[15px] text-outline transition-transform duration-200 ${isCategoryPickerOpen ? "rotate-180" : ""}`}>
+                      expand_more
+                    </span>
+                  </button>
+
+                  {/* Dropdown displaying category names */}
+                  {isCategoryPickerOpen && (
+                    <div className="absolute top-full right-0 mt-1.5 z-50 w-44 bg-surface-container-highest/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl py-1.5 max-h-56 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1 text-[10px] font-bold text-outline uppercase tracking-wider border-b border-white/10 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[12px] text-[#1DB954]">drive_file_move</span>
+                        <span>Move to</span>
+                      </div>
+                      {PLAYLIST_CATEGORIES.map((catName) => {
+                        const isCurrent = selectedCategory === catName;
+                        return (
+                          <button
+                            key={catName}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCategory(catName);
+                              setIsCategoryPickerOpen(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                              isCurrent
+                                ? "bg-[#1DB954]/20 text-[#1DB954] font-bold"
+                                : "text-white/90 hover:bg-white/10 hover:text-white"
+                            }`}
+                          >
+                            <span>{catName}</span>
+                            {isCurrent && (
+                              <span className="material-symbols-outlined text-[14px] text-[#1DB954]">check</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {importMode === "url" ? (
@@ -737,7 +839,11 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
                       {sourcePlaylist.description || `Curated by ${sourcePlaylist.owner}`}
                     </p>
                     <div className="flex items-center gap-2 mt-1 text-[11px] font-mono text-outline">
-                      <span>{matchedItems.length} total tracks</span>
+                      <span>
+                        {sourcePlaylist.totalTracks && sourcePlaylist.totalTracks > matchedItems.length
+                          ? `${matchedItems.length} of ${sourcePlaylist.totalTracks} tracks`
+                          : `${matchedItems.length} total tracks`}
+                      </span>
                       <span>•</span>
                       <span className="text-[#1DB954]">Spotify Source</span>
                     </div>
@@ -954,7 +1060,59 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
                   )}
                 </div>
 
-                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end flex-wrap">
+                  {/* Move to Category Selection */}
+                  <div className="relative" data-moveto-container="true">
+                    <button
+                      type="button"
+                      onClick={() => setIsCategoryPickerOpen(!isCategoryPickerOpen)}
+                      className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-container border border-outline-variant/30 hover:border-white/30 text-xs text-white transition-all cursor-pointer shadow-sm"
+                      title="Select category to move imported playlist into"
+                    >
+                      <span className="material-symbols-outlined text-[17px] text-[#1DB954]">drive_file_move</span>
+                      <span className="text-outline">Move to:</span>
+                      <span className="font-bold text-white px-2 py-0.5 rounded bg-[#1DB954]/20 text-[#1DB954] text-[11px]">
+                        {selectedCategory}
+                      </span>
+                      <span className={`material-symbols-outlined text-[16px] text-outline transition-transform duration-200 ${isCategoryPickerOpen ? "rotate-180" : ""}`}>
+                        expand_more
+                      </span>
+                    </button>
+
+                    {/* Dropdown displaying category names */}
+                    {isCategoryPickerOpen && (
+                      <div className="absolute bottom-full right-0 mb-1.5 z-50 w-44 bg-surface-container-highest/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl py-1.5 max-h-56 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                        <div className="px-3 py-1 text-[10px] font-bold text-outline uppercase tracking-wider border-b border-white/10 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[12px] text-[#1DB954]">drive_file_move</span>
+                          <span>Move to</span>
+                        </div>
+                        {PLAYLIST_CATEGORIES.map((catName) => {
+                          const isCurrent = selectedCategory === catName;
+                          return (
+                            <button
+                              key={catName}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCategory(catName);
+                                setIsCategoryPickerOpen(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                                isCurrent
+                                  ? "bg-[#1DB954]/20 text-[#1DB954] font-bold"
+                                  : "text-white/90 hover:bg-white/10 hover:text-white"
+                              }`}
+                            >
+                              <span>{catName}</span>
+                              {isCurrent && (
+                                <span className="material-symbols-outlined text-[14px] text-[#1DB954]">check</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     onClick={() => setStage("input")}
                     className="px-4 py-2 rounded-xl text-xs font-semibold text-outline hover:text-white hover:bg-surface-container transition-all cursor-pointer"
@@ -990,23 +1148,41 @@ export default function SpotifyImportModal({ isOpen, onClose }) {
 
               {/* Import Statistics Box */}
               {importReport && (
-                <div className="grid grid-cols-4 gap-2 p-3.5 rounded-xl bg-surface-container border border-outline-variant/20 text-center font-mono">
-                  <div className="p-2 rounded-lg bg-surface-container-highest/40">
-                    <p className="text-[10px] text-outline">Total</p>
-                    <p className="text-base font-bold text-white">{importReport.total}</p>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-4 gap-2 p-3.5 rounded-xl bg-surface-container border border-outline-variant/20 text-center font-mono">
+                    <div className="p-2 rounded-lg bg-surface-container-highest/40">
+                      <p className="text-[10px] text-outline">Total</p>
+                      <p className="text-base font-bold text-white">{importReport.total}</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-emerald-500/10">
+                      <p className="text-[10px] text-emerald-400">Imported</p>
+                      <p className="text-base font-bold text-emerald-400">{importReport.imported}</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-amber-500/10">
+                      <p className="text-[10px] text-amber-400">Unresolved</p>
+                      <p className="text-base font-bold text-amber-400">{importReport.unresolved}</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-surface-container-highest/40">
+                      <p className="text-[10px] text-outline">Skipped</p>
+                      <p className="text-base font-bold text-outline">{importReport.skipped}</p>
+                    </div>
                   </div>
-                  <div className="p-2 rounded-lg bg-emerald-500/10">
-                    <p className="text-[10px] text-emerald-400">Imported</p>
-                    <p className="text-base font-bold text-emerald-400">{importReport.imported}</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-surface-container-highest/40">
-                    <p className="text-[10px] text-outline">Skipped</p>
-                    <p className="text-base font-bold text-outline">{importReport.skipped}</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-amber-500/10">
-                    <p className="text-[10px] text-amber-400">Substituted</p>
-                    <p className="text-base font-bold text-amber-400">{importReport.substituted}</p>
-                  </div>
+
+                  {importReport.unresolved > 0 && (
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs text-left flex items-start gap-2">
+                      <span className="material-symbols-outlined text-[17px] flex-shrink-0 text-amber-400">info</span>
+                      <span>
+                        {importReport.unresolved} song{importReport.unresolved > 1 ? "s" : ""} could not be automatically matched on JioSaavn and {importReport.unresolved > 1 ? "were" : "was"} omitted from playback.
+                      </span>
+                    </div>
+                  )}
+
+                  {importReport.isPartial && importReport.partialError && (
+                    <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-200 text-xs text-left flex items-start gap-2">
+                      <span className="material-symbols-outlined text-[17px] flex-shrink-0 text-cyan-400">sync_problem</span>
+                      <span>{importReport.partialError}</span>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -50,7 +50,8 @@ export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
       .from("playlist_tracks")
       .select("*")
       .in("playlist_id", playlistIds)
-      .order("position", { ascending: true });
+      .order("position", { ascending: true })
+      .limit(10000);
 
     if (trError) {
       console.error("[CloudService] Failed to fetch playlist_tracks:", trError.message);
@@ -134,7 +135,8 @@ export const fetchPlaylistTracksFromCloud = async (playlistId) => {
       .from("playlist_tracks")
       .select("*")
       .eq("playlist_id", playlistId)
-      .order("position", { ascending: true });
+      .order("position", { ascending: true })
+      .limit(5000);
 
     if (error || !tracksData || tracksData.length === 0) return null;
 
