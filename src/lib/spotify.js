@@ -20,7 +20,13 @@ if (typeof dns?.lookup === "function") {
       options = {};
     }
     originalLookup(hostname, options, (err, address, family) => {
-      if (err && (hostname.includes("spotify.com") || err.code === "ENOTFOUND")) {
+      if (
+        err &&
+        (hostname.includes("spotify.com") ||
+          hostname.includes("scdn.co") ||
+          hostname.includes("spotifycdn.com") ||
+          err.code === "ENOTFOUND")
+      ) {
         resolver.resolve4(hostname, (resErr, addresses) => {
           if (resErr || !addresses || addresses.length === 0) {
             return callback(err, address, family);
