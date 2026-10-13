@@ -22,6 +22,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
   const [stage, setStage] = useState("input");
   const [errorMessage, setErrorMessage] = useState("");
   const [clipboardNotice, setClipboardNotice] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Fetched playlist data & matched results
   const [sourcePlaylist, setSourcePlaylist] = useState(null);
@@ -378,7 +379,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
   };
 
   // Action: Final Import
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     // Collect all valid playable tracks (excluding skipped or completely unmatched without candidate)
     const tracksToImport = [];
     const occCounts = new Map();
@@ -456,44 +457,57 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
       (typeof playlistUrl === "string" && playlistUrl.trim()) ||
       (sourcePlaylist?.id ? `https://open.spotify.com/playlist/${sourcePlaylist.id}` : null);
 
-    const created = importSpotifyPlaylist({
-      title: sourcePlaylist?.name || "Imported Spotify Playlist",
-      description: sourcePlaylist?.description || "Imported Spotify playlist with JioSaavn audio streaming.",
-      coverUrl: sourcePlaylist?.coverUrl || tracksToImport[0]?.coverUrl,
-      tracks: tracksToImport,
-      spotifyUrl: spotifyLink,
-      category: selectedCategory,
-      sourceMeta: {
-        spotifyId: sourcePlaylist?.id || null,
+    setIsSaving(true);
+    setErrorMessage("");
+
+    try {
+      const created = await importSpotifyPlaylist({
+        title: sourcePlaylist?.name || "Imported Spotify Playlist",
+        description: sourcePlaylist?.description || "Imported Spotify playlist with JioSaavn audio streaming.",
+        coverUrl: sourcePlaylist?.coverUrl || tracksToImport[0]?.coverUrl,
+        tracks: tracksToImport,
         spotifyUrl: spotifyLink,
-        spotifyLink: spotifyLink,
-        snapshotId: sourcePlaylist?.snapshotId || null,
-        lastSyncedAt: Date.now(),
-        lastSyncStatus: unresolvedCount > 0 ? "partial" : "success",
-        totalSourceTracks: sourcePlaylist?.totalTracks || matchedItems.length,
-        syncedSnapshot,
-        unresolvedTracks,
-        importedCount,
-        skippedCount,
-        unresolvedCount,
-        substitutedCount,
+        category: selectedCategory,
+        sourceMeta: {
+          spotifyId: sourcePlaylist?.id || null,
+          spotifyUrl: spotifyLink,
+          spotifyLink: spotifyLink,
+          snapshotId: sourcePlaylist?.snapshotId || null,
+          lastSyncedAt: Date.now(),
+          lastSyncStatus: unresolvedCount > 0 ? "partial" : "success",
+          totalSourceTracks: sourcePlaylist?.totalTracks || matchedItems.length,
+          syncedSnapshot,
+          unresolvedTracks,
+          importedCount,
+          skippedCount,
+          unresolvedCount,
+          substitutedCount,
+          isPartial: Boolean(sourcePlaylist?.isPartial),
+          partialError: sourcePlaylist?.partialError || null,
+        },
+      });
+
+      setImportedPlaylist(created);
+      setImportReport({
+        total: sourcePlaylist?.totalTracks || matchedItems.length,
+        retrieved: matchedItems.length,
+        imported: importedCount,
+        skipped: skippedCount,
+        unresolved: unresolvedCount,
+        substituted: substitutedCount,
         isPartial: Boolean(sourcePlaylist?.isPartial),
         partialError: sourcePlaylist?.partialError || null,
-      },
-    });
-
-    setImportedPlaylist(created);
-    setImportReport({
-      total: sourcePlaylist?.totalTracks || matchedItems.length,
-      retrieved: matchedItems.length,
-      imported: importedCount,
-      skipped: skippedCount,
-      unresolved: unresolvedCount,
-      substituted: substitutedCount,
-      isPartial: Boolean(sourcePlaylist?.isPartial),
-      partialError: sourcePlaylist?.partialError || null,
-    });
-    setStage("complete");
+      });
+      setStage("complete");
+    } catch (saveErr) {
+      console.error("Failed to complete Spotify playlist import to cloud:", saveErr);
+      setErrorMessage(
+        "Could not save the complete playlist to Supabase cloud. " +
+          (saveErr?.message || "Please check your network and retry.")
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Counts
@@ -1115,17 +1129,27 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
 
                   <button
                     onClick={() => setStage("input")}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-outline hover:text-white hover:bg-surface-container transition-all cursor-pointer"
+                    disabled={isSaving}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-outline hover:text-white hover:bg-surface-container transition-all cursor-pointer disabled:opacity-40"
                   >
                     Back
                   </button>
                   <button
                     onClick={handleConfirmImport}
-                    disabled={confirmedCount === 0}
+                    disabled={confirmedCount === 0 || isSaving}
                     className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_15px_rgba(76,215,246,0.3)] hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
                   >
-                    <span className="material-symbols-outlined text-[18px]">playlist_add</span>
-                    <span>Import Playlist ({confirmedCount} Tracks)</span>
+                    {isSaving ? (
+                      <>
+                        <div className="w-4 h-4 rounded-full border-2 border-surface-container-lowest border-t-transparent animate-spin" />
+                        <span>Saving to Cloud Database...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[18px]">playlist_add</span>
+                        <span>Import Playlist ({confirmedCount} Tracks)</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

@@ -59,7 +59,17 @@ export default function PlaylistCover({
           loading="lazy"
           onLoad={() => handleLoad(0)}
           onError={(e) => {
-            // Graceful fallback if Spotify CDN image is blocked or expired
+            const currentSrc = e.currentTarget.src || "";
+            // If the Spotify CDN URL was blocked or had CORS/DNS issues, retry via image proxy before falling back
+            if (
+              effectiveCover &&
+              (effectiveCover.includes("scdn.co") || effectiveCover.includes("spotifycdn.com")) &&
+              !currentSrc.includes("/api/spotify/image-proxy")
+            ) {
+              e.currentTarget.src = `/api/spotify/image-proxy?url=${encodeURIComponent(effectiveCover)}`;
+              return;
+            }
+            // Graceful fallback if image is completely unavailable or expired
             e.currentTarget.src =
               "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80";
           }}

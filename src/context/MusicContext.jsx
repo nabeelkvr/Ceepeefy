@@ -55,10 +55,14 @@ import {
   fetchPlaylistTracksFromCloud,
   saveAccountDataToCloud,
   fetchAccountDataFromCloud,
+  subscribeToUserPlaylists,
 } from "../services/cloudStorageService";
 import {
   deleteSelfMixFromCloud,
   fetchSelfMixesFromCloud,
+  uploadPlaylistCoverToCloud,
+  mirrorRemoteArtworkToCloud,
+  isSupabaseConfigured,
 } from "../services/supabaseClient";
 import { generateRecommendedQueue, extractLanguage, classifySongMood } from "../utils/recommendationEngine";
 
@@ -892,118 +896,116 @@ export const MusicProvider = ({ children }) => {
     }
   };
 
-  // Safely hydrate from localStorage on client mount, then fetch fresh data from Supabase cloud
+  // Safely hydrate from localStorage on client mount, then fetch authoritative data from Supabase cloud
   useEffect(() => {
     try {
-      const storedLoggedIn = localStorage.getItem("isLoggedIn") === "true";
       const storedActiveUser = localStorage.getItem("activeUser") || DEFAULT_USER_ID;
+      const savedUserStr = localStorage.getItem("ceepeefy_user");
+      const userObj = savedUserStr
+        ? JSON.parse(savedUserStr)
+        : {
+          username: DEFAULT_USER_ID,
+          name: DEFAULT_USER_ID,
+          email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
+          plan: "Owner / Studio Master",
+          isLoggedIn: true,
+          activeUser: DEFAULT_USER_ID,
+        };
+      setUser(userObj);
 
-      if (storedLoggedIn && storedActiveUser === DEFAULT_USER_ID) {
-        const savedUserStr = localStorage.getItem("ceepeefy_user");
-        const userObj = savedUserStr
-          ? JSON.parse(savedUserStr)
-          : {
-            username: DEFAULT_USER_ID,
-            name: DEFAULT_USER_ID,
-            email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
-            plan: "Owner / Studio Master",
-            isLoggedIn: true,
-            activeUser: DEFAULT_USER_ID,
-          };
-        setUser(userObj);
-
-        // Instant local cache hydration for zero UI flicker
-        const accountStorageKey = getAccountStorageKey("userData", storedActiveUser);
-        const accountDataStr = localStorage.getItem(accountStorageKey);
-        if (accountDataStr) {
-          const accountData = JSON.parse(accountDataStr);
-          if (Array.isArray(accountData.likedSongIds)) setLikedSongIds(accountData.likedSongIds);
-          if (accountData.likedSongsMap && typeof accountData.likedSongsMap === "object") {
-            setLikedSongsMap(accountData.likedSongsMap);
-          }
-          if (Array.isArray(accountData.customPlaylists)) setCustomPlaylists(accountData.customPlaylists);
-          if (Array.isArray(accountData.recentlyPlayedTracks)) {
-            const valid = accountData.recentlyPlayedTracks
-              .map(normalizeTrack)
-              .filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)));
-            setRecentlyPlayedTracks(valid);
-            setRecentlyPlayed(valid.map((t) => t.id));
-          }
-          let mixesToHydrate = [];
-          if (Array.isArray(accountData.selfMixes) && accountData.selfMixes.length > 0) {
-            mixesToHydrate = accountData.selfMixes;
-          } else {
-            try {
-              const standaloneMixes = JSON.parse(localStorage.getItem("ceepeefy_self_mixes") || "[]");
-              if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
-                mixesToHydrate = standaloneMixes;
-              }
-            } catch { }
-          }
-          setSelfMixes(mixesToHydrate);
-
-          // Recover any orphaned local audio records from IndexedDB
-          recoverLocalUploadedTracksAsMix(mixesToHydrate).then((recovered) => {
-            if (recovered && recovered.length > mixesToHydrate.length) {
-              setSelfMixes(recovered);
-              persistAccountData({ selfMixes: recovered });
-            }
-          });
+      // Instant local cache hydration for zero UI flicker
+      const accountStorageKey = getAccountStorageKey("userData", storedActiveUser);
+      const accountDataStr = localStorage.getItem(accountStorageKey);
+      if (accountDataStr) {
+        const accountData = JSON.parse(accountDataStr);
+        if (Array.isArray(accountData.likedSongIds)) setLikedSongIds(accountData.likedSongIds);
+        if (accountData.likedSongsMap && typeof accountData.likedSongsMap === "object") {
+          setLikedSongsMap(accountData.likedSongsMap);
+        }
+        if (Array.isArray(accountData.customPlaylists)) setCustomPlaylists(accountData.customPlaylists);
+        if (Array.isArray(accountData.recentlyPlayedTracks)) {
+          const valid = accountData.recentlyPlayedTracks
+            .map(normalizeTrack)
+            .filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)));
+          setRecentlyPlayedTracks(valid);
+          setRecentlyPlayed(valid.map((t) => t.id));
+        }
+        let mixesToHydrate = [];
+        if (Array.isArray(accountData.selfMixes) && accountData.selfMixes.length > 0) {
+          mixesToHydrate = accountData.selfMixes;
         } else {
-          // Fallback to legacy keys
-          const legacyLiked = JSON.parse(localStorage.getItem("nocturne_liked") || "[]");
-          const legacyLikedMap = JSON.parse(localStorage.getItem("nocturne_liked_map") || "{}");
-          const legacyPlaylists = JSON.parse(localStorage.getItem("nocturne_custom_playlists") || "[]");
-          const legacyRecents = JSON.parse(localStorage.getItem("nocturne_recent_tracks") || "[]");
-          let fallbackMixes = [];
           try {
             const standaloneMixes = JSON.parse(localStorage.getItem("ceepeefy_self_mixes") || "[]");
             if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
-              fallbackMixes = standaloneMixes;
+              mixesToHydrate = standaloneMixes;
             }
           } catch { }
-
-          const initialAccountData = {
-            likedSongIds: Array.isArray(legacyLiked) && legacyLiked.length > 0
-              ? legacyLiked
-              : ["track-midnight-pulse", "track-shadows-in-blue"],
-            likedSongsMap: legacyLikedMap,
-            customPlaylists: Array.isArray(legacyPlaylists) ? legacyPlaylists : [],
-            recentlyPlayedTracks: Array.isArray(legacyRecents) && legacyRecents.length > 0
-              ? legacyRecents.map(normalizeTrack).filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)))
-              : [],
-            recentlyPlayed: Array.isArray(legacyRecents) && legacyRecents.length > 0
-              ? legacyRecents.map((t) => t.id).filter((id) => !DEFAULT_MOCK_TRACK_IDS.has(String(id)))
-              : [],
-            selfMixes: fallbackMixes,
-          };
-          localStorage.setItem(accountStorageKey, JSON.stringify(initialAccountData));
-          setLikedSongIds(initialAccountData.likedSongIds);
-          setLikedSongsMap(initialAccountData.likedSongsMap);
-          setCustomPlaylists(initialAccountData.customPlaylists);
-          setRecentlyPlayedTracks(initialAccountData.recentlyPlayedTracks);
-          setRecentlyPlayed(initialAccountData.recentlyPlayed);
-          setSelfMixes(fallbackMixes);
-
-          recoverLocalUploadedTracksAsMix(fallbackMixes).then((recovered) => {
-            if (recovered && recovered.length > fallbackMixes.length) {
-              setSelfMixes(recovered);
-              persistAccountData({ selfMixes: recovered });
-            }
-          });
         }
+        setSelfMixes(mixesToHydrate);
 
-        // Fresh cloud state fetch from Supabase (cross-device sync)
-        syncAccountDataWithCloud(DEFAULT_USER_ID);
+        recoverLocalUploadedTracksAsMix(mixesToHydrate).then((recovered) => {
+          if (recovered && recovered.length > mixesToHydrate.length) {
+            setSelfMixes(recovered);
+            persistAccountData({ selfMixes: recovered });
+          }
+        });
       } else {
-        // Logged out: features are locked, personal arrays remain empty
-        setUser(null);
-        setLikedSongIds([]);
-        setLikedSongsMap({});
-        setCustomPlaylists([]);
-        setRecentlyPlayedTracks([]);
-        setRecentlyPlayed([]);
+        // Fallback to legacy keys
+        const legacyLiked = JSON.parse(localStorage.getItem("nocturne_liked") || "[]");
+        const legacyLikedMap = JSON.parse(localStorage.getItem("nocturne_liked_map") || "{}");
+        const legacyPlaylists = JSON.parse(localStorage.getItem("nocturne_custom_playlists") || "[]");
+        const legacyRecents = JSON.parse(localStorage.getItem("nocturne_recent_tracks") || "[]");
+        let fallbackMixes = [];
+        try {
+          const standaloneMixes = JSON.parse(localStorage.getItem("ceepeefy_self_mixes") || "[]");
+          if (Array.isArray(standaloneMixes) && standaloneMixes.length > 0) {
+            fallbackMixes = standaloneMixes;
+          }
+        } catch { }
+
+        const initialAccountData = {
+          likedSongIds: Array.isArray(legacyLiked) && legacyLiked.length > 0
+            ? legacyLiked
+            : ["track-midnight-pulse", "track-shadows-in-blue"],
+          likedSongsMap: legacyLikedMap,
+          customPlaylists: Array.isArray(legacyPlaylists) ? legacyPlaylists : [],
+          recentlyPlayedTracks: Array.isArray(legacyRecents) && legacyRecents.length > 0
+            ? legacyRecents.map(normalizeTrack).filter((t) => t && !DEFAULT_MOCK_TRACK_IDS.has(String(t.id)))
+            : [],
+          recentlyPlayed: Array.isArray(legacyRecents) && legacyRecents.length > 0
+            ? legacyRecents.map((t) => t.id).filter((id) => !DEFAULT_MOCK_TRACK_IDS.has(String(id)))
+            : [],
+          selfMixes: fallbackMixes,
+        };
+        localStorage.setItem(accountStorageKey, JSON.stringify(initialAccountData));
+        setLikedSongIds(initialAccountData.likedSongIds);
+        setLikedSongsMap(initialAccountData.likedSongsMap);
+        setCustomPlaylists(initialAccountData.customPlaylists);
+        setRecentlyPlayedTracks(initialAccountData.recentlyPlayedTracks);
+        setRecentlyPlayed(initialAccountData.recentlyPlayed);
+        setSelfMixes(fallbackMixes);
+
+        recoverLocalUploadedTracksAsMix(fallbackMixes).then((recovered) => {
+          if (recovered && recovered.length > fallbackMixes.length) {
+            setSelfMixes(recovered);
+            persistAccountData({ selfMixes: recovered });
+          }
+        });
       }
+
+      // Authoritative cloud state fetch from Supabase (cross-device sync)
+      syncAccountDataWithCloud(DEFAULT_USER_ID);
+
+      // Set up Supabase Realtime subscription for cross-device playlist sync
+      const unsubscribeRealtime = subscribeToUserPlaylists(DEFAULT_USER_ID, () => {
+        syncAccountDataWithCloud(DEFAULT_USER_ID);
+      });
+
+      // Refresh on window focus so switching devices/tabs immediately gets latest playlists
+      const handleFocus = () => {
+        syncAccountDataWithCloud(DEFAULT_USER_ID);
+      };
+      window.addEventListener("focus", handleFocus);
 
       const savedSearches = localStorage.getItem("nocturne_recent_searches");
       if (savedSearches) {
@@ -1039,6 +1041,11 @@ export const MusicProvider = ({ children }) => {
           }
         } catch { }
       }
+
+      return () => {
+        if (typeof unsubscribeRealtime === "function") unsubscribeRealtime();
+        window.removeEventListener("focus", handleFocus);
+      };
     } catch (e) {
       console.warn("Failed to load saved state from localStorage:", e);
     } finally {
@@ -1110,7 +1117,7 @@ export const MusicProvider = ({ children }) => {
     return newPlaylist;
   };
 
-  const importSpotifyPlaylist = ({
+  const importSpotifyPlaylist = async ({
     title,
     description,
     coverUrl,
@@ -1134,10 +1141,23 @@ export const MusicProvider = ({ children }) => {
       "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80",
     ];
 
-    const finalCover =
+    let finalCover =
       coverUrl ||
       safeTracks[0]?.coverUrl ||
       fallbackCovers[customPlaylists.length % fallbackCovers.length];
+
+    // If a genuine Spotify cover URL was provided and Supabase Storage is configured,
+    // mirror it into Supabase Storage for permanent cross-device durability
+    if (coverUrl && isSupabaseConfigured()) {
+      try {
+        const mirroredUrl = await mirrorRemoteArtworkToCloud(coverUrl, id, currentUserId);
+        if (mirroredUrl) {
+          finalCover = mirroredUrl;
+        }
+      } catch (err) {
+        console.warn("[MusicContext] Could not mirror Spotify cover to cloud storage:", err);
+      }
+    }
 
     const formattedDuration = formatPlaylistDuration(safeTracks);
 
@@ -1183,9 +1203,8 @@ export const MusicProvider = ({ children }) => {
       return updated;
     });
 
-    savePlaylistToCloud(newPlaylist, currentUserId).catch((err) => {
-      console.error("[MusicContext] Failed to persist imported playlist to Supabase:", err);
-    });
+    // Authoritative persistence in Supabase PostgreSQL (both user_playlists and playlist_tracks)
+    await savePlaylistToCloud(newPlaylist, currentUserId);
 
     return newPlaylist;
   };
@@ -1468,10 +1487,24 @@ export const MusicProvider = ({ children }) => {
     deleteCustomPlaylist(id);
   };
 
-  const updatePlaylistCover = (id, newCoverUrl) => {
+  const updatePlaylistCover = async (id, newCoverUrl) => {
     if (!id || !newCoverUrl) return false;
     const currentUserId = getAccountUserId(user);
     const idStr = String(id);
+
+    let durableCoverUrl = newCoverUrl;
+
+    // If a base64 data URL is provided and Supabase Storage is configured, upload to Storage
+    if (typeof newCoverUrl === "string" && newCoverUrl.startsWith("data:") && isSupabaseConfigured()) {
+      try {
+        const uploadResult = await uploadPlaylistCoverToCloud(newCoverUrl, idStr, currentUserId);
+        if (uploadResult?.publicUrl) {
+          durableCoverUrl = uploadResult.publicUrl;
+        }
+      } catch (uploadErr) {
+        console.warn("[MusicContext] Storage cover upload notice:", uploadErr);
+      }
+    }
 
     // 1. Update in customPlaylists
     let foundInCustom = false;
@@ -1483,8 +1516,8 @@ export const MusicProvider = ({ children }) => {
         const current = prev[idx];
         updatedCustomPlaylist = {
           ...current,
-          coverUrl: newCoverUrl,
-          customCover: newCoverUrl,
+          coverUrl: durableCoverUrl,
+          customCover: durableCoverUrl,
         };
         const next = [...prev];
         next[idx] = updatedCustomPlaylist;
@@ -1501,9 +1534,7 @@ export const MusicProvider = ({ children }) => {
     });
 
     if (foundInCustom && updatedCustomPlaylist) {
-      savePlaylistToCloud(updatedCustomPlaylist, currentUserId).catch((err) => {
-        console.warn("[MusicContext] Failed to sync updated cover to Supabase:", err);
-      });
+      await savePlaylistToCloud(updatedCustomPlaylist, currentUserId);
     }
 
     // 2. Update in selfMixes
@@ -1516,8 +1547,8 @@ export const MusicProvider = ({ children }) => {
         const current = prev[idx];
         updatedSelfMix = {
           ...current,
-          coverUrl: newCoverUrl,
-          customCover: newCoverUrl,
+          coverUrl: durableCoverUrl,
+          customCover: durableCoverUrl,
         };
         const next = [...prev];
         next[idx] = updatedSelfMix;
@@ -1531,15 +1562,13 @@ export const MusicProvider = ({ children }) => {
     });
 
     if (foundInSelfMix && updatedSelfMix) {
-      savePlaylistToCloud(updatedSelfMix, currentUserId).catch((err) => {
-        console.warn("[MusicContext] Failed to sync updated self mix cover to Supabase:", err);
-      });
+      await savePlaylistToCloud(updatedSelfMix, currentUserId);
     }
 
     // 3. Update in addedPlaylists
     setAddedPlaylists((prev) => {
       const next = prev.map((p) =>
-        String(p.id) === idStr ? { ...p, coverUrl: newCoverUrl, customCover: newCoverUrl } : p
+        String(p.id) === idStr ? { ...p, coverUrl: durableCoverUrl, customCover: durableCoverUrl } : p
       );
       try {
         localStorage.setItem("ceepeefy_added_playlists", JSON.stringify(next));
@@ -1550,7 +1579,7 @@ export const MusicProvider = ({ children }) => {
     // 4. Save to persistent overrides map (works across all playlist types)
     try {
       const storedOverrides = JSON.parse(localStorage.getItem("ceepeefy_playlist_covers") || "{}");
-      storedOverrides[idStr] = newCoverUrl;
+      storedOverrides[idStr] = durableCoverUrl;
       localStorage.setItem("ceepeefy_playlist_covers", JSON.stringify(storedOverrides));
     } catch { }
 
@@ -1820,26 +1849,32 @@ export const MusicProvider = ({ children }) => {
     const norm = normalizeTrack(track);
     if (!norm) return;
 
-    let isCustom = false;
+    const currentUserId = getAccountUserId(user);
+    let updatedCustomPl = null;
     let targetIndex = 0;
 
-    setCustomPlaylists((prev) =>
-      prev.map((pl) => {
+    setCustomPlaylists((prev) => {
+      const next = prev.map((pl) => {
         if (pl.id !== playlistId) return pl;
-        isCustom = true;
         const existing = pl.tracks || [];
         if (existing.some((t) => String(t.id) === String(norm.id))) return pl;
         targetIndex = existing.length;
         const updated = [...existing, norm];
-        return {
+        updatedCustomPl = {
           ...pl,
           tracks: updated,
           songsCount: updated.length,
           duration: formatPlaylistDuration(updated),
           subtitle: `By You • ${updated.length} tracks`,
         };
-      })
-    );
+        return updatedCustomPl;
+      });
+      if (updatedCustomPl) {
+        persistAccountData({ customPlaylists: next });
+      }
+      return next;
+    });
+
     setSelfMixes((prev) =>
       prev.map((pl) => {
         if (pl.id !== playlistId) return pl;
@@ -1856,35 +1891,43 @@ export const MusicProvider = ({ children }) => {
       })
     );
 
-    if (isCustom) {
-      addTrackToPlaylistCloud(playlistId, norm, targetIndex).catch((err) => {
-        console.error("[MusicContext] Failed to add track to playlist in Supabase:", err);
+    if (updatedCustomPl) {
+      savePlaylistToCloud(updatedCustomPl, currentUserId).catch((err) => {
+        console.error("[MusicContext] Failed to persist added track to Supabase:", err);
       });
+      addTrackToPlaylistCloud(playlistId, norm, targetIndex).catch(() => {});
     }
   };
 
   const removeTrackFromPlaylist = (playlistId, trackId) => {
     if (!playlistId || !trackId) return;
+    const currentUserId = getAccountUserId(user);
     if (String(trackId).startsWith("local-")) {
       deleteLocalAudioFile(trackId).catch((e) =>
         console.warn("Failed to delete local audio file:", e)
       );
     }
-    let isCustom = false;
-    setCustomPlaylists((prev) =>
-      prev.map((pl) => {
+
+    let updatedCustomPl = null;
+    setCustomPlaylists((prev) => {
+      const next = prev.map((pl) => {
         if (pl.id !== playlistId) return pl;
-        isCustom = true;
         const updated = (pl.tracks || []).filter((t) => String(t.id) !== String(trackId));
-        return {
+        updatedCustomPl = {
           ...pl,
           tracks: updated,
           songsCount: updated.length,
           duration: formatPlaylistDuration(updated),
           subtitle: `By You • ${updated.length} tracks`,
         };
-      })
-    );
+        return updatedCustomPl;
+      });
+      if (updatedCustomPl) {
+        persistAccountData({ customPlaylists: next });
+      }
+      return next;
+    });
+
     setSelfMixes((prev) =>
       prev.map((pl) => {
         if (pl.id !== playlistId) return pl;
@@ -1899,12 +1942,43 @@ export const MusicProvider = ({ children }) => {
       })
     );
 
-    if (isCustom) {
-      removeTrackFromPlaylistCloud(playlistId, trackId).catch((err) => {
-        console.error("[MusicContext] Failed to remove track from playlist in Supabase:", err);
+    if (updatedCustomPl) {
+      savePlaylistToCloud(updatedCustomPl, currentUserId).catch((err) => {
+        console.error("[MusicContext] Failed to persist removed track to Supabase:", err);
       });
+      removeTrackFromPlaylistCloud(playlistId, trackId).catch(() => {});
     }
   };
+
+  const reorderPlaylistTracks = async (playlistId, newOrderedTracks) => {
+    if (!playlistId || !Array.isArray(newOrderedTracks)) return false;
+    const currentUserId = getAccountUserId(user);
+    const idStr = String(playlistId);
+
+    let updatedPl = null;
+    setCustomPlaylists((prev) => {
+      const next = prev.map((pl) => {
+        if (String(pl.id) !== idStr) return pl;
+        updatedPl = {
+          ...pl,
+          tracks: newOrderedTracks,
+          songsCount: newOrderedTracks.length,
+          duration: formatPlaylistDuration(newOrderedTracks),
+        };
+        return updatedPl;
+      });
+      if (updatedPl) {
+        persistAccountData({ customPlaylists: next });
+      }
+      return next;
+    });
+
+    if (updatedPl) {
+      return await savePlaylistToCloud(updatedPl, currentUserId);
+    }
+    return false;
+  };
+
 
   // HTML5 Audio Reference & State
   const audioRef = useRef(null);
@@ -3931,7 +4005,9 @@ export const MusicProvider = ({ children }) => {
         addLocalTracksToSelfMix,
         addTrackToPlaylist,
         removeTrackFromPlaylist,
+        reorderPlaylistTracks,
         syncAccountDataWithCloud,
+        refreshCloudPlaylists: () => syncAccountDataWithCloud(DEFAULT_USER_ID),
         fetchPlaylistTracksFromCloud,
 
         // Offline storage & playback helpers

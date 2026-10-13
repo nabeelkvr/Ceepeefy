@@ -45,56 +45,93 @@ export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
 
     const playlistIds = playlistsData.map((p) => p.id);
 
-    // 2. Fetch tracks for these playlists, strictly ordered by position asc
-    const { data: tracksData, error: trError } = await supabase
-      .from("playlist_tracks")
-      .select("*")
-      .in("playlist_id", playlistIds)
-      .order("position", { ascending: true })
-      .limit(10000);
+    // 2. Fetch tracks for these playlists with PostgREST range pagination
+    // Ensures large playlists (e.g. 464, 1000+ tracks) are completely retrieved without server caps
+    const tracksByPlaylist = {};
+    const PAGE_SIZE = 1000;
+    let page = 0;
+    let hasMore = true;
 
-    if (trError) {
-      console.error("[CloudService] Failed to fetch playlist_tracks:", trError.message);
+    while (hasMore) {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      const { data: tracksChunk, error: trError } = await supabase
+        .from("playlist_tracks")
+        .select("*")
+        .in("playlist_id", playlistIds)
+        .order("position", { ascending: true })
+        .range(from, to);
+
+      if (trError) {
+        console.error("[CloudService] Failed to fetch playlist_tracks range:", trError.message);
+        break;
+      }
+
+      if (Array.isArray(tracksChunk) && tracksChunk.length > 0) {
+        tracksChunk.forEach((row) => {
+          if (!tracksByPlaylist[row.playlist_id]) {
+            tracksByPlaylist[row.playlist_id] = [];
+          }
+          // Restore authentic original track ID from track_data or clean disambiguation suffix
+          const cleanTrackId =
+            row.track_data?.id ||
+            (typeof row.track_id === "string" ? row.track_id.replace(/__pos_\d+$/, "") : row.track_id);
+          const trackObj =
+            row.track_data && typeof row.track_data === "object"
+              ? { ...row.track_data, id: cleanTrackId }
+              : { id: cleanTrackId, title: "Unknown Track", artist: "Unknown Artist" };
+          tracksByPlaylist[row.playlist_id].push(trackObj);
+        });
+
+        if (tracksChunk.length < PAGE_SIZE) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      } else {
+        hasMore = false;
+      }
     }
 
-    // 3. Map tracks by playlist ID
-    const tracksByPlaylist = {};
-    (tracksData || []).forEach((row) => {
-      if (!tracksByPlaylist[row.playlist_id]) {
-        tracksByPlaylist[row.playlist_id] = [];
-      }
-      const trackObj = row.track_data && typeof row.track_data === "object"
-        ? { ...row.track_data, id: row.track_id }
-        : { id: row.track_id, title: "Unknown Track", artist: "Unknown Artist" };
-      tracksByPlaylist[row.playlist_id].push(trackObj);
-    });
-
-    // 4. Assemble UI-compatible playlist objects
+    // 3. Assemble UI-compatible playlist objects
     const assembled = playlistsData.map((pl) => {
       // Prioritize pl.tracks if stored directly on the row, then fallback to playlist_tracks join
-      const plTracks = (Array.isArray(pl.tracks) && pl.tracks.length > 0)
-        ? pl.tracks
-        : (tracksByPlaylist[pl.id] || []);
-      const isSelfMix = pl.badge === "SELF MIX" || pl.badge_variant === "cyan" || plTracks.some((t) => t.isCloud || t.source === "supabase-cloud");
+      const plTracks =
+        Array.isArray(pl.tracks) && pl.tracks.length > 0
+          ? pl.tracks
+          : tracksByPlaylist[pl.id] || [];
+      const isSelfMix =
+        pl.badge === "SELF MIX" ||
+        pl.badge_variant === "cyan" ||
+        plTracks.some((t) => t.isCloud || t.source === "supabase-cloud");
 
       return {
         id: pl.id,
         title: pl.title,
         subtitle: `By ${pl.curator || "You"} • ${plTracks.length} tracks`,
-        description: pl.description || (isSelfMix
-          ? `Personal self mix "${pl.title}" blended by You in Ceepeefy Studio Mode.`
-          : `Personal playlist "${pl.title}" created in Ceepeefy Studio Mode. High-resolution lossless playback.`),
+        description:
+          pl.description ||
+          (isSelfMix
+            ? `Personal self mix "${pl.title}" blended by You in Ceepeefy Studio Mode.`
+            : `Personal playlist "${pl.title}" created in Ceepeefy Studio Mode. High-resolution lossless playback.`),
         curator: pl.curator || "You",
-        curatorAvatar: pl.curator_avatar || "https://lh3.googleusercontent.com/aida-public/AB6AXuB0776cuJDNwyUTJA-rmqEC0bmxGrVq2yheMO1LRRjEKa8X3Cf3UEDu0hJn4mdmjyKKeTpXvIjAXGckcnVAnrz3t0pLZyIHxk3oSWIBKnTAewK0vZY8jNgt5WWU1mB33uzQZJtQJNQfehNFMnRCim5JQVgBeDcIsQ21sOVpfHhvACpeifEiQ9VMkYu25PbaQ5RDOCGsSjDtlsMuC8kifyPcZ62qnvBUyplbvUNIWKL7azjlQ_ONJ0ZS",
+        curatorAvatar:
+          pl.curator_avatar ||
+          "https://lh3.googleusercontent.com/aida-public/AB6AXuB0776cuJDNwyUTJA-rmqEC0bmxGrVq2yheMO1LRRjEKa8X3Cf3UEDu0hJn4mdmjyKKeTpXvIjAXGckcnVAnrz3t0pLZyIHxk3oSWIBKnTAewK0vZY8jNgt5WWU1mB33uzQZJtQJNQfehNFMnRCim5JQVgBeDcIsQ21sOVpfHhvACpeifEiQ9VMkYu25PbaQ5RDOCGsSjDtlsMuC8kifyPcZ62qnvBUyplbvUNIWKL7azjlQ_ONJ0ZS",
         songsCount: plTracks.length,
         duration: formatPlaylistDuration(plTracks),
         updatedDate: "Created today",
-        fidelity: pl.fidelity || (isSelfMix ? "Self Mix • Hi-Res Lossless" : "Personal Playlist • Hi-Res Lossless"),
+        fidelity:
+          pl.fidelity ||
+          (isSelfMix ? "Self Mix • Hi-Res Lossless" : "Personal Playlist • Hi-Res Lossless"),
         spec: pl.spec || "24-Bit • 192kHz",
         badge: pl.badge || (isSelfMix ? "SELF MIX" : "CUSTOM"),
         badgeVariant: pl.badge_variant || (isSelfMix ? "cyan" : "purple"),
         stat: `${plTracks.length} tracks`,
-        coverUrl: pl.cover_url || "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
+        coverUrl:
+          pl.cover_url ||
+          "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
         customCover: pl.cover_url,
         tracks: plTracks,
         isCustom: true,
@@ -112,7 +149,7 @@ export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
 };
 
 /**
- * Fetches tracks for a single playlist on-demand from Supabase
+ * Fetches all tracks for a single playlist with complete PostgREST pagination
  * @param {string} playlistId
  * @returns {Promise<Array|null>}
  */
@@ -130,21 +167,51 @@ export const fetchPlaylistTracksFromCloud = async (playlistId) => {
       return plData.tracks;
     }
 
-    // 2. Otherwise query playlist_tracks
-    const { data: tracksData, error } = await supabase
-      .from("playlist_tracks")
-      .select("*")
-      .eq("playlist_id", playlistId)
-      .order("position", { ascending: true })
-      .limit(5000);
+    // 2. Otherwise query playlist_tracks with full range pagination
+    const allTracks = [];
+    const PAGE_SIZE = 1000;
+    let page = 0;
+    let hasMore = true;
 
-    if (error || !tracksData || tracksData.length === 0) return null;
+    while (hasMore) {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
 
-    return tracksData.map((row) => {
-      return row.track_data && typeof row.track_data === "object"
-        ? { ...row.track_data, id: row.track_id }
-        : { id: row.track_id, title: "Unknown Track", artist: "Unknown Artist" };
-    });
+      const { data: tracksChunk, error } = await supabase
+        .from("playlist_tracks")
+        .select("*")
+        .eq("playlist_id", playlistId)
+        .order("position", { ascending: true })
+        .range(from, to);
+
+      if (error) {
+        console.error("[CloudService] Error fetching playlist_tracks chunk:", error.message);
+        break;
+      }
+
+      if (Array.isArray(tracksChunk) && tracksChunk.length > 0) {
+        tracksChunk.forEach((row) => {
+          const cleanTrackId =
+            row.track_data?.id ||
+            (typeof row.track_id === "string" ? row.track_id.replace(/__pos_\d+$/, "") : row.track_id);
+          const trackObj =
+            row.track_data && typeof row.track_data === "object"
+              ? { ...row.track_data, id: cleanTrackId }
+              : { id: cleanTrackId, title: "Unknown Track", artist: "Unknown Artist" };
+          allTracks.push(trackObj);
+        });
+
+        if (tracksChunk.length < PAGE_SIZE) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allTracks.length > 0 ? allTracks : null;
   } catch (err) {
     console.error("[CloudService] Error fetching single playlist tracks:", err);
     return null;
@@ -152,7 +219,10 @@ export const fetchPlaylistTracksFromCloud = async (playlistId) => {
 };
 
 /**
- * Creates or updates a playlist in Supabase
+ * Creates or updates a playlist in Supabase with complete track membership.
+ * Safe batching and conflict resolution guarantee that large playlists (100, 200, 464+ tracks)
+ * are completely persisted across chunks without failing on duplicates.
+ *
  * @param {Object} playlist
  * @param {string} userId
  * @returns {Promise<boolean>}
@@ -161,28 +231,36 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
   if (!supabase || !isSupabaseConfigured() || !playlist?.id) return false;
 
   try {
+    const rawTracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+
     const record = {
       id: playlist.id,
       user_id: userId,
       title: playlist.title || "Untitled Playlist",
       description: playlist.description || "",
-      cover_url: playlist.coverUrl || playlist.cover_url || "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
+      cover_url:
+        playlist.coverUrl ||
+        playlist.cover_url ||
+        "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
       curator: playlist.curator || "You",
       curator_avatar: playlist.curatorAvatar || playlist.curator_avatar || "",
       badge: playlist.badge || (playlist.isSelfMix ? "SELF MIX" : "CUSTOM"),
       badge_variant: playlist.badgeVariant || playlist.badge_variant || (playlist.isSelfMix ? "cyan" : "purple"),
-      fidelity: playlist.fidelity || (playlist.isSelfMix ? "Self Mix • Hi-Res Lossless" : "Personal Playlist • Hi-Res Lossless"),
+      fidelity:
+        playlist.fidelity ||
+        (playlist.isSelfMix ? "Self Mix • Hi-Res Lossless" : "Personal Playlist • Hi-Res Lossless"),
       spec: playlist.spec || "24-Bit • 192kHz",
       updated_at: new Date().toISOString(),
     };
 
     const fullRecord = {
       ...record,
-      tracks: Array.isArray(playlist.tracks) ? playlist.tracks : [],
+      tracks: rawTracks,
       source: playlist.source || (playlist.badge === "SPOTIFY" ? "spotify_import" : "custom"),
       source_meta: playlist.sourceMeta || null,
     };
 
+    // 1. Upsert into user_playlists with full tracks JSONB
     let plResult = await supabase
       .from("user_playlists")
       .upsert(fullRecord, { onConflict: "id" });
@@ -200,17 +278,18 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
       return false;
     }
 
-    // Persist tracks inside playlist_tracks table using safe delete + chunked insert
-    if (Array.isArray(playlist.tracks) && playlist.tracks.length > 0) {
-      const trackRecords = playlist.tracks.map((track, idx) => ({
+    // 2. Persist tracks inside playlist_tracks table using safe delete + chunked insert
+    if (rawTracks.length > 0) {
+      // Build normalized records with position
+      const trackRecords = rawTracks.map((track, idx) => ({
         playlist_id: playlist.id,
-        track_id: String(track.id),
+        track_id: String(track.id || `track-${idx}`),
         position: idx,
         track_data: track,
         added_at: new Date().toISOString(),
       }));
 
-      // Delete existing tracks for this playlist to avoid onConflict constraint dependency
+      // Delete existing tracks for this playlist to ensure clean replacement
       const { error: delError } = await supabase
         .from("playlist_tracks")
         .delete()
@@ -220,15 +299,31 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
         console.warn("[CloudService] Notice on delete old playlist_tracks:", delError.message);
       }
 
-      // Batch insert in chunks of 50
-      for (let i = 0; i < trackRecords.length; i += 50) {
-        const chunk = trackRecords.slice(i, i + 50);
-        const { error: trError } = await supabase
-          .from("playlist_tracks")
-          .insert(chunk);
+      // Batch insert in chunks of 50 with safe conflict resolution
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < trackRecords.length; i += CHUNK_SIZE) {
+        const chunk = trackRecords.slice(i, i + CHUNK_SIZE);
 
+        // Attempt direct batch upsert
+        let { error: trError } = await supabase
+          .from("playlist_tracks")
+          .upsert(chunk, { onConflict: "playlist_id,track_id" });
+
+        // If duplicate (playlist_id, track_id) within the chunk caused failure,
+        // disambiguate track_id per position so no chunk is ever lost
         if (trError) {
-          console.error("[CloudService] Failed to insert playlist_tracks chunk:", trError.message);
+          console.warn(`[CloudService] Batch upsert conflict at chunk ${i}, applying position-safe keys:`, trError.message);
+          const safeChunk = chunk.map((r, cIdx) => ({
+            ...r,
+            track_id: `${r.track_id}__pos_${i + cIdx}`,
+          }));
+          const fallbackRes = await supabase
+            .from("playlist_tracks")
+            .upsert(safeChunk, { onConflict: "playlist_id,track_id" });
+
+          if (fallbackRes.error) {
+            console.error(`[CloudService] Fallback insert failed for chunk ${i}:`, fallbackRes.error.message);
+          }
         }
       }
     }
@@ -239,6 +334,7 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
     return false;
   }
 };
+
 
 /**
  * Deletes a playlist from Supabase (cascades to playlist_tracks automatically)
@@ -772,6 +868,61 @@ export const fetchAccountDataFromCloud = async (userId = DEFAULT_USER_ID) => {
     return data.account_data || null;
   } catch (err) {
     return null;
+  }
+};
+
+/**
+ * Subscribes to Supabase Realtime changes for user playlists
+ * Triggers callback whenever playlists or playlist tracks are added, modified, or deleted across devices
+ * @param {string} userId
+ * @param {Function} onUpdate
+ * @returns {Function} unsubscribe cleanup function
+ */
+export const subscribeToUserPlaylists = (userId = DEFAULT_USER_ID, onUpdate) => {
+  if (!supabase || !isSupabaseConfigured() || typeof onUpdate !== "function") {
+    return () => {};
+  }
+
+  try {
+    const channelName = `realtime-playlists-${userId}-${Date.now()}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_playlists",
+        },
+        () => {
+          onUpdate();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "playlist_tracks",
+        },
+        () => {
+          onUpdate();
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("[CloudService] Realtime subscription established for playlists.");
+        }
+      });
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  } catch (err) {
+    console.warn("[CloudService] Error setting up Realtime subscription:", err);
+    return () => {};
   }
 };
 

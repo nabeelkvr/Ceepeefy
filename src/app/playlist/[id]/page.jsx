@@ -40,6 +40,7 @@ import {
 import {
   uploadAudioToCloud,
   saveSelfMixToCloud,
+  uploadPlaylistCoverToCloud,
   isSupabaseConfigured,
 } from "../../../services/supabaseClient";
 import { getAccountUserId } from "../../../config/authConfig";
@@ -137,11 +138,26 @@ export default function PlaylistPage() {
     if (!file || !playlistId) return;
     try {
       setIsUpdatingCover(true);
-      const dataUrl = await processLocalImage(file);
-      if (updatePlaylistCover) {
-        updatePlaylistCover(playlistId, dataUrl);
+      let durableUrl = null;
+      if (isSupabaseConfigured()) {
+        try {
+          const uploadRes = await uploadPlaylistCoverToCloud(file, playlistId, currentUserId);
+          if (uploadRes?.publicUrl) {
+            durableUrl = uploadRes.publicUrl;
+          }
+        } catch (uploadErr) {
+          console.warn("[PlaylistDetail] Storage upload notice:", uploadErr);
+        }
       }
-      setRemotePlaylist((prev) => (prev ? { ...prev, coverUrl: dataUrl, customCover: dataUrl } : prev));
+
+      if (!durableUrl) {
+        durableUrl = await processLocalImage(file);
+      }
+
+      if (updatePlaylistCover) {
+        await updatePlaylistCover(playlistId, durableUrl);
+      }
+      setRemotePlaylist((prev) => (prev ? { ...prev, coverUrl: durableUrl, customCover: durableUrl } : prev));
     } catch (err) {
       console.error("Failed to update playlist cover image:", err);
     } finally {
@@ -190,11 +206,18 @@ export default function PlaylistPage() {
 
   const tracks = playlist?.tracks || (isCustomPlaylist ? [] : NOCTURNE_TRACKS);
 
-  // Automatic track recovery from cloud when empty on secondary computer
+  // Authoritative track recovery from Supabase cloud when tracks are empty or incomplete
   const [isRecoveringTracks, setIsRecoveringTracks] = useState(false);
   useEffect(() => {
     const currentTracks = playlist?.tracks || [];
-    if (isCustomPlaylist && playlistId && currentTracks.length === 0 && !isRecoveringTracks) {
+    const expectedCount = playlist?.songsCount || 0;
+    const shouldFetch =
+      isCustomPlaylist &&
+      playlistId &&
+      !isRecoveringTracks &&
+      (currentTracks.length === 0 || (expectedCount > currentTracks.length));
+
+    if (shouldFetch) {
       let cancelled = false;
       setIsRecoveringTracks(true);
 
@@ -202,7 +225,7 @@ export default function PlaylistPage() {
       fetchCloud(playlistId)
         .then((cloudTracks) => {
           if (cancelled) return;
-          if (Array.isArray(cloudTracks) && cloudTracks.length > 0) {
+          if (Array.isArray(cloudTracks) && cloudTracks.length > currentTracks.length) {
             setRemotePlaylist((prev) => ({
               ...(prev || playlist),
               id: playlistId,
@@ -222,7 +245,8 @@ export default function PlaylistPage() {
         cancelled = true;
       };
     }
-  }, [playlistId, isCustomPlaylist, playlist?.tracks?.length]);
+  }, [playlistId, isCustomPlaylist, playlist?.tracks?.length, playlist?.songsCount]);
+
 
   const isSpotifyLinked = Boolean(
     playlist?.source === "spotify_import" ||

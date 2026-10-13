@@ -13,6 +13,7 @@ import {
 } from "../../utils/playlistUtils";
 import PlaylistCover from "../../components/PlaylistCover";
 import SpotifyImportModal from "../../components/SpotifyImportModal";
+import { uploadPlaylistCoverToCloud, isSupabaseConfigured } from "../../services/supabaseClient";
 
 export default function PlaylistsPage() {
   const router = useRouter();
@@ -33,7 +34,13 @@ export default function PlaylistsPage() {
     renamePlaylist,
     updatePlaylistCategory,
     bumpPlaylistToTop,
+    refreshCloudPlaylists,
   } = useMusic();
+
+  // Authoritatively load fresh playlists from Supabase cloud whenever the playlist page is opened
+  React.useEffect(() => {
+    refreshCloudPlaylists?.();
+  }, [refreshCloudPlaylists]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
@@ -76,9 +83,24 @@ export default function PlaylistsPage() {
     if (!file || !targetCoverPlaylistId) return;
     try {
       setIsProcessingCover(true);
-      const dataUrl = await processLocalImage(file);
+      let durableUrl = null;
+      if (isSupabaseConfigured()) {
+        try {
+          const uploadRes = await uploadPlaylistCoverToCloud(file, targetCoverPlaylistId);
+          if (uploadRes?.publicUrl) {
+            durableUrl = uploadRes.publicUrl;
+          }
+        } catch (uploadErr) {
+          console.warn("[PlaylistsPage] Storage upload notice, falling back to local optimization:", uploadErr);
+        }
+      }
+
+      if (!durableUrl) {
+        durableUrl = await processLocalImage(file);
+      }
+
       if (updatePlaylistCover) {
-        updatePlaylistCover(targetCoverPlaylistId, dataUrl);
+        await updatePlaylistCover(targetCoverPlaylistId, durableUrl);
       }
     } catch (err) {
       console.error("Failed to update playlist cover:", err);

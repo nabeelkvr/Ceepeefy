@@ -73,6 +73,116 @@ export const uploadAudioToCloud = async (file, owner = DEFAULT_USER_ID) => {
 };
 
 /**
+ * Converts a data URL to a Blob
+ */
+const dataUrlToBlob = (dataUrl) => {
+  const parts = dataUrl.split(",");
+  const mimeMatch = parts[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+  const bstr = atob(parts[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+};
+
+/**
+ * Uploads a playlist cover image directly to Supabase cloud storage (`self-mixes` bucket)
+ * Accepts File, Blob, or base64 data URL
+ * @param {File|Blob|string} imageFileOrData - Image file, blob, or data URL
+ * @param {string} playlistId - Associated playlist ID
+ * @param {string} owner - Account handle (default DEFAULT_USER_ID)
+ * @returns {Promise<{ publicUrl: string, filePath: string }>}
+ */
+export const uploadPlaylistCoverToCloud = async (imageFileOrData, playlistId, owner = DEFAULT_USER_ID) => {
+  if (!supabase || !isSupabaseConfigured()) {
+    throw new Error("Supabase is not configured.");
+  }
+  if (!imageFileOrData) {
+    throw new Error("No cover image provided.");
+  }
+
+  let fileToUpload = imageFileOrData;
+  let contentType = "image/jpeg";
+  let extension = "jpg";
+
+  if (typeof imageFileOrData === "string" && imageFileOrData.startsWith("data:")) {
+    fileToUpload = dataUrlToBlob(imageFileOrData);
+    contentType = fileToUpload.type || "image/jpeg";
+  } else if (imageFileOrData instanceof Blob || (typeof File !== "undefined" && imageFileOrData instanceof File)) {
+    contentType = imageFileOrData.type || "image/jpeg";
+  }
+
+  if (contentType.includes("png")) extension = "png";
+  else if (contentType.includes("webp")) extension = "webp";
+  else if (contentType.includes("gif")) extension = "gif";
+
+  const cleanId = String(playlistId || `cover-${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filePath = `${owner}/covers/${cleanId}_${Date.now()}.${extension}`;
+
+  const { data, error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(filePath, fileToUpload, {
+      cacheControl: "31536000",
+      upsert: true,
+      contentType,
+    });
+
+  if (error) {
+    console.error("[Supabase Storage] Playlist cover upload error:", error);
+    throw error;
+  }
+
+  const { data: urlData } = supabase.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(data.path);
+
+  return {
+    publicUrl: urlData.publicUrl,
+    filePath: data.path,
+  };
+};
+
+/**
+ * Mirrors a remote image (e.g. Spotify original cover art) into Supabase cloud storage
+ * Returns the durable Supabase public URL if successful, or null on error
+ * @param {string} remoteUrl - URL of remote artwork
+ * @param {string} playlistId - Associated playlist ID
+ * @param {string} owner - Account handle (default DEFAULT_USER_ID)
+ * @returns {Promise<string|null>} Durable Supabase storage URL or null
+ */
+export const mirrorRemoteArtworkToCloud = async (remoteUrl, playlistId, owner = DEFAULT_USER_ID) => {
+  if (!supabase || !isSupabaseConfigured() || !remoteUrl || typeof remoteUrl !== "string") {
+    return null;
+  }
+  if (remoteUrl.includes(BUCKET_NAME) && remoteUrl.includes("supabase.co")) {
+    return remoteUrl; // Already in Supabase Storage
+  }
+
+  try {
+    // Attempt fetching the image; if direct fetch fails on client due to CORS, route through proxy
+    let res;
+    try {
+      res = await fetch(remoteUrl, { cache: "no-store" });
+    } catch {
+      // Fallback via our server-side image proxy
+      const proxyUrl = `/api/spotify/image-proxy?url=${encodeURIComponent(remoteUrl)}`;
+      res = await fetch(proxyUrl, { cache: "no-store" });
+    }
+
+    if (!res || !res.ok) return null;
+    const blob = await res.blob();
+    const result = await uploadPlaylistCoverToCloud(blob, playlistId, owner);
+    return result?.publicUrl || null;
+  } catch (err) {
+    console.warn("[Supabase Storage] Notice mirroring artwork to storage:", err?.message || err);
+    return null;
+  }
+};
+
+/**
  * Saves a Self Mix record to the cloud database
  * @param {Object} mixData - Self mix details
  * @returns {Promise<Object>}
