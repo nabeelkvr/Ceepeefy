@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useMusic } from "../context/MusicContext";
 import { getTrackFingerprint, createSnapshotEntry } from "../services/spotifySyncService";
+import { parseSpotifyPlaylistId } from "../services/spotifyPlaylistService";
 import { PLAYLIST_CATEGORIES } from "../utils/playlistUtils";
 
 export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = "Mixed" }) {
@@ -486,7 +487,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
         spotifyUrl: spotifyLink,
         category: selectedCategory,
         sourceMeta: {
-          spotifyId: sourcePlaylist?.id || parseSpotifyPlaylistId(playlistUrl) || null,
+          spotifyId: sourcePlaylist?.id || (playlistUrl ? parseSpotifyPlaylistId(playlistUrl) : null) || null,
           spotifyUrl: spotifyLink,
           spotifyLink: spotifyLink,
           snapshotId: sourcePlaylist?.snapshotId || null,
@@ -538,6 +539,9 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
   };
 
   // Counts
+  const importableCount = matchedItems.filter(
+    (m) => (m.userSelectedTrack || m.matchedTrack) && !m.skipped
+  ).length;
   const confirmedCount = matchedItems.filter(
     (m) => (m.status === "matched" || m.userSelectedTrack) && !m.skipped
   ).length;
@@ -1089,11 +1093,18 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
                 })}
               </div>
 
+              {errorMessage && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">error</span>
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
               {/* Bottom Confirm Actions */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-outline-variant/20">
                 <div className="text-xs text-outline font-mono">
                   <span>
-                    Will import <strong className="text-white">{confirmedCount}</strong> songs
+                    Will import <strong className="text-white">{importableCount}</strong> songs
                   </span>
                   {skippedTotal > 0 && <span> ({skippedTotal} skipped)</span>}
                   {unmatchedCount > 0 && (
@@ -1163,7 +1174,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
                   </button>
                   <button
                     onClick={handleConfirmImport}
-                    disabled={confirmedCount === 0 || isSaving}
+                    disabled={importableCount === 0 || isSaving}
                     className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_15px_rgba(76,215,246,0.3)] hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
                   >
                     {isSaving ? (
@@ -1174,7 +1185,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
                     ) : (
                       <>
                         <span className="material-symbols-outlined text-[18px]">playlist_add</span>
-                        <span>Import Playlist ({confirmedCount} Tracks)</span>
+                        <span>Import Playlist ({importableCount} Tracks)</span>
                       </>
                     )}
                   </button>

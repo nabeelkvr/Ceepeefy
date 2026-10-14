@@ -1180,6 +1180,7 @@ export const MusicProvider = ({ children }) => {
     description,
     coverUrl,
     tracks,
+    spotifyUrl,
     sourceMeta,
     category = "Mixed",
   }) => {
@@ -1274,7 +1275,11 @@ export const MusicProvider = ({ children }) => {
     });
 
     // Authoritative persistence in Supabase PostgreSQL (both user_playlists and playlist_tracks)
-    await savePlaylistToCloud(newPlaylist, currentUserId);
+    try {
+      await savePlaylistToCloud(newPlaylist, currentUserId);
+    } catch (cloudErr) {
+      console.warn("[MusicContext] Could not persist imported playlist to cloud:", cloudErr);
+    }
 
     return newPlaylist;
   };
