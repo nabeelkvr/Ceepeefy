@@ -64,6 +64,7 @@ import {
   mirrorRemoteArtworkToCloud,
   isSupabaseConfigured,
 } from "../services/supabaseClient";
+import { parseSpotifyPlaylistId } from "../services/spotifyPlaylistService";
 import { generateRecommendedQueue, extractLanguage, classifySongMood } from "../utils/recommendationEngine";
 
 export const DEFAULT_MOCK_TRACK_IDS = new Set([
@@ -242,8 +243,22 @@ export const MusicProvider = ({ children }) => {
   // User Authentication State (Strict Personal Instance: centralized account identity)
   const [user, setUser] = useState(null);
 
+  // Playback Context State (tracks active playlist/album source)
+  const [playbackContext, setPlaybackContext] = useState(null);
+  const playbackContextRef = useRef(null);
+  useEffect(() => {
+    playbackContextRef.current = playbackContext;
+  }, [playbackContext]);
+
+  const isSyncingCloudRef = useRef(false);
+
   // Cloud sync helper to refresh playlists, liked songs, and recently played from Supabase
   const syncAccountDataWithCloud = async (userId = DEFAULT_USER_ID) => {
+    if (!isSupabaseConfigured()) {
+      return;
+    }
+    if (isSyncingCloudRef.current) return;
+    isSyncingCloudRef.current = true;
     try {
       // 1. Run one-time migration if not yet completed
       await migrateLocalDataToSupabase(userId);
@@ -257,17 +272,31 @@ export const MusicProvider = ({ children }) => {
         fetchAccountDataFromCloud(userId).catch(() => null),
       ]);
 
+      // Collect all deleted playlist IDs to prevent resurrection
+      const deletedIdsSet = new Set();
+      try {
+        const localDeleted = JSON.parse(localStorage.getItem("ceepeefy_deleted_playlists") || "[]");
+        if (Array.isArray(localDeleted)) localDeleted.forEach((d) => deletedIdsSet.add(String(d)));
+        if (Array.isArray(cloudAccountData?.deletedPlaylistIds)) {
+          cloudAccountData.deletedPlaylistIds.forEach((d) => deletedIdsSet.add(String(d)));
+        }
+      } catch {}
+
       // 3. Apply state updates non-destructively: NEVER overwrite playlists with tracks by empty playlists
       if (cloudPlaylists !== null || cloudAccountData?.customPlaylists) {
         setCustomPlaylists((prev) => {
-          const localList = Array.isArray(prev) ? prev : [];
+          const localList = Array.isArray(prev)
+            ? prev.filter((p) => !deletedIdsSet.has(String(p.id)))
+            : [];
           const localMap = new Map(localList.map((p) => [String(p.id), p]));
 
-          const acctList = Array.isArray(cloudAccountData?.customPlaylists) ? cloudAccountData.customPlaylists : [];
+          const acctList = Array.isArray(cloudAccountData?.customPlaylists)
+            ? cloudAccountData.customPlaylists.filter((p) => !deletedIdsSet.has(String(p.id)))
+            : [];
           const acctMap = new Map(acctList.map((p) => [String(p.id), p]));
 
           const cloudList = Array.isArray(cloudPlaylists)
-            ? cloudPlaylists.filter((pl) => !pl.isSelfMix && pl.badge !== "SELF MIX")
+            ? cloudPlaylists.filter((pl) => !pl.isSelfMix && pl.badge !== "SELF MIX" && !deletedIdsSet.has(String(pl.id)))
             : [];
           const cloudMap = new Map(cloudList.map((p) => [String(p.id), p]));
 
@@ -324,9 +353,11 @@ export const MusicProvider = ({ children }) => {
 
       // 4. Merge self-mixes across cloud tables, central account data, and local storage
       const selfMixPlaylists = Array.isArray(cloudPlaylists)
-        ? cloudPlaylists.filter((pl) => pl.isSelfMix || pl.badge === "SELF MIX")
+        ? cloudPlaylists.filter((pl) => (pl.isSelfMix || pl.badge === "SELF MIX") && !deletedIdsSet.has(String(pl.id)))
         : [];
-      const acctMixes = Array.isArray(cloudAccountData?.selfMixes) ? cloudAccountData.selfMixes : [];
+      const acctMixes = Array.isArray(cloudAccountData?.selfMixes)
+        ? cloudAccountData.selfMixes.filter((m) => !deletedIdsSet.has(String(m.id)))
+        : [];
 
       setSelfMixes((prev) => {
         const localList = Array.isArray(prev) ? prev : [];
@@ -444,8 +475,15 @@ export const MusicProvider = ({ children }) => {
       }
     } catch (err) {
       console.error("[MusicContext] Cloud sync error:", err);
+    } finally {
+      isSyncingCloudRef.current = false;
     }
   };
+
+  const refreshCloudPlaylists = useCallback(() => {
+    if (!isSupabaseConfigured()) return;
+    return syncAccountDataWithCloud(DEFAULT_USER_ID);
+  }, []);
 
   const login = (userData) => {
     const userObj = {
@@ -557,7 +595,12 @@ export const MusicProvider = ({ children }) => {
     return null;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.warn("[MusicContext] Logout request error:", e);
+    }
     setUser(null);
     setLikedSongIds([]);
     setLikedSongsMap({});
@@ -570,6 +613,10 @@ export const MusicProvider = ({ children }) => {
       localStorage.removeItem("activeUser");
       localStorage.removeItem("ceepeefy_user");
     } catch (e) { }
+
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
   };
 
   // Audiophile App & Playback Settings
@@ -901,17 +948,28 @@ export const MusicProvider = ({ children }) => {
     try {
       const storedActiveUser = localStorage.getItem("activeUser") || DEFAULT_USER_ID;
       const savedUserStr = localStorage.getItem("ceepeefy_user");
-      const userObj = savedUserStr
-        ? JSON.parse(savedUserStr)
-        : {
-          username: DEFAULT_USER_ID,
-          name: DEFAULT_USER_ID,
-          email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
-          plan: "Owner / Studio Master",
-          isLoggedIn: true,
-          activeUser: DEFAULT_USER_ID,
-        };
-      setUser(userObj);
+      const userObj = savedUserStr ? JSON.parse(savedUserStr) : null;
+      if (userObj && userObj.isLoggedIn) {
+        setUser(userObj);
+      } else {
+        setUser(null);
+      }
+
+      // Check authoritative server session via HttpOnly cookie
+      fetch("/api/auth/session")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.authenticated && data?.user) {
+            setUser(data.user);
+            localStorage.setItem("ceepeefy_user", JSON.stringify(data.user));
+            localStorage.setItem("isLoggedIn", "true");
+          } else {
+            setUser(null);
+            localStorage.removeItem("ceepeefy_user");
+            localStorage.removeItem("isLoggedIn");
+          }
+        })
+        .catch(() => {});
 
       // Instant local cache hydration for zero UI flicker
       const accountStorageKey = getAccountStorageKey("userData", storedActiveUser);
@@ -1161,6 +1219,16 @@ export const MusicProvider = ({ children }) => {
 
     const formattedDuration = formatPlaylistDuration(safeTracks);
 
+    const resolvedSpotifyId =
+      sourceMeta?.spotifyId ||
+      parseSpotifyPlaylistId(spotifyUrl || sourceMeta?.spotifyUrl || sourceMeta?.spotifyLink);
+
+    const completeSourceMeta = {
+      ...(sourceMeta || {}),
+      spotifyId: resolvedSpotifyId || sourceMeta?.spotifyId || null,
+      spotifyUrl: spotifyUrl || sourceMeta?.spotifyUrl || null,
+    };
+
     const newPlaylist = {
       id,
       title: cleanTitle,
@@ -1185,7 +1253,9 @@ export const MusicProvider = ({ children }) => {
       isCustom: true,
       category: cleanCategory,
       source: "spotify_import",
-      sourceMeta: sourceMeta || null,
+      spotifyId: resolvedSpotifyId || null,
+      spotifyUrl: spotifyUrl || sourceMeta?.spotifyUrl || null,
+      sourceMeta: completeSourceMeta,
     };
 
     try {
@@ -1277,9 +1347,40 @@ export const MusicProvider = ({ children }) => {
       return { success: false, error: "Playlist not found in your custom playlists." };
     }
 
-    const spotifyId = playlist.sourceMeta?.spotifyId;
+    const spotifyId =
+      playlist.sourceMeta?.spotifyId ||
+      playlist.source_meta?.spotifyId ||
+      playlist.spotifyId ||
+      parseSpotifyPlaylistId(
+        playlist.sourceMeta?.spotifyUrl ||
+        playlist.sourceMeta?.spotifyLink ||
+        playlist.spotifyUrl ||
+        playlist.source_meta?.spotifyUrl ||
+        playlist.description
+      );
+
     if (!spotifyId) {
-      return { success: false, error: "This playlist is not linked to a Spotify source." };
+      return { success: false, error: "This playlist is not linked to a Spotify source.", noSpotifySource: true };
+    }
+
+    // Permanently backfill sourceMeta if spotifyId was missing
+    if (!playlist.sourceMeta?.spotifyId) {
+      playlist.sourceMeta = {
+        ...(playlist.sourceMeta || {}),
+        spotifyId,
+      };
+      playlist.spotifyId = spotifyId;
+      const currentUserId = getAccountUserId(user);
+      setCustomPlaylists((prev) => {
+        const next = prev.map((p) =>
+          String(p.id) === String(playlistId) ? { ...p, sourceMeta: playlist.sourceMeta, spotifyId } : p
+        );
+        try {
+          localStorage.setItem(getAccountStorageKey("ceepeefy_custom_playlists", currentUserId), JSON.stringify(next));
+          persistAccountData({ customPlaylists: next });
+        } catch {}
+        return next;
+      });
     }
 
     setSyncingPlaylistIds((prev) => new Set([...prev, playlistId]));
@@ -1355,6 +1456,8 @@ export const MusicProvider = ({ children }) => {
         spotifyTrack: m.spotifyTrack,
       })),
       unresolvedAdditions,
+      skippedAdditions: options.skippedAdditions || [],
+      unskippedSourceEntryIds: options.unskippedSourceEntryIds || [],
       existingTracks: playlist.tracks || [],
       playlistTitle: playlist.title,
     });
@@ -1415,10 +1518,22 @@ export const MusicProvider = ({ children }) => {
     };
   };
 
-  const deleteCustomPlaylist = (id) => {
-    if (!id) return;
+  const deleteCustomPlaylist = async (id) => {
+    if (!id) return { success: false, error: "Playlist ID required" };
     const currentUserId = getAccountUserId(user);
     const idStr = String(id);
+
+    // Save to local deleted playlist IDs to prevent resurrection on refresh or sync
+    try {
+      const storedDeleted = JSON.parse(localStorage.getItem("ceepeefy_deleted_playlists") || "[]");
+      const nextDeleted = Array.from(new Set([...storedDeleted, idStr]));
+      localStorage.setItem("ceepeefy_deleted_playlists", JSON.stringify(nextDeleted));
+    } catch {}
+
+    // Safely detach active playback context if this playlist was playing
+    if (playbackContextRef.current?.id === idStr) {
+      setPlaybackContext(null);
+    }
 
     // 1. Remove from customPlaylists immediately and persist
     setCustomPlaylists((prev) => {
@@ -1430,7 +1545,7 @@ export const MusicProvider = ({ children }) => {
         );
       } catch { }
       try {
-        persistAccountData({ customPlaylists: next });
+        persistAccountData({ customPlaylists: next, deletedPlaylistIds: [idStr] });
       } catch { }
       return next;
     });
@@ -1463,7 +1578,7 @@ export const MusicProvider = ({ children }) => {
       return next;
     });
 
-    // 5. Clean up local title/cover overrides
+    // 5. Clean up local title/cover/category overrides
     try {
       const titles = JSON.parse(localStorage.getItem("ceepeefy_playlist_titles") || "{}");
       if (titles[idStr]) {
@@ -1475,16 +1590,32 @@ export const MusicProvider = ({ children }) => {
         delete covers[idStr];
         localStorage.setItem("ceepeefy_playlist_covers", JSON.stringify(covers));
       }
+      const cats = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+      if (cats[idStr]) {
+        delete cats[idStr];
+        localStorage.setItem("ceepeefy_playlist_categories", JSON.stringify(cats));
+      }
     } catch { }
 
     // 6. Delete from Supabase cloud
-    deletePlaylistFromCloud(idStr, currentUserId).catch((err) => {
-      console.error("[MusicContext] Failed to delete playlist from Supabase:", err);
-    });
+    if (isSupabaseConfigured()) {
+      try {
+        const cloudOk = await deletePlaylistFromCloud(idStr, currentUserId);
+        if (!cloudOk) {
+          console.error("[MusicContext] Database failed to delete playlist:", idStr);
+          return { success: false, error: "Database error: Could not remove playlist from cloud." };
+        }
+      } catch (err) {
+        console.error("[MusicContext] Failed to delete playlist from Supabase:", err);
+        return { success: false, error: err?.message || "Cloud deletion failed." };
+      }
+    }
+
+    return { success: true };
   };
 
-  const deletePlaylist = (id) => {
-    deleteCustomPlaylist(id);
+  const deletePlaylist = async (id) => {
+    return await deleteCustomPlaylist(id);
   };
 
   const updatePlaylistCover = async (id, newCoverUrl) => {
@@ -3071,18 +3202,36 @@ export const MusicProvider = ({ children }) => {
     const isExplicitSequentialPlaylist = Boolean(
       options?.context === "playlist" ||
       options?.isSequentialPlaylist ||
+      options?.playlistId ||
       (options?.context === "album" && options?.isAlbumPlay)
     );
 
     if (tracklist && tracklist.length > 0 && isExplicitSequentialPlaylist) {
+      const ctxId = options?.playlistId || options?.contextId || (options?.context === "album" ? options?.albumId : "playlist");
+      const ctxTitle = options?.playlistTitle || options?.albumTitle || "Playlist";
+      const ctxType = options?.context === "album" ? "album" : "playlist";
+
+      setPlaybackContext({
+        type: ctxType,
+        id: String(ctxId),
+        name: ctxTitle,
+      });
+
       originalPlaylistTracksRef.current = tracklist;
       setCurrentTracklist(tracklist);
       const trackIdStr = String(track.id);
       const idx = tracklist.findIndex((t) => String(t.id) === trackIdStr);
 
-      if (isShuffleRef.current) {
-        const remaining = tracklist.filter((t) => String(t.id) !== trackIdStr).sort(() => Math.random() - 0.5);
-        setAutoQueue(remaining);
+      if (options?.isShuffle || isShuffleRef.current) {
+        if (Array.isArray(options?.shuffledQueue) && options.shuffledQueue.length > 0) {
+          setAutoQueue(options.shuffledQueue);
+        } else {
+          const remaining = idx !== -1
+            ? [...tracklist.slice(0, idx), ...tracklist.slice(idx + 1)]
+            : tracklist.filter((t) => String(t.id) !== trackIdStr);
+          const shuffled = [...remaining].sort(() => Math.random() - 0.5);
+          setAutoQueue(shuffled);
+        }
       } else if (idx !== -1) {
         // Normal playlist queue: all results after selected song become upcoming queue in exact order
         const remaining = tracklist.slice(idx + 1);
@@ -3096,11 +3245,12 @@ export const MusicProvider = ({ children }) => {
         // User clicked a song directly inside the queue drawer: regenerate queue for this new song!
         setAutoQueue([]);
         fetchAndInjectAutoplayQueue(track, { mode: "initial" });
-      } else if (isAutoplayEnabledRef.current && autoQueueRef.current.length <= 5) {
+      } else if (playbackContextRef.current?.type !== "playlist" && isAutoplayEnabledRef.current && autoQueueRef.current.length <= 5) {
         fetchAndInjectAutoplayQueue(track, { mode: "append" });
       }
     } else {
-      // Individual track played (Search, Home page, SongCard, RecommendationCard, etc.):
+      // Individual track played outside playlist (Search, Home page, SongCard, RecommendationCard, etc.):
+      setPlaybackContext(null);
       if (tracklist && Array.isArray(tracklist) && tracklist.length > 1) {
         const seedLang = (track.language || track.more_info?.language || "").toLowerCase().trim();
         const initialSeed = tracklist
@@ -3338,7 +3488,11 @@ export const MusicProvider = ({ children }) => {
       const remainingAuto = aQ.slice(1);
       autoQueueRef.current = remainingAuto;
       setAutoQueue(remainingAuto);
-      if (isAutoplayEnabledRef.current && remainingAuto.length <= 5) {
+      if (
+        playbackContextRef.current?.type !== "playlist" &&
+        isAutoplayEnabledRef.current &&
+        remainingAuto.length <= 5
+      ) {
         fetchAndInjectAutoplayQueue(next, { mode: "append" });
       }
       playTrack(next, null, { fromQueue: true, wasManual: false });
@@ -3507,15 +3661,18 @@ export const MusicProvider = ({ children }) => {
       const cur = currentTrackRef.current;
       if (orig && orig.length > 0) {
         if (next) {
-          // Shuffle remaining tracks without altering current track
-          const remaining = orig.filter((t) => String(t.id) !== String(cur?.id));
+          // Shuffle remaining tracks without altering current track or saved playlist order
+          const curIndex = orig.findIndex((t) => String(t.id) === String(cur?.id));
+          const remaining = curIndex !== -1
+            ? [...orig.slice(0, curIndex), ...orig.slice(curIndex + 1)]
+            : orig.filter((t) => String(t.id) !== String(cur?.id));
           const shuffled = [...remaining].sort(() => Math.random() - 0.5);
-          setQueue(shuffled);
+          setAutoQueue(shuffled);
         } else {
           // Restore normal playlist-order playback
           const curIndex = orig.findIndex((t) => String(t.id) === String(cur?.id));
           const normalRemaining = curIndex !== -1 ? orig.slice(curIndex + 1) : orig.filter((t) => String(t.id) !== String(cur?.id));
-          setQueue(normalRemaining);
+          setAutoQueue(normalRemaining);
         }
       }
       return next;
@@ -3645,15 +3802,20 @@ export const MusicProvider = ({ children }) => {
     }
 
     const cur = currentTrackRef.current;
-    const tracklist = currentTracklistRef.current || [];
-    if (cur && tracklist.length > 0) {
-      const currentIndex = tracklist.findIndex((t) => String(t.id) === String(cur.id));
+    const origTracks = originalPlaylistTracksRef.current?.length > 0 ? originalPlaylistTracksRef.current : (currentTracklistRef.current || []);
+    if (cur && origTracks.length > 0) {
+      const currentIndex = origTracks.findIndex((t) => String(t.id) === String(cur.id));
       if (currentIndex > 0) {
-        const prevTrack = tracklist[currentIndex - 1];
+        const prevTrack = origTracks[currentIndex - 1];
         if (currentTrackRef.current) {
           setQueue((q) => [currentTrackRef.current, ...q]);
         }
-        playTrack(prevTrack, tracklist, { fromHistory: true });
+        playTrack(prevTrack, origTracks, {
+          context: playbackContextRef.current?.type || "playlist",
+          playlistId: playbackContextRef.current?.id,
+          playlistTitle: playbackContextRef.current?.name,
+          fromHistory: true,
+        });
         return;
       }
     }
@@ -3928,6 +4090,8 @@ export const MusicProvider = ({ children }) => {
         setManualQueue,
         setAutoQueue,
         currentTracklist,
+        playbackContext,
+        setPlaybackContext,
         playbackHistory,
         hasNextTrack,
         hasPrevTrack,
@@ -4007,7 +4171,7 @@ export const MusicProvider = ({ children }) => {
         removeTrackFromPlaylist,
         reorderPlaylistTracks,
         syncAccountDataWithCloud,
-        refreshCloudPlaylists: () => syncAccountDataWithCloud(DEFAULT_USER_ID),
+        refreshCloudPlaylists,
         fetchPlaylistTracksFromCloud,
 
         // Offline storage & playback helpers

@@ -46,6 +46,7 @@ import {
 import { getAccountUserId } from "../../../config/authConfig";
 import PlaylistSkeleton from "../../../components/PlaylistSkeleton";
 import SpotifySyncModal from "../../../components/SpotifySyncModal";
+import { parseSpotifyPlaylistId } from "../../../services/spotifyPlaylistService";
 
 export default function PlaylistPage() {
   const params = useParams();
@@ -248,13 +249,19 @@ export default function PlaylistPage() {
   }, [playlistId, isCustomPlaylist, playlist?.tracks?.length, playlist?.songsCount]);
 
 
-  const isSpotifyLinked = Boolean(
-    playlist?.source === "spotify_import" ||
+  const spotifySourceId =
     playlist?.sourceMeta?.spotifyId ||
-    playlist?.sourceMeta?.spotifyUrl ||
-    playlist?.badge === "SPOTIFY" ||
-    playlist?.fidelity?.toLowerCase().includes("imported")
-  );
+    playlist?.source_meta?.spotifyId ||
+    playlist?.spotifyId ||
+    parseSpotifyPlaylistId(
+      playlist?.sourceMeta?.spotifyUrl ||
+      playlist?.sourceMeta?.spotifyLink ||
+      playlist?.spotifyUrl ||
+      playlist?.source_meta?.spotifyUrl ||
+      playlist?.description
+    );
+
+  const isSpotifyLinked = Boolean(spotifySourceId);
 
   const isSyncing = Boolean(syncingPlaylistIds?.has(playlist?.id) || isFetchingSync);
 
@@ -270,20 +277,23 @@ export default function PlaylistPage() {
 
   const handleStartSync = async () => {
     if (isSyncing || !playlist?.id) return;
+    if (!spotifySourceId) return; // Do not show error alert if playlist genuinely has no Spotify source
     setIsFetchingSync(true);
     setSyncNotice(null);
 
     try {
       const planResult = await fetchSpotifySyncPlan(playlist.id);
       if (!planResult || !planResult.success) {
-        setSyncNotice({
-          type: "error",
-          message: planResult?.error || "Failed to check Spotify playlist source. Please try again.",
-        });
+        if (!planResult?.noSpotifySource) {
+          setSyncNotice({
+            type: "error",
+            message: planResult?.error || "Failed to check Spotify playlist source. Please try again.",
+          });
+        }
         return;
       }
 
-      if (planResult.isUpToDate) {
+      if (planResult.isUpToDate && (!planResult.diff?.skipped || planResult.diff.skipped.length === 0)) {
         setSyncNotice({
           type: "info",
           message: "Your playlist is already up to date.",
@@ -346,9 +356,13 @@ export default function PlaylistPage() {
       if (playlist?.id && bumpPlaylistToTop) {
         bumpPlaylistToTop(playlist.id);
       }
-      playTrack(tracks[0], tracks);
+      playTrack(tracks[0], tracks, {
+        context: "playlist",
+        playlistId: playlist?.id,
+        playlistTitle: playlist?.title,
+      });
     }
-  }, [shouldAutoPlay, tracks, playTrack, playlist?.id, bumpPlaylistToTop]);
+  }, [shouldAutoPlay, tracks, playTrack, playlist?.id, playlist?.title, bumpPlaylistToTop]);
 
   // Sync edited title when playlist changes
   useEffect(() => {
@@ -386,7 +400,11 @@ export default function PlaylistPage() {
     if (isCurrentPlaylistPlaying) {
       togglePlay();
     } else {
-      playTrack(tracks[0], tracks);
+      playTrack(tracks[0], tracks, {
+        context: "playlist",
+        playlistId: playlist?.id,
+        playlistTitle: playlist?.title,
+      });
     }
   };
 
@@ -398,7 +416,13 @@ export default function PlaylistPage() {
     }
     const shuffled = [...tracks].sort(() => Math.random() - 0.5);
     setIsShuffle(true);
-    playTrack(shuffled[0], shuffled);
+    playTrack(shuffled[0], tracks, {
+      context: "playlist",
+      playlistId: playlist?.id,
+      playlistTitle: playlist?.title,
+      isShuffle: true,
+      shuffledQueue: shuffled.slice(1),
+    });
   };
 
   const handleRowClick = (track) => {
@@ -408,7 +432,11 @@ export default function PlaylistPage() {
     if (currentTrack?.id === track.id) {
       togglePlay();
     } else {
-      playTrack(track, tracks);
+      playTrack(track, tracks, {
+        context: "playlist",
+        playlistId: playlist?.id,
+        playlistTitle: playlist?.title,
+      });
     }
   };
 
@@ -672,7 +700,7 @@ export default function PlaylistPage() {
   return (
     <div className="w-full flex flex-col pb-12 select-none">
       {/* Dynamic Hero Banner */}
-      <div className="relative w-full p-4 sm:p-6 md:p-8 bg-gradient-to-b from-surface-container-high/60 via-surface-container-low/40 to-transparent border-b border-white/5">
+      <div className="relative w-full p-4 sm:p-6 md:p-8 2xl:p-12 bg-gradient-to-b from-surface-container-high/60 via-surface-container-low/40 to-transparent border-b border-white/5">
         {/* Upper Right Edge: Pin to Library Button */}
         <div className="absolute top-3.5 right-3.5 sm:top-5 sm:right-5 md:top-6 md:right-6 z-20">
           <button
@@ -693,11 +721,11 @@ export default function PlaylistPage() {
           </button>
         </div>
 
-        <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 max-w-6xl">
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 2xl:gap-10 max-w-6xl 2xl:max-w-7xl 3xl:max-w-[1800px]">
           {/* Cover Art with Love button on upper right edge */}
           <div
             onClick={() => coverImageInputRef.current?.click()}
-            className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group mx-auto md:mx-0 cursor-pointer"
+            className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-56 md:h-56 2xl:w-64 2xl:h-64 3xl:w-72 3xl:h-72 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group mx-auto md:mx-0 cursor-pointer"
             title="Click to change playlist cover with local photo"
           >
             {/* Hidden file input for cover photo */}
@@ -819,7 +847,7 @@ export default function PlaylistPage() {
                     setEditedTitle(playlist.title || "");
                   }}
                   title="Double-click to rename"
-                  className="text-xl sm:text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight line-clamp-2 cursor-pointer hover:text-primary transition-colors select-none"
+                  className="text-xl sm:text-2xl md:text-4xl 2xl:text-5xl font-extrabold text-white tracking-tight leading-tight line-clamp-2 cursor-pointer hover:text-primary transition-colors select-none"
                 >
                   {playlist.title}
                 </h1>
@@ -1145,7 +1173,7 @@ export default function PlaylistPage() {
       )}
 
       {/* Tracklist Table */}
-      <div className="px-4 md:px-8 pt-6 flex flex-col gap-2">
+      <div className="px-4 md:px-8 2xl:px-12 3xl:px-16 pt-6 flex flex-col gap-2 max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2100px]">
         {/* Table Header */}
         <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 py-2 border-b border-white/10 text-[11px] font-semibold uppercase tracking-wider text-outline select-none">
           <span className="text-center">#</span>

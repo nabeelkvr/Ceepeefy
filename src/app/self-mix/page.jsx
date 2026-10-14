@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMusic } from "../../context/MusicContext";
-import { formatPlaylistDuration } from "../../utils/playlistUtils";
+import { formatPlaylistDuration, processLocalImage } from "../../utils/playlistUtils";
 import { getAccountUserId, DEFAULT_USER_ID } from "../../config/authConfig";
 import DownloadButton from "../../components/DownloadButton";
 import SongOptionsMenu from "../../components/SongOptionsMenu";
@@ -17,6 +17,7 @@ import {
 import {
   isSupabaseConfigured,
   uploadAudioToCloud,
+  uploadPlaylistCoverToCloud,
   saveSelfMixToCloud,
   fetchSelfMixesFromCloud,
   deleteSelfMixFromCloud,
@@ -47,6 +48,7 @@ function SelfMixContent() {
     selfMixes,
     createSelfMix,
     deleteSelfMix,
+    updatePlaylistCover,
     addLocalTracksToSelfMix,
     removeTrackFromPlaylist,
     user,
@@ -74,6 +76,82 @@ function SelfMixContent() {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [isSavingMix, setIsSavingMix] = useState(false);
+
+  // Manual Cover Image Upload State
+  const coverFileInputRef = useRef(null);
+  const modalCoverFileInputRef = useRef(null);
+  const [targetCoverMixId, setTargetCoverMixId] = useState(null);
+  const [isProcessingCover, setIsProcessingCover] = useState(false);
+  const [isUploadingModalCover, setIsUploadingModalCover] = useState(false);
+
+  const handleOpenCoverPicker = (mixId, e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    setTargetCoverMixId(String(mixId));
+    if (coverFileInputRef.current) {
+      coverFileInputRef.current.value = "";
+      coverFileInputRef.current.click();
+    }
+  };
+
+  const handleCoverFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetCoverMixId) return;
+    try {
+      setIsProcessingCover(true);
+      let durableUrl = null;
+      if (isSupabaseConfigured()) {
+        try {
+          const uploadRes = await uploadPlaylistCoverToCloud(file, targetCoverMixId, currentUserId);
+          if (uploadRes?.publicUrl) {
+            durableUrl = uploadRes.publicUrl;
+          }
+        } catch (uploadErr) {
+          console.warn("[SelfMix] Storage upload notice, falling back to local optimization:", uploadErr);
+        }
+      }
+
+      if (!durableUrl) {
+        durableUrl = await processLocalImage(file);
+      }
+
+      if (updatePlaylistCover) {
+        await updatePlaylistCover(targetCoverMixId, durableUrl);
+      }
+    } catch (err) {
+      console.error("Failed to update self mix playlist cover:", err);
+    } finally {
+      setIsProcessingCover(false);
+      setTargetCoverMixId(null);
+    }
+  };
+
+  const handleModalCoverSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploadingModalCover(true);
+      let durableUrl = null;
+      if (isSupabaseConfigured()) {
+        try {
+          const uploadRes = await uploadPlaylistCoverToCloud(file, `selfmix-temp-${Date.now()}`, currentUserId);
+          if (uploadRes?.publicUrl) {
+            durableUrl = uploadRes.publicUrl;
+          }
+        } catch (err) {
+          console.warn("[SelfMixModal] Upload notice:", err);
+        }
+      }
+      if (!durableUrl) {
+        durableUrl = await processLocalImage(file);
+      }
+      setSelectedCover(durableUrl);
+    } catch (err) {
+      console.error("Failed to process modal cover image:", err);
+    } finally {
+      setIsUploadingModalCover(false);
+    }
+  };
 
   const fileInputRef = useRef(null);
   const cardDropInputRef = useRef(null);
@@ -422,7 +500,20 @@ function SelfMixContent() {
   });
 
   const allPlaylists = useMemo(() => {
-    const list = [...(selfMixes || [])];
+    let coverOverrides = {};
+    if (typeof window !== "undefined") {
+      try {
+        coverOverrides = JSON.parse(localStorage.getItem("ceepeefy_playlist_covers") || "{}");
+      } catch {}
+    }
+
+    const list = (selfMixes || []).map((m) => {
+      const override = coverOverrides[String(m.id)];
+      if (override) {
+        return { ...m, coverUrl: override, customCover: override };
+      }
+      return m;
+    });
     const existingTrackIds = new Set(
       list.flatMap((m) => (m.tracks || []).map((t) => String(t.id)))
     );
@@ -540,12 +631,23 @@ function SelfMixContent() {
           <div className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-52 md:h-52 rounded-2xl overflow-hidden bg-surface-container-highest shadow-2xl flex-shrink-0 border border-white/10 group mx-auto md:mx-0">
             <img
               src={
+                activeMix.customCover ||
                 activeMix.coverUrl ||
                 "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80"
               }
               alt={activeMix.title}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
+            {/* Quick change cover button on hover */}
+            <button
+              type="button"
+              onClick={(e) => handleOpenCoverPicker(activeMix.id, e)}
+              className="absolute bottom-2 left-2 z-20 opacity-0 group-hover:opacity-100 px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-white/20 text-[10px] font-bold text-white/90 hover:text-white hover:bg-black/95 flex items-center gap-1 transition-all cursor-pointer shadow-md"
+              title="Change cover with local photo"
+            >
+              <span className="material-symbols-outlined text-[13px] text-cyan-300">photo_camera</span>
+              <span>Change Cover</span>
+            </button>
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 type="button"
@@ -611,6 +713,17 @@ function SelfMixContent() {
               >
                 <span className="material-symbols-outlined text-[17px] text-primary">add</span>
                 <span>Add Songs</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => handleOpenCoverPicker(activeMix.id, e)}
+                disabled={isProcessingCover}
+                className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full bg-surface-container-high/80 hover:bg-surface-container-highest border border-white/10 hover:border-primary/40 text-xs font-semibold text-white transition-all cursor-pointer shadow-md"
+                title="Change cover image with local photo"
+              >
+                <span className="material-symbols-outlined text-[17px] text-cyan-300">photo_camera</span>
+                <span>{isProcessingCover ? "Updating..." : "Change Cover"}</span>
               </button>
 
               <button
@@ -984,14 +1097,22 @@ function SelfMixContent() {
                 }}
                 className="flex items-center gap-3.5 p-3 rounded-2xl glass-card border border-white/5 hover:border-primary/40 active:scale-[0.98] transition-all cursor-pointer shadow-lg group"
               >
-                <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-surface-container-highest flex-shrink-0 shadow border border-white/10">
+                <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-surface-container-highest flex-shrink-0 shadow border border-white/10 group/cover">
                   <img
-                    src={mix.coverUrl || COVER_ART_OPTIONS[0]}
+                    src={mix.customCover || mix.coverUrl || COVER_ART_OPTIONS[0]}
                     alt={mix.title}
                     className="w-full h-full object-cover"
                   />
+                  <button
+                    type="button"
+                    onClick={(e) => handleOpenCoverPicker(mix.id, e)}
+                    className="absolute inset-0 bg-black/60 opacity-0 group-hover/cover:opacity-100 flex items-center justify-center text-cyan-300 transition-opacity cursor-pointer"
+                    title="Change cover image"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">photo_camera</span>
+                  </button>
                   {isThisPlaying && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
                       <span className="material-symbols-outlined text-primary text-[16px] animate-pulse">
                         graphic_eq
                       </span>
@@ -1014,6 +1135,14 @@ function SelfMixContent() {
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={(e) => handleOpenCoverPicker(mix.id, e)}
+                    className="w-8 h-8 rounded-full text-outline hover:text-cyan-300 hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
+                    title="Change Cover Image"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">photo_camera</span>
+                  </button>
                   <button
                     type="button"
                     onClick={(e) => handleLocalMixPlay(mix, e)}
@@ -1135,6 +1264,7 @@ function SelfMixContent() {
                   <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-3">
                     <img
                       src={
+                        mix.customCover ||
                         mix.coverUrl ||
                         COVER_ART_OPTIONS[0]
                       }
@@ -1143,21 +1273,42 @@ function SelfMixContent() {
                     />
 
                     {/* Top-left Playlist Badge */}
-                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
                       <span className="text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/85 text-cyan-300 border-cyan-700/60 shadow-[0_0_12px_rgba(6,182,212,0.3)] flex items-center gap-1">
                         <span className="material-symbols-outlined text-[11px]">queue_music</span>
                         PLAYLIST
                       </span>
                     </div>
 
-                    {/* Delete button top-right */}
+                    {/* Action buttons top-right */}
+                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1 z-10">
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenCoverPicker(mix.id, e)}
+                        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-primary hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-sm"
+                        title="Change Cover Image"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">photo_camera</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteSelfMixPlaylist(mix, e)}
+                        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-sm"
+                        title="Delete Playlist"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">delete</span>
+                      </button>
+                    </div>
+
+                    {/* Change Cover quick button on hover (bottom-left) */}
                     <button
                       type="button"
-                      onClick={(e) => handleDeleteSelfMixPlaylist(mix, e)}
-                      className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10 shadow-sm"
-                      title="Delete Playlist"
+                      onClick={(e) => handleOpenCoverPicker(mix.id, e)}
+                      className="absolute bottom-2 left-2 z-10 opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-white/20 text-[9px] font-bold text-white/90 hover:text-primary hover:bg-black/95 flex items-center gap-1 transition-all cursor-pointer shadow-md"
+                      title="Change cover with custom photo"
                     >
-                      <span className="material-symbols-outlined text-[15px]">delete</span>
+                      <span className="material-symbols-outlined text-[12px] text-cyan-300">photo_camera</span>
+                      <span>Cover</span>
                     </button>
 
                     {/* Play Button Overlay */}
@@ -1299,10 +1450,47 @@ function SelfMixContent() {
 
               {/* Cover Art Picker */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-outline uppercase tracking-wider">
-                  Select Cover Artwork (Playlist Cover)
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-outline uppercase tracking-wider">
+                    Select Cover Artwork (Playlist Cover)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => modalCoverFileInputRef.current?.click()}
+                    disabled={isUploadingModalCover}
+                    className="flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">
+                      {isUploadingModalCover ? "progress_activity" : "add_photo_alternate"}
+                    </span>
+                    <span>{isUploadingModalCover ? "Uploading..." : "Upload Custom"}</span>
+                  </button>
+                </div>
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  {/* Upload custom option tile */}
+                  <button
+                    type="button"
+                    onClick={() => modalCoverFileInputRef.current?.click()}
+                    disabled={isUploadingModalCover}
+                    className="relative w-12 h-12 rounded-xl border border-dashed border-primary/50 bg-primary/10 hover:bg-primary/20 flex flex-col items-center justify-center text-primary flex-shrink-0 cursor-pointer transition-all"
+                    title="Upload Custom Image"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {isUploadingModalCover ? "progress_activity" : "photo_camera"}
+                    </span>
+                  </button>
+
+                  {/* If selectedCover is not in COVER_ART_OPTIONS, display it as first selected item */}
+                  {selectedCover && !COVER_ART_OPTIONS.includes(selectedCover) && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCover(selectedCover)}
+                      className="relative w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 border-2 border-primary scale-105 shadow-[0_0_12px_rgba(76,215,246,0.5)] cursor-pointer"
+                    >
+                      <img src={selectedCover} alt="Custom cover" className="w-full h-full object-cover" />
+                    </button>
+                  )}
+
                   {COVER_ART_OPTIONS.map((url, idx) => (
                     <button
                       key={idx}
@@ -1589,6 +1777,22 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...`}
           </div>
         </div>
       )}
+
+      {/* Hidden Cover Image File Pickers for Self Mix */}
+      <input
+        ref={coverFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleCoverFileSelected}
+      />
+      <input
+        ref={modalCoverFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleModalCoverSelected}
+      />
     </div>
   );
 }

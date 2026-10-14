@@ -8,7 +8,7 @@ export default function AppSkeleton() {
       {/* Upper area: Sidebar + Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Desktop Sidebar Skeleton */}
-        <aside className="hidden md:flex w-[72px] flex-col bg-[#000000] border-r border-[#181818] py-4 px-3 gap-5 select-none shrink-0 items-center justify-between">
+        <aside className="hidden md:flex w-[var(--sidebar-collapsed-w,72px)] flex-col bg-[#000000] border-r border-[#181818] py-4 px-3 gap-5 select-none shrink-0 items-center justify-between">
           <div className="flex flex-col gap-5 items-center w-full">
             {/* Logo Skeleton */}
             <div className="w-10 h-10 rounded-2xl bg-[#303030] skeleton-shimmer shrink-0" />

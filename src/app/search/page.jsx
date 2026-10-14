@@ -1533,11 +1533,11 @@ function SearchContent() {
   const hasQuery = Boolean(debouncedQuery.trim());
 
   return (
-    <div className="w-full px-3 md:px-8 py-4 md:py-6 flex flex-col gap-4 md:gap-6 select-none max-w-7xl mx-auto">
+    <div className="w-full px-3 md:px-8 2xl:px-12 py-4 md:py-6 2xl:py-8 flex flex-col gap-4 md:gap-6 2xl:gap-8 select-none max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2100px] mx-auto">
       {/* Search Header Bar (Hidden when inside Genre Showcase) */}
       {!selectedGenre && (
         <div className="flex flex-col gap-3 md:gap-4">
-          <div className="relative max-w-2xl w-full">
+          <div className="relative max-w-2xl 2xl:max-w-3xl w-full">
             <button
               type="button"
               onClick={() => {
@@ -2602,7 +2602,7 @@ function SearchContent() {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6 gap-2.5 sm:gap-5">
             {CURATED_GENRES.map((genre) => {
               const isCurrentGenrePlaying =
                 isPlaying &&

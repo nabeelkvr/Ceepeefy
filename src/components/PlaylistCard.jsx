@@ -59,7 +59,11 @@ export default function PlaylistCard({
     if (isPlaylistPlaying) {
       togglePlay();
     } else if (tracks.length > 0) {
-      playTrack(tracks[0], tracks);
+      playTrack(tracks[0], tracks, {
+        context: "playlist",
+        playlistId: playlist.id,
+        playlistTitle: playlist.title,
+      });
     } else {
       router.push(targetUrl);
     }
@@ -79,7 +83,7 @@ export default function PlaylistCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`w-[135px] sm:w-[150px] md:w-[165px] lg:w-[175px] p-2 rounded-xl flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-200 hover:bg-[#1A1A1A] hover:-translate-y-0.5 hover:shadow-md ${className}`}
+      className={`w-[135px] sm:w-[150px] md:w-[165px] lg:w-[175px] xl:w-[195px] 2xl:w-[215px] 3xl:w-[240px] p-2 rounded-xl flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-200 hover:bg-[#1A1A1A] hover:-translate-y-0.5 hover:shadow-md ${className}`}
     >
       {/* Square Artwork (Refined Rounded-[10px]) */}
       <div
@@ -106,7 +110,7 @@ export default function PlaylistCard({
           <button
             type="button"
             onClick={handlePlayButtonClick}
-            className={`w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-110 active:scale-95 ${
+            className={`w-8 h-8 sm:w-8.5 sm:h-8.5 2xl:w-10 2xl:h-10 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-110 active:scale-95 ${
               isPlaylistPlaying
                 ? "translate-y-0 scale-100 shadow-[0_0_14px_rgba(var(--color-primary-rgb),0.6)]"
                 : "translate-y-2 group-hover:translate-y-0 scale-95 group-hover:scale-100"
@@ -114,7 +118,7 @@ export default function PlaylistCard({
             title={isPlaylistPlaying ? "Pause Playlist" : "Play Playlist"}
             aria-label={isPlaylistPlaying ? "Pause Playlist" : "Play Playlist"}
           >
-            <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
+            <span className="material-symbols-outlined text-[18px] sm:text-[20px] 2xl:text-[22px]">
               {isPlaylistPlaying ? "pause" : "play_arrow"}
             </span>
           </button>
@@ -133,7 +137,7 @@ export default function PlaylistCard({
       {/* Details: Title & 2-Line Truncated Description */}
       <div className="flex flex-col min-w-0 mt-1.5">
         <h3
-          className={`text-xs sm:text-[13px] font-bold truncate transition-colors leading-tight ${
+          className={`text-xs sm:text-[13px] 2xl:text-sm font-bold truncate transition-colors leading-tight ${
             isPlaylistPlaying ? "text-primary font-extrabold" : "text-white group-hover:text-primary"
           }`}
           title={playlist.title}
@@ -141,7 +145,7 @@ export default function PlaylistCard({
           {playlist.title}
         </h3>
         <p
-          className="text-[10px] sm:text-[11px] text-[#B3B3B3] line-clamp-2 leading-snug mt-0.5"
+          className="text-[10px] sm:text-[11px] 2xl:text-xs text-[#B3B3B3] line-clamp-2 leading-snug mt-0.5"
           title={descriptionText}
         >
           {descriptionText}

@@ -8,14 +8,19 @@ export function getTrackFingerprint(track) {
   if (!track) return "unknown";
 
   // If real Spotify track ID or explicit ID
-  if (
-    track.spotifyId &&
-    typeof track.spotifyId === "string" &&
-    !track.spotifyId.startsWith("embed-") &&
-    !track.spotifyId.startsWith("spotify-track-") &&
-    !track.spotifyId.startsWith("local-")
-  ) {
-    return `sp_${track.spotifyId}`;
+  const explicitSpotifyId =
+    track.spotifyId ||
+    (track.id &&
+      typeof track.id === "string" &&
+      !track.id.startsWith("embed-") &&
+      !track.id.startsWith("spotify-track-") &&
+      !track.id.startsWith("local-") &&
+      !track.id.startsWith("meta_")
+      ? track.id
+      : null);
+
+  if (explicitSpotifyId) {
+    return `sp_${explicitSpotifyId}`;
   }
 
   const normTitle = normalizeTitle(track.name || track.title || "");
@@ -35,18 +40,20 @@ export function getTrackFingerprint(track) {
 /**
  * Builds or backfills a synced snapshot entry for a single track.
  */
-export function createSnapshotEntry(track, occurrenceIndex = 0, jioTrackId = null, matchScore = 100) {
+export function createSnapshotEntry(track, occurrenceIndex = 0, jioTrackId = null, matchScore = 100, customStatus = null) {
   const fingerprint = getTrackFingerprint(track);
   const sourceEntryId = `${fingerprint}#${occurrenceIndex}`;
   const artists = Array.isArray(track.artists)
     ? track.artists
     : [track.primaryArtist || track.artist || "Unknown Artist"];
 
+  const resolvedStatus = customStatus || (jioTrackId ? "matched" : "unresolved");
+
   return {
     sourceEntryId,
     fingerprint,
     occurrenceIndex,
-    spotifyId: track.spotifyId || null,
+    spotifyId: track.spotifyId || (track.id && !String(track.id).startsWith("meta_") ? String(track.id) : null),
     name: track.name || track.title || "",
     primaryArtist: track.primaryArtist || track.artist || artists[0] || "Unknown Artist",
     artists,
@@ -54,9 +61,10 @@ export function createSnapshotEntry(track, occurrenceIndex = 0, jioTrackId = nul
     duration_ms: track.duration_ms || (track.duration ? track.duration * 1000 : 0),
     durationFormatted: track.durationFormatted || "3:30",
     coverUrl: track.coverUrl || "",
-    jioTrackId: jioTrackId ? String(jioTrackId) : (track.id ? String(track.id) : null),
-    matchScore: matchScore || 100,
-    status: jioTrackId ? "matched" : "unresolved",
+    jioTrackId: jioTrackId ? String(jioTrackId) : null,
+    matchScore: matchScore || (resolvedStatus === "skipped" ? 0 : 100),
+    status: resolvedStatus,
+    skipped: resolvedStatus === "skipped",
     syncedAt: Date.now(),
   };
 }
@@ -216,6 +224,53 @@ export function diffSpotifyPlaylist(previousSnapshot = [], currentSpotifyTracks 
     }
   });
 
+  // Collect all excluded signatures and stable IDs from previous snapshot
+  const excludedSourceEntryIds = new Set();
+  const excludedSpotifyIds = new Set();
+  const excludedFingerprints = new Set();
+  const excludedNormSignatures = new Set();
+
+  prevItems.forEach((p) => {
+    const isExcluded =
+      p.skipped ||
+      p.excluded ||
+      p.blocked ||
+      p.rejected ||
+      p.unresolved ||
+      ["skipped", "unavailable", "blocked", "rejected", "unresolved", "unmatched"].includes(
+        String(p.status || "").toLowerCase()
+      );
+
+    if (isExcluded) {
+      if (p.sourceEntryId) excludedSourceEntryIds.add(p.sourceEntryId);
+      if (p.spotifyId) excludedSpotifyIds.add(String(p.spotifyId));
+      if (p.fingerprint) excludedFingerprints.add(p.fingerprint);
+      const nTitle = normalizeTitle(p.name || p.title || "");
+      const nArtist = normalizeArtist(p.primaryArtist || p.artist || "");
+      if (nTitle && nArtist) {
+        excludedNormSignatures.add(`${nTitle}:::${nArtist}`);
+      }
+    }
+  });
+
+  // Collect all existing playlist tracks signatures to avoid duplicating songs
+  const existingSourceEntryIds = new Set();
+  const existingSpotifyIds = new Set();
+  const existingFingerprints = new Set();
+  const existingNormSignatures = new Set();
+
+  (Array.isArray(existingPlaylistTracks) ? existingPlaylistTracks : []).forEach((t) => {
+    if (t.sourceEntryId) existingSourceEntryIds.add(t.sourceEntryId);
+    if (t.spotifyId) existingSpotifyIds.add(String(t.spotifyId));
+    const fp = getTrackFingerprint(t);
+    if (fp) existingFingerprints.add(fp);
+    const nTitle = normalizeTitle(t.title || t.name || "");
+    const nArtist = normalizeArtist(t.artist || t.primaryArtist || "");
+    if (nTitle && nArtist) {
+      existingNormSignatures.add(`${nTitle}:::${nArtist}`);
+    }
+  });
+
   // 4. Compute LCS to find unchanged sequence
   const lcsPairs = computeLCSIndices(prevItems, newItems);
   const matchedPrevIndices = new Set(lcsPairs.map((p) => p.oldIdx));
@@ -242,12 +297,37 @@ export function diffSpotifyPlaylist(previousSnapshot = [], currentSpotifyTracks 
   const reordered = [];
   const removed = [];
   const added = [];
+  const skipped = [];
 
   // Aligned pairs from LCS (relative sequence preserved)
   lcsPairs.forEach(({ oldIdx, newIdx }) => {
     const prevItem = prevItems[oldIdx];
     const newItem = newItems[newIdx];
     const existingCeepeefyTrack = existingManagedMap.get(prevItem.sourceEntryId) || null;
+
+    const isExcluded =
+      prevItem.status === "skipped" ||
+      prevItem.skipped ||
+      prevItem.excluded ||
+      prevItem.blocked ||
+      prevItem.rejected ||
+      prevItem.status === "unavailable" ||
+      prevItem.status === "blocked" ||
+      prevItem.status === "rejected" ||
+      prevItem.status === "unresolved";
+
+    if (isExcluded) {
+      skipped.push({
+        sourceEntryId: prevItem.sourceEntryId,
+        prevItem,
+        newItem,
+        status: prevItem.status || "skipped",
+        fromIndex: oldIdx,
+        targetIndex: newIdx,
+        wasExcluded: true,
+      });
+      return;
+    }
 
     unchanged.push({
       sourceEntryId: prevItem.sourceEntryId,
@@ -264,6 +344,30 @@ export function diffSpotifyPlaylist(previousSnapshot = [], currentSpotifyTracks 
     const prevItem = prevItems[oldIdx];
     const newItem = newItems[newIdx];
     const existingCeepeefyTrack = existingManagedMap.get(prevItem.sourceEntryId) || null;
+
+    const isExcluded =
+      prevItem.status === "skipped" ||
+      prevItem.skipped ||
+      prevItem.excluded ||
+      prevItem.blocked ||
+      prevItem.rejected ||
+      prevItem.status === "unavailable" ||
+      prevItem.status === "blocked" ||
+      prevItem.status === "rejected" ||
+      prevItem.status === "unresolved";
+
+    if (isExcluded) {
+      skipped.push({
+        sourceEntryId: prevItem.sourceEntryId,
+        prevItem,
+        newItem,
+        status: prevItem.status || "skipped",
+        fromIndex: oldIdx,
+        targetIndex: newIdx,
+        wasExcluded: true,
+      });
+      return;
+    }
 
     reordered.push({
       sourceEntryId: prevItem.sourceEntryId,
@@ -284,23 +388,63 @@ export function diffSpotifyPlaylist(previousSnapshot = [], currentSpotifyTracks 
         prevItem,
         existingTrack: existingCeepeefyTrack,
         prevIndex: idx,
+        wasSkipped: Boolean(
+          prevItem.status === "skipped" ||
+          prevItem.skipped ||
+          prevItem.excluded ||
+          prevItem.blocked ||
+          prevItem.rejected ||
+          prevItem.status === "unavailable"
+        ),
       });
     }
   });
 
   // Added items: in new Spotify playlist but not matched in previous snapshot
   newItems.forEach((newItem, idx) => {
-    if (!matchedNewIndices.has(idx)) {
-      added.push({
+    if (matchedNewIndices.has(idx)) return;
+
+    const nTitle = normalizeTitle(newItem.name || newItem.title || "");
+    const nArtist = normalizeArtist(newItem.primaryArtist || newItem.artist || "");
+    const normSig = nTitle && nArtist ? `${nTitle}:::${nArtist}` : null;
+    const spId = newItem.spotifyId ? String(newItem.spotifyId) : (newItem.id ? String(newItem.id) : null);
+
+    // Rule: Exclude previously blocked, skipped, rejected, or unavailable songs
+    const isExplicitlyExcluded =
+      excludedSourceEntryIds.has(newItem.sourceEntryId) ||
+      (spId && excludedSpotifyIds.has(spId)) ||
+      excludedFingerprints.has(newItem.fingerprint) ||
+      (normSig && excludedNormSignatures.has(normSig));
+
+    // Rule: Do not duplicate songs already imported into Ceepeefy playlist
+    const isAlreadyImported =
+      existingSourceEntryIds.has(newItem.sourceEntryId) ||
+      (spId && existingSpotifyIds.has(spId)) ||
+      existingFingerprints.has(newItem.fingerprint) ||
+      (normSig && existingNormSignatures.has(normSig));
+
+    if (isExplicitlyExcluded || isAlreadyImported) {
+      skipped.push({
         sourceEntryId: newItem.sourceEntryId,
         newItem,
         targetIndex: idx,
+        status: isExplicitlyExcluded ? "excluded" : "already_present",
+        wasExcluded: Boolean(isExplicitlyExcluded),
+        reason: isExplicitlyExcluded ? "previously_excluded" : "already_in_playlist",
       });
+      return;
     }
+
+    added.push({
+      sourceEntryId: newItem.sourceEntryId,
+      newItem,
+      targetIndex: idx,
+    });
   });
 
   // 7. Check if completely up to date
-  const hasChanges = added.length > 0 || removed.length > 0 || reordered.length > 0;
+  const genuineRemoved = removed.filter((r) => !r.wasSkipped);
+  const hasChanges = added.length > 0 || genuineRemoved.length > 0 || reordered.length > 0;
   const isUpToDate = !hasChanges;
 
   return {
@@ -311,6 +455,7 @@ export function diffSpotifyPlaylist(previousSnapshot = [], currentSpotifyTracks 
       removedCount: removed.length,
       reorderedCount: reordered.length,
       unchangedCount: unchanged.length,
+      skippedCount: skipped.length,
       manualTracksCount: manualTracks.length,
       totalPrevious: prevItems.length,
       totalCurrent: newItems.length,
@@ -319,6 +464,7 @@ export function diffSpotifyPlaylist(previousSnapshot = [], currentSpotifyTracks 
     removed,
     reordered,
     unchanged,
+    skipped,
     manualTracks,
     prevItems,
     newItems,
@@ -336,6 +482,8 @@ export function applySyncPlan({
   diff = {},
   matchedAddedItems = [],
   unresolvedAdditions = [],
+  skippedAdditions = [],
+  unskippedSourceEntryIds = [],
   existingTracks = [],
   playlistTitle = "",
 }) {
@@ -345,6 +493,22 @@ export function applySyncPlan({
   const unchanged = Array.isArray(diff?.unchanged) ? diff.unchanged : [];
   const manualTracks = Array.isArray(diff?.manualTracks) ? diff.manualTracks : [];
   const newItems = Array.isArray(diff?.newItems) ? diff.newItems : [];
+  const diffSkipped = Array.isArray(diff?.skipped) ? diff.skipped : [];
+
+  // Track skipped items from prior snapshot
+  const prevSkippedMap = new Map();
+  diffSkipped.forEach((s) => {
+    if (s.sourceEntryId) prevSkippedMap.set(s.sourceEntryId, s.prevItem || s);
+  });
+  // Track newly skipped items from current sync review
+  const newlySkippedMap = new Map();
+  (Array.isArray(skippedAdditions) ? skippedAdditions : []).forEach((item) => {
+    if (item?.sourceEntryId) {
+      newlySkippedMap.set(item.sourceEntryId, item);
+    }
+  });
+
+  const unskippedSet = new Set(unskippedSourceEntryIds || []);
 
   // Determine base list of tracks from existing playlist
   let baseList = [];
@@ -468,7 +632,7 @@ export function applySyncPlan({
     newItems.forEach((targetItem) => {
       const entryId = targetItem.sourceEntryId;
       const fp = targetItem.fingerprint || getTrackFingerprint(targetItem);
-      const spId = String(targetItem.id || "");
+      const spId = String(targetItem.spotifyId || targetItem.id || "");
       const matched =
         trackMapByEntry.get(entryId) ||
         trackMapByEntry.get(fp) ||
@@ -484,9 +648,28 @@ export function applySyncPlan({
           )
         );
       } else {
+        const skippedInfo =
+          (!unskippedSet.has(entryId) && (newlySkippedMap.get(entryId) || prevSkippedMap.get(entryId) || (spId && prevSkippedMap.get(spId)))) ||
+          diffSkipped.find(
+            (s) =>
+              s.sourceEntryId === entryId ||
+              s.prevItem?.sourceEntryId === entryId ||
+              s.newItem?.sourceEntryId === entryId ||
+              s.prevItem?.fingerprint === fp ||
+              (spId && (s.prevItem?.spotifyId === spId || s.newItem?.spotifyId === spId || s.spotifyId === spId))
+          );
+
+        const customStatus =
+          skippedInfo?.status ||
+          skippedInfo?.prevItem?.status ||
+          (skippedInfo?.wasExcluded ? "skipped" : "unresolved");
+
         newSnapshot.push({
-          ...createSnapshotEntry(targetItem, targetItem.occurrenceIndex || 0, null, 0),
-          status: "unresolved",
+          ...createSnapshotEntry(targetItem, targetItem.occurrenceIndex || 0, null, 0, customStatus),
+          status: customStatus,
+          skipped: true,
+          excluded: true,
+          skippedAt: skippedInfo?.skippedAt || Date.now(),
         });
       }
     });
@@ -503,5 +686,6 @@ export function applySyncPlan({
     removedCount: removed.length,
     addedCount: successfullyAdded.length,
     unresolvedCount: Array.isArray(unresolvedAdditions) ? unresolvedAdditions.length : 0,
+    skippedCount: diffSkipped.length + newlySkippedMap.size,
   };
 }

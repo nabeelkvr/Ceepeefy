@@ -195,6 +195,35 @@ function tagM4aBuffer(rawBuf, tags) {
   }
 }
 
+const FALLBACK_TRACK_STREAMS = {
+  "track-midnight-pulse": "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3",
+  "track-shadows-in-blue": "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=chill-abstract-intention-12099.mp3",
+  "track-aether-resonance": "https://cdn.pixabay.com/download/audio/2022/11/06/audio_2484643534.mp3?filename=lofi-chill-medium-version-159456.mp3",
+  "track-kuroshio-current": "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=ambient-piano-amp-strings-10711.mp3",
+  "track-tokyo-monorail": "https://cdn.pixabay.com/download/audio/2022/02/07/audio_1e592795f5.mp3?filename=japanese-chill-hop-115316.mp3",
+};
+
+/**
+ * Validates whether an audio buffer is genuine MP3 audio.
+ * Genuine MP3 starts with an ID3 tag ('ID3' / 0x49 0x44 0x33)
+ * or MPEG-1/2 Layer III sync frame (0xFF with Layer III bits).
+ */
+export function isMp3Buffer(buf) {
+  if (!buf || buf.length < 4) return false;
+  // 1. ID3v2 tag identifier
+  if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
+    return true;
+  }
+  // 2. MPEG frame sync: 11 bits set to 1 (0xFF, 0xE0)
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) {
+    const layer = (buf[1] >> 1) & 0x03;
+    if (layer === 0x01) {
+      return true; // MPEG Layer III
+    }
+  }
+  return false;
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const trackId = searchParams.get("trackId")?.trim() || "";
@@ -226,6 +255,11 @@ export async function GET(request) {
   const album = cleanHtmlText(searchParams.get("album")?.trim() || "Single");
   const year = searchParams.get("year")?.trim() || "";
   const coverUrl = searchParams.get("coverUrl")?.trim() || "";
+
+  // If track has a known curated MP3 stream
+  if (trackId && FALLBACK_TRACK_STREAMS[trackId]) {
+    audioUrl = FALLBACK_TRACK_STREAMS[trackId];
+  }
 
   // If no direct audioUrl is provided, resolve via trackId first, then via search
   if (!audioUrl && trackId) {
@@ -283,7 +317,14 @@ export async function GET(request) {
   }
 
   if (!audioUrl) {
-    return new NextResponse("Audio stream not found", { status: 404 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Playable audio stream could not be resolved for this track.",
+        code: "AUDIO_NOT_FOUND",
+      },
+      { status: 404 }
+    );
   }
 
   try {
@@ -327,47 +368,118 @@ export async function GET(request) {
     }
 
     if (!audioRes.ok) {
-      return new NextResponse("Failed to retrieve audio stream", { status: 502 });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Failed to retrieve audio stream from provider.",
+          code: "STREAM_UNAVAILABLE",
+        },
+        { status: 502 }
+      );
     }
 
-    const rawAudioBuffer = Buffer.from(await audioRes.arrayBuffer());
-    let coverBuffer = null;
-    if (imgRes && imgRes.ok) {
-      coverBuffer = Buffer.from(await imgRes.arrayBuffer());
+    let rawAudioBuffer = Buffer.from(await audioRes.arrayBuffer());
+
+    // Check if the stream is genuine MP3 audio
+    let isGenuineMp3 = isMp3Buffer(rawAudioBuffer);
+
+    // If stream is not MP3 and we have an ambient/fallback MP3 track stream, try that
+    if (!isGenuineMp3 && trackId && FALLBACK_TRACK_STREAMS[trackId]) {
+      try {
+        const altRes = await fetch(FALLBACK_TRACK_STREAMS[trackId], {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+        });
+        if (altRes.ok) {
+          const altBuf = Buffer.from(await altRes.arrayBuffer());
+          if (isMp3Buffer(altBuf)) {
+            rawAudioBuffer = altBuf;
+            isGenuineMp3 = true;
+          }
+        }
+      } catch (altErr) {
+        console.warn("Alternative MP3 stream fetch failed:", altErr);
+      }
     }
 
-    // 2. Tag M4A audio with Title, Artist, Album, Year, and Cover Art
-    let finalBuffer = rawAudioBuffer;
-    const isM4a = rawAudioBuffer.subarray(4, 8).toString("latin1") === "ftyp";
+    // Determine audio format and prepare output buffer
+    let outputBuffer = rawAudioBuffer;
+    let ext = "mp3";
+    let contentType = "audio/mpeg";
 
-    if (isM4a) {
-      finalBuffer = tagM4aBuffer(rawAudioBuffer, {
-        title,
-        artist,
-        album,
-        year,
-        cover: coverBuffer,
-      });
+    if (isGenuineMp3) {
+      ext = "mp3";
+      contentType = "audio/mpeg";
+      outputBuffer = rawAudioBuffer;
+    } else {
+      // If there is no MP3 file, download the available audio file
+      const isM4a = rawAudioBuffer.subarray(4, 8).toString("latin1") === "ftyp";
+      const isWav =
+        rawAudioBuffer.length >= 12 &&
+        rawAudioBuffer.subarray(0, 4).toString("latin1") === "RIFF" &&
+        rawAudioBuffer.subarray(8, 12).toString("latin1") === "WAVE";
+      const isFlac = rawAudioBuffer.length >= 4 && rawAudioBuffer.subarray(0, 4).toString("latin1") === "fLaC";
+      const isOgg = rawAudioBuffer.length >= 4 && rawAudioBuffer.subarray(0, 4).toString("latin1") === "OggS";
+
+      if (isM4a) {
+        ext = "m4a";
+        contentType = "audio/mp4";
+        // Tag M4A with track metadata and cover art if available
+        let imageBuffer = null;
+        if (imgRes && imgRes.ok) {
+          try {
+            imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+          } catch {}
+        }
+        outputBuffer = tagM4aBuffer(rawAudioBuffer, {
+          title,
+          artist,
+          album,
+          year,
+          cover: imageBuffer,
+        });
+      } else if (isWav) {
+        ext = "wav";
+        contentType = "audio/wav";
+      } else if (isFlac) {
+        ext = "flac";
+        contentType = "audio/flac";
+      } else if (isOgg) {
+        ext = "ogg";
+        contentType = "audio/ogg";
+      } else {
+        // Fallback available format
+        ext = audioUrl.includes(".aac") ? "aac" : "m4a";
+        contentType = audioUrl.includes(".aac") ? "audio/aac" : "audio/mp4";
+      }
     }
 
-    // 3. Format clean filename: "[Title] - [Artist] [Quality].m4a"
+    // Format clean filename: "[Title] - [Artist] [Quality].[ext]"
     const safeArtist = artist.replace(/[\/\\?%*:|"<>]/g, "").trim();
     const safeTitle = title.replace(/[\/\\?%*:|"<>]/g, "").trim();
     const cleanFilename = safeTitle && safeArtist ? `${safeTitle} - ${safeArtist}` : safeTitle || safeArtist || "track";
-    const extension = isM4a ? "m4a" : "mp3";
-    const downloadFilename = `${cleanFilename} [${qualityLabel}].${extension}`;
+    const downloadFilename = `${cleanFilename} [${qualityLabel}].${ext}`;
 
-    return new NextResponse(finalBuffer, {
+    return new NextResponse(outputBuffer, {
       status: 200,
       headers: {
-        "Content-Type": isM4a ? "audio/mp4" : "audio/mpeg",
+        "Content-Type": contentType,
         "Content-Disposition": `attachment; filename="${downloadFilename.replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(downloadFilename)}`,
-        "Content-Length": finalBuffer.length.toString(),
+        "Content-Length": outputBuffer.length.toString(),
         "Cache-Control": "public, max-age=86400",
       },
     });
   } catch (err) {
     console.error("Audio download error:", err);
-    return new NextResponse("Internal Server Error while processing audio download", { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: "An unexpected error occurred while processing the audio download.",
+        code: "SERVER_ERROR",
+      },
+      { status: 500 }
+    );
   }
 }

@@ -131,9 +131,17 @@ export default function HomePage() {
   // Spotify Discovery state (populated from Spotify Web API discovery endpoint)
   const [spotifyDiscovery, setSpotifyDiscovery] = useState({ artists: [] });
   const [isSpotifyLoading, setIsSpotifyLoading] = useState(false);
+  const [isPageLoading, setIsPageLoading] = useState(true);
 
   // Dynamic Personalized Recommendations (Ranked by user listening history & behavior)
   const [recommendationSeed, setRecommendationSeed] = useState(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsPageLoading(false);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, []);
 
   const recommendedTracks = useMemo(() => {
     return getPersonalizedRecommendations(recentlyPlayedTracks, {
@@ -379,7 +387,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="relative w-full overflow-hidden px-3 sm:px-6 md:px-8 flex flex-col gap-6 md:gap-10 pt-3 md:pt-6">
+    <div className="relative w-full overflow-hidden px-3 sm:px-6 md:px-8 2xl:px-12 3xl:px-16 flex flex-col gap-6 md:gap-10 2xl:gap-12 pt-3 md:pt-6">
       {/* Section 1: Recently played songs - Single-row header */}
       <section className="flex flex-col gap-3.5 md:gap-4.5">
         <div className="flex items-center justify-between">
@@ -412,7 +420,23 @@ export default function HomePage() {
           </div>
         </div>
 
-        {displayRecentlyPlayed.length > 0 ? (
+        {isPageLoading ? (
+          <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-1.5 sm:gap-2 md:gap-2.5 pb-2 pt-1 -mx-2 px-2">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="w-[154px] sm:w-[165px] md:w-[176px] lg:w-[184px] xl:w-[200px] 2xl:w-[220px] 3xl:w-[245px] p-0 flex-shrink-0 flex flex-col gap-2 select-none"
+              >
+                <div className="relative aspect-[4/5] w-full rounded-[6px] bg-[#1a1a1a] animate-pulse ring-1 ring-white/5" />
+                <div className="flex items-center justify-between px-0.5">
+                  <div className="h-3 w-20 bg-[#222222] rounded animate-pulse" />
+                  <div className="h-3.5 w-3.5 bg-[#222222] rounded-full animate-pulse" />
+                </div>
+                <div className="h-4 w-28 bg-[#222222] rounded animate-pulse px-0.5" />
+              </div>
+            ))}
+          </div>
+        ) : displayRecentlyPlayed.length > 0 ? (
           <div
             ref={recentsContainerRef}
             className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-1.5 sm:gap-2 md:gap-2.5 pb-2 pt-1 -mx-2 px-2"
@@ -564,16 +588,31 @@ export default function HomePage() {
             Trending Playlists
           </h3>
 
-          <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4 pb-2 pt-1 -mx-2 px-2">
-            {SPOTIFY_STYLE_PLAYLISTS.filter(
-              (pl) =>
-                !FEATURED_PLAYLIST_COLLECTION.some(
-                  (f) => f.playlistId === pl.id || f.playlistId === pl.playlistId
-                )
-            ).map((pl) => (
-              <PlaylistCard key={pl.id} playlist={pl} />
-            ))}
-          </div>
+          {isPageLoading ? (
+            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4 pb-2 pt-1 -mx-2 px-2">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="w-[135px] sm:w-[150px] md:w-[165px] lg:w-[175px] xl:w-[195px] 2xl:w-[215px] 3xl:w-[240px] p-2 rounded-xl flex-shrink-0 flex flex-col gap-2 select-none"
+                >
+                  <div className="relative aspect-square w-full rounded-[10px] bg-[#1a1a1a] animate-pulse ring-1 ring-white/5" />
+                  <div className="h-4 w-24 bg-[#222222] rounded animate-pulse mt-0.5" />
+                  <div className="h-3 w-32 bg-[#1f1f1f] rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4 pb-2 pt-1 -mx-2 px-2">
+              {SPOTIFY_STYLE_PLAYLISTS.filter(
+                (pl) =>
+                  !FEATURED_PLAYLIST_COLLECTION.some(
+                    (f) => f.playlistId === pl.id || f.playlistId === pl.playlistId
+                  )
+              ).map((pl) => (
+                <PlaylistCard key={pl.id} playlist={pl} />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -605,27 +644,44 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Responsive Grid: 4 rows on mobile (8 items, 2 cols), 4 rows on desktop (12 items, 3 cols) */}
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 lg:gap-3.5">
-          {recommendedTracks.map((track, index) => (
-            <div
-              key={track.id}
-              className={index >= 8 ? "hidden lg:block min-w-0" : "block min-w-0"}
-            >
-              <RecommendationCard
-                track={track}
-                trackList={recommendedTracks}
-                onPlay={() => {
-                  if (currentTrack?.id === track.id) {
-                    togglePlay();
-                  } else {
-                    playTrack(track, recommendedTracks);
-                  }
-                }}
-              />
-            </div>
-          ))}
-        </div>
+        {/* Responsive Grid: 4 rows on mobile (8 items, 2 cols), 4 rows on desktop (12 items, 3-4 cols) */}
+        {isPageLoading ? (
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-2.5 lg:gap-3.5 2xl:gap-4">
+            {Array.from({ length: 8 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-2.5 sm:gap-3 p-1.5 sm:p-2 rounded-xl bg-[#141414] animate-pulse border border-white/5 select-none"
+              >
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-[#222222] flex-shrink-0" />
+                <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+                  <div className="h-3.5 w-3/4 bg-[#262626] rounded" />
+                  <div className="h-2.5 w-1/2 bg-[#1f1f1f] rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-2.5 lg:gap-3.5 2xl:gap-4">
+            {recommendedTracks.map((track, index) => (
+              <div
+                key={track.id}
+                className={index >= 8 ? "hidden lg:block min-w-0" : "block min-w-0"}
+              >
+                <RecommendationCard
+                  track={track}
+                  trackList={recommendedTracks}
+                  onPlay={() => {
+                    if (currentTrack?.id === track.id) {
+                      togglePlay();
+                    } else {
+                      playTrack(track, recommendedTracks);
+                    }
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Section 4: Dynamic & Categorized Popular Artists */}
@@ -662,58 +718,73 @@ export default function HomePage() {
         </div>
 
         {/* Dynamic Artist Avatars Grid: 2 rows on mobile (3 cols x 2 rows), grid on tablet/desktop */}
-        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4 md:gap-5 pb-2 transition-all duration-300">
-          {displayedArtists.map((artist, index) => {
-            const isArtistPlaying =
-              isPlaying &&
-              currentTrack?.artist?.toLowerCase().includes(artist.name.toLowerCase());
-
-            return (
-              <Link
-                key={artist.id}
-                href={`/artist/${artist.id}`}
-                className={`w-full group flex flex-col items-center text-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-[4px] hover:bg-white/[0.04] transition-all duration-200 cursor-pointer select-none relative ${index >= 6 ? "hidden sm:flex" : "flex"
-                  }`}
+        {isPageLoading ? (
+          <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-4 md:gap-5 2xl:gap-6 pb-2">
+            {Array.from({ length: 8 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="w-full flex flex-col items-center text-center gap-2 p-1.5 sm:p-2 select-none"
               >
-                <div className="relative w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full bg-surface-container-highest shadow-md p-0.5 sm:p-1 ring-2 ring-primary/20 group-hover:ring-primary group-hover:shadow-[0_0_20px_rgba(76,215,246,0.3)] transition-all">
-                  <div className="w-full h-full rounded-full overflow-hidden">
-                    <ArtistAvatar
-                      name={artist.name}
-                      avatar={artist.avatar}
-                      className="w-full h-full"
-                    />
-                  </div>
-                  {/* Persistent Centered Mini Play Badge on bottom right of Avatar */}
-                  <button
-                    onClick={(e) => handleArtistPlay(artist, e)}
-                    className="absolute bottom-0 right-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_10px_rgba(76,215,246,0.6)] hover:scale-110 active:scale-95 transition-all z-10"
-                    title={isArtistPlaying ? "Pause audio" : `Play ${artist.name}`}
-                  >
-                    {isArtistPlaying ? (
-                      <span className="material-symbols-outlined text-[12px] sm:text-[14px] leading-none flex items-center justify-center">
-                        pause
-                      </span>
-                    ) : (
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current translate-x-[0.5px]"
-                      >
-                        <polygon points="6 4 19 12 6 20" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
+                <div className="w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 2xl:w-32 2xl:h-32 3xl:w-36 3xl:h-36 rounded-full bg-[#1a1a1a] animate-pulse ring-1 ring-white/5" />
+                <div className="h-3.5 w-16 bg-[#222222] rounded animate-pulse" />
+                <div className="h-2.5 w-12 bg-[#1a1a1a] rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-4 md:gap-5 2xl:gap-6 pb-2 transition-all duration-300">
+            {displayedArtists.map((artist, index) => {
+              const isArtistPlaying =
+                isPlaying &&
+                currentTrack?.artist?.toLowerCase().includes(artist.name.toLowerCase());
 
-                <div className="flex flex-col items-center min-w-0 w-full">
-                  <span className="text-xs sm:text-sm font-semibold truncate transition-colors w-full text-white group-hover:text-primary">
-                    {artist.name}
-                  </span>
-                  <span className="text-[10px] sm:text-xs text-outline truncate w-full">{artist.genre || artist.role}</span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+              return (
+                <Link
+                  key={artist.id}
+                  href={`/artist/${artist.id}`}
+                  className={`w-full group flex flex-col items-center text-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-[4px] hover:bg-white/[0.04] transition-all duration-200 cursor-pointer select-none relative ${index >= 6 ? "hidden sm:flex" : "flex"
+                    }`}
+                >
+                  <div className="relative w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 2xl:w-32 2xl:h-32 3xl:w-36 3xl:h-36 rounded-full bg-surface-container-highest shadow-md p-0.5 sm:p-1 ring-2 ring-primary/20 group-hover:ring-primary group-hover:shadow-[0_0_20px_rgba(76,215,246,0.3)] transition-all">
+                    <div className="w-full h-full rounded-full overflow-hidden">
+                      <ArtistAvatar
+                        name={artist.name}
+                        avatar={artist.avatar}
+                        className="w-full h-full"
+                      />
+                    </div>
+                    {/* Persistent Centered Mini Play Badge on bottom right of Avatar */}
+                    <button
+                      onClick={(e) => handleArtistPlay(artist, e)}
+                      className="absolute bottom-0 right-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_10px_rgba(76,215,246,0.6)] hover:scale-110 active:scale-95 transition-all z-10"
+                      title={isArtistPlaying ? "Pause audio" : `Play ${artist.name}`}
+                    >
+                      {isArtistPlaying ? (
+                        <span className="material-symbols-outlined text-[12px] sm:text-[14px] leading-none flex items-center justify-center">
+                          pause
+                        </span>
+                      ) : (
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current translate-x-[0.5px]"
+                        >
+                          <polygon points="6 4 19 12 6 20" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col items-center min-w-0 w-full">
+                    <span className="text-xs sm:text-sm font-semibold truncate transition-colors w-full text-white group-hover:text-primary">
+                      {artist.name}
+                    </span>
+                    <span className="text-[10px] sm:text-xs text-outline truncate w-full">{artist.genre || artist.role}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* Spotify Discovery: Spotify Artists */}

@@ -40,12 +40,15 @@ export default function PlaylistsPage() {
   // Authoritatively load fresh playlists from Supabase cloud whenever the playlist page is opened
   React.useEffect(() => {
     refreshCloudPlaylists?.();
-  }, [refreshCloudPlaylists]);
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [playlistToDelete, setPlaylistToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
   const [newTitle, setNewTitle] = useState("");
   const [selectedCreateCategory, setSelectedCreateCategory] = useState("Mixed");
   const [isCreateMoveToOpen, setIsCreateMoveToOpen] = useState(false);
@@ -199,12 +202,16 @@ export default function PlaylistsPage() {
     if (isThisPlaying) {
       togglePlay();
     } else {
-      playTrack(tracks[0], tracks);
+      playTrack(tracks[0], tracks, {
+        context: "playlist",
+        playlistId: playlist.id,
+        playlistTitle: playlist.title,
+      });
     }
   };
 
   return (
-    <div className="w-full px-3 md:px-8 py-4 md:py-8 flex flex-col gap-6 md:gap-10 select-none">
+    <div className="w-full px-3 md:px-8 2xl:px-12 3xl:px-16 py-4 md:py-8 2xl:py-10 flex flex-col gap-6 md:gap-10 2xl:gap-12 select-none">
       {/* Page Header */}
       <div className="flex flex-col gap-2.5 md:gap-3">
         <div className="flex items-center gap-2">
@@ -316,7 +323,7 @@ export default function PlaylistsPage() {
         </div>
 
         {/* Playlist Card Grid (matching Home Playlist Card style with uppercase track & duration header) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-4 md:gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 gap-3.5 sm:gap-4 md:gap-5 2xl:gap-6">
           {/* 'Create New Playlist' Card */}
           <div
             onClick={() => {
@@ -518,13 +525,8 @@ export default function PlaylistsPage() {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        if (deletePlaylist) {
-                          deletePlaylist(pl.id);
-                        } else if (pl.isCustom) {
-                          deleteCustomPlaylist(pl.id);
-                        } else {
-                          removeAddedPlaylist(pl.id);
-                        }
+                        setDeleteError(null);
+                        setPlaylistToDelete(pl);
                       }}
                       className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-white/80 hover:text-red-400 hover:bg-black/90 hover:scale-105 flex items-center justify-center transition-all cursor-pointer"
                       title={pl.isCustom ? "Delete playlist" : "Remove from library"}
@@ -814,6 +816,92 @@ export default function PlaylistsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal Dialog */}
+      {playlistToDelete && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            if (!isDeleting) {
+              setPlaylistToDelete(null);
+              setDeleteError(null);
+            }
+          }}
+        >
+          <div 
+            className="w-full max-w-sm bg-[#181818] border border-red-500/30 rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto">
+              <span className="material-symbols-outlined text-[26px]">delete</span>
+            </div>
+            <div className="flex flex-col text-center gap-1.5">
+              <h3 className="text-lg font-bold text-white">
+                {playlistToDelete.isCustom ? "Delete Playlist?" : "Remove Playlist?"}
+              </h3>
+              <p className="text-xs text-outline leading-relaxed">
+                Are you sure you want to {playlistToDelete.isCustom ? "permanently delete" : "remove"}{" "}
+                <span className="text-white font-semibold">"{playlistToDelete.title}"</span>?{" "}
+                {playlistToDelete.isCustom ? "This action cannot be undone." : "You can add it back anytime."}
+              </p>
+              {deleteError && (
+                <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                  {deleteError}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 mt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setPlaylistToDelete(null);
+                  setDeleteError(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-white/10 text-outline hover:text-white hover:bg-white/5 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  setDeleteError(null);
+                  try {
+                    if (playlistToDelete.isCustom) {
+                      const res = deletePlaylist ? await deletePlaylist(playlistToDelete.id) : await deleteCustomPlaylist(playlistToDelete.id);
+                      if (res && res.error) {
+                        setDeleteError(res.error);
+                        setIsDeleting(false);
+                        return;
+                      }
+                    } else {
+                      removeAddedPlaylist(playlistToDelete.id);
+                    }
+                    setPlaylistToDelete(null);
+                  } catch (err) {
+                    console.error("Failed to delete playlist:", err);
+                    setDeleteError(err.message || "Failed to delete playlist");
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold shadow-[0_0_15px_rgba(239,68,68,0.4)] transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isDeleting ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>{playlistToDelete.isCustom ? "Delete" : "Remove"}</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

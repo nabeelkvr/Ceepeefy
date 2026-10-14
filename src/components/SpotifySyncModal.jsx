@@ -12,13 +12,20 @@ export default function SpotifySyncModal({
 }) {
   const [selectedAlternatives, setSelectedAlternatives] = useState({});
   const [skippedAddedIds, setSkippedAddedIds] = useState(new Set());
+  const [unskippedSourceEntryIds, setUnskippedSourceEntryIds] = useState(new Set());
+  const [unskippedAddedMatches, setUnskippedAddedMatches] = useState([]);
+  const [isMatchingUnskipped, setIsMatchingUnskipped] = useState(null);
   const [activeReviewId, setActiveReviewId] = useState(null);
+  const [showSkippedList, setShowSkippedList] = useState(false);
 
   if (!isOpen || !syncPlan) return null;
 
-  const isUpToDate = Boolean(syncPlan.isUpToDate);
+  const previouslySkipped = (syncPlan.diff?.skipped || []).filter(
+    (s) => !unskippedSourceEntryIds.has(s.sourceEntryId)
+  );
+  const isUpToDate = Boolean(syncPlan.isUpToDate) && unskippedAddedMatches.length === 0;
   const summary = syncPlan.summary || {};
-  const addedMatches = syncPlan.addedMatches || [];
+  const addedMatches = [...(syncPlan.addedMatches || []), ...unskippedAddedMatches];
   const removedItems = syncPlan.diff?.removed || [];
   const reorderedItems = syncPlan.diff?.reordered || [];
   const unchangedCount = summary.unchangedCount || 0;
@@ -41,13 +48,69 @@ export default function SpotifySyncModal({
     });
   };
 
+  const handleUnskipTrack = async (skippedEntry) => {
+    const entryId = skippedEntry.sourceEntryId;
+    const spotifyTrack = skippedEntry.newItem || skippedEntry.prevItem;
+    if (!entryId || !spotifyTrack) return;
+
+    setIsMatchingUnskipped(entryId);
+    try {
+      const res = await fetch("/api/spotify/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ track: spotifyTrack }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const matchResult = data.result || {};
+        const matchedItem = {
+          sourceEntryId: entryId,
+          targetIndex: skippedEntry.targetIndex,
+          spotifyTrack,
+          status: matchResult.status || (matchResult.matchedTrack ? "matched" : "unmatched"),
+          score: matchResult.score || 0,
+          matchedTrack: matchResult.matchedTrack || null,
+          alternatives: matchResult.alternatives || [],
+          playableTrack: matchResult.matchedTrack
+            ? {
+                id: String(matchResult.matchedTrack.id),
+                title: matchResult.matchedTrack.title || spotifyTrack.name,
+                artist: matchResult.matchedTrack.artist || spotifyTrack.primaryArtist || "Various Artists",
+                album: matchResult.matchedTrack.album || spotifyTrack.album || "Imported Album",
+                duration: matchResult.matchedTrack.duration || Math.round((spotifyTrack.duration_ms || 210000) / 1000),
+                durationFormatted: matchResult.matchedTrack.durationFormatted || spotifyTrack.durationFormatted || "3:30",
+                audioUrl: matchResult.matchedTrack.audioUrl || null,
+                coverUrl: matchResult.matchedTrack.coverUrl || spotifyTrack.coverUrl,
+                type: "song",
+                source: "jiosaavn",
+              }
+            : null,
+        };
+
+        setUnskippedSourceEntryIds((prev) => {
+          const next = new Set(prev);
+          next.add(entryId);
+          return next;
+        });
+
+        setUnskippedAddedMatches((prev) => [...prev, matchedItem]);
+      }
+    } catch (err) {
+      console.warn("Failed to match unskipped track:", err);
+    } finally {
+      setIsMatchingUnskipped(null);
+    }
+  };
+
   const handleApply = () => {
     // Build user choice mappings
     const resolvedAdditions = [];
     const unresolvedAdditions = [];
+    const skippedAdditions = [];
 
     addedMatches.forEach((item) => {
       if (skippedAddedIds.has(item.sourceEntryId)) {
+        skippedAdditions.push(item);
         return;
       }
       const userCand = selectedAlternatives[item.sourceEntryId];
@@ -55,6 +118,18 @@ export default function SpotifySyncModal({
         resolvedAdditions.push({
           ...item,
           userSelectedTrack: userCand,
+          playableTrack: {
+            id: String(userCand.id),
+            title: userCand.title || item.spotifyTrack?.name,
+            artist: userCand.artist || item.spotifyTrack?.primaryArtist || "Various Artists",
+            album: userCand.album || item.spotifyTrack?.album || "Imported Album",
+            duration: userCand.duration || Math.round((item.spotifyTrack?.duration_ms || 210000) / 1000),
+            durationFormatted: userCand.durationFormatted || item.spotifyTrack?.durationFormatted || "3:30",
+            audioUrl: userCand.audioUrl || null,
+            coverUrl: userCand.coverUrl || item.spotifyTrack?.coverUrl,
+            type: "song",
+            source: "jiosaavn",
+          },
         });
       } else if (item.status === "matched" && item.matchedTrack) {
         resolvedAdditions.push(item);
@@ -71,6 +146,8 @@ export default function SpotifySyncModal({
     onConfirmSync({
       selectedAdditions: resolvedAdditions,
       unresolvedAdditions,
+      skippedAdditions,
+      unskippedSourceEntryIds: Array.from(unskippedSourceEntryIds),
     });
   };
 
@@ -116,7 +193,7 @@ export default function SpotifySyncModal({
         <div className="flex-1 overflow-y-auto p-5 space-y-4 no-scrollbar">
           {isUpToDate ? (
             /* Up-to-date notice */
-            <div className="flex flex-col items-center justify-center text-center py-8 px-4 space-y-3">
+            <div className="flex flex-col items-center justify-center text-center py-6 px-4 space-y-3">
               <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.3)]">
                 <span className="material-symbols-outlined text-[34px]">check_circle</span>
               </div>
@@ -124,6 +201,64 @@ export default function SpotifySyncModal({
               <p className="text-xs text-outline max-w-md leading-relaxed">
                 Spotify has no added, deleted, or reordered songs compared to your last synchronized snapshot. All {unchangedCount} tracks remain preserved.
               </p>
+
+              {previouslySkipped.length > 0 && (
+                <div className="w-full text-left pt-4 border-t border-white/5 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-outline">
+                    <button
+                      type="button"
+                      onClick={() => setShowSkippedList(!showSkippedList)}
+                      className="flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                      <span>Previously Skipped Tracks ({previouslySkipped.length})</span>
+                      <span className={`material-symbols-outlined text-[14px] transition-transform ${showSkippedList ? "rotate-180" : ""}`}>
+                        expand_more
+                      </span>
+                    </button>
+                    <span className="text-[10px] text-outline font-normal">
+                      Click to retry or unskip
+                    </span>
+                  </div>
+
+                  {showSkippedList && (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto no-scrollbar pr-0.5">
+                      {previouslySkipped.map((skipItem) => {
+                        const tr = skipItem.newItem || skipItem.prevItem;
+                        const isMatching = isMatchingUnskipped === skipItem.sourceEntryId;
+                        return (
+                          <div
+                            key={skipItem.sourceEntryId}
+                            className="p-2 rounded-xl bg-surface-container/40 border border-white/5 text-xs flex items-center justify-between"
+                          >
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className="font-semibold text-white/70 truncate text-xs">
+                                {tr?.name || tr?.title}
+                              </div>
+                              <div className="text-[10px] text-outline truncate">
+                                {tr?.primaryArtist || tr?.artist}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={isMatching || isApplying}
+                              onClick={() => handleUnskipTrack(skipItem)}
+                              className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {isMatching ? (
+                                <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <span className="material-symbols-outlined text-[12px]">undo</span>
+                              )}
+                              <span>Unskip & Match</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             /* Change Summary Preview */
@@ -363,6 +498,65 @@ export default function SpotifySyncModal({
                   <span className="text-[11px]">
                     {reorderedItems.length} track{reorderedItems.length === 1 ? "" : "s"} moved to match the new Spotify sequence without re-matching.
                   </span>
+                </div>
+              )}
+
+              {/* Previously Skipped Songs Section */}
+              {previouslySkipped.length > 0 && (
+                <div className="space-y-2 pt-1 border-t border-white/5">
+                  <div className="flex items-center justify-between text-xs font-semibold text-outline">
+                    <button
+                      type="button"
+                      onClick={() => setShowSkippedList(!showSkippedList)}
+                      className="flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                      <span>Previously Skipped Tracks ({previouslySkipped.length})</span>
+                      <span className={`material-symbols-outlined text-[14px] transition-transform ${showSkippedList ? "rotate-180" : ""}`}>
+                        expand_more
+                      </span>
+                    </button>
+                    <span className="text-[10px] text-outline font-normal">
+                      Will remain omitted unless unskipped
+                    </span>
+                  </div>
+
+                  {showSkippedList && (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto no-scrollbar pr-0.5">
+                      {previouslySkipped.map((skipItem) => {
+                        const tr = skipItem.newItem || skipItem.prevItem;
+                        const isMatching = isMatchingUnskipped === skipItem.sourceEntryId;
+                        return (
+                          <div
+                            key={skipItem.sourceEntryId}
+                            className="p-2 rounded-xl bg-surface-container/40 border border-white/5 text-xs flex items-center justify-between"
+                          >
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className="font-semibold text-white/70 truncate text-xs">
+                                {tr?.name || tr?.title}
+                              </div>
+                              <div className="text-[10px] text-outline truncate">
+                                {tr?.primaryArtist || tr?.artist}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={isMatching || isApplying}
+                              onClick={() => handleUnskipTrack(skipItem)}
+                              className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {isMatching ? (
+                                <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <span className="material-symbols-outlined text-[12px]">undo</span>
+                              )}
+                              <span>Unskip & Match</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </>

@@ -33,6 +33,47 @@
     --spotify-text-primary: #FFFFFF;
     --spotify-text-secondary: #B3B3B3;
     --spotify-text-muted: #858585;
+    /* Responsive Layout Scaling Tokens */
+    --sidebar-collapsed-w: 72px;
+    --sidebar-expanded-w: 248px;
+    --player-island-left: 84px;
+  }
+
+  /* Progressive Fluid Responsive Scaling for Larger Desktop Monitors */
+  @media (min-width: 1536px) {
+    :root {
+      font-size: clamp(16px, 0.85rem + 0.22vw, 17.5px);
+      --sidebar-collapsed-w: 80px;
+      --sidebar-expanded-w: 270px;
+      --player-island-left: 96px;
+    }
+  }
+
+  @media (min-width: 1800px) {
+    :root {
+      font-size: clamp(17.5px, 0.88rem + 0.25vw, 19.5px);
+      --sidebar-collapsed-w: 88px;
+      --sidebar-expanded-w: 296px;
+      --player-island-left: 104px;
+    }
+  }
+
+  @media (min-width: 2200px) {
+    :root {
+      font-size: clamp(19.5px, 0.95rem + 0.28vw, 22px);
+      --sidebar-collapsed-w: 96px;
+      --sidebar-expanded-w: 320px;
+      --player-island-left: 114px;
+    }
+  }
+
+  @media (min-width: 2800px) {
+    :root {
+      font-size: clamp(22px, 1.05rem + 0.3vw, 24px);
+      --sidebar-collapsed-w: 104px;
+      --sidebar-expanded-w: 348px;
+      --player-island-left: 124px;
+    }
   }
 
   html,

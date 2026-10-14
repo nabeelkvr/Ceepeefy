@@ -1,46 +1,42 @@
-import dns from "node:dns";
+// Configure DNS fallback on server-side so Spotify hostnames resolve properly
+if (typeof window === "undefined") {
+  try {
+    const dnsModule = await import(/* webpackIgnore: true */ "node:dns");
+    const dns = dnsModule.default || dnsModule;
+    if (typeof dns?.lookup === "function") {
+      const originalLookup = dns.lookup;
+      const resolver = new dns.Resolver();
+      resolver.setServers(["8.8.8.8", "1.1.1.1"]);
 
-/**
- * Spotify Server-side Web API Integration
- * Handles Client Credentials OAuth flow, token caching, catalog search,
- * and discovery for Artists and Playlists.
- *
- * NOTE: Keeps SPOTIFY_CLIENT_SECRET strictly server-side.
- */
-
-// Configure DNS fallback so Spotify hostnames resolve properly even if local network DNS sinks them
-if (typeof dns?.lookup === "function") {
-  const originalLookup = dns.lookup;
-  const resolver = new dns.Resolver();
-  resolver.setServers(["8.8.8.8", "1.1.1.1"]);
-
-  dns.lookup = function (hostname, options, callback) {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    originalLookup(hostname, options, (err, address, family) => {
-      if (
-        err &&
-        (hostname.includes("spotify.com") ||
-          hostname.includes("scdn.co") ||
-          hostname.includes("spotifycdn.com") ||
-          err.code === "ENOTFOUND")
-      ) {
-        resolver.resolve4(hostname, (resErr, addresses) => {
-          if (resErr || !addresses || addresses.length === 0) {
-            return callback(err, address, family);
+      dns.lookup = function (hostname, options, callback) {
+        if (typeof options === "function") {
+          callback = options;
+          options = {};
+        }
+        originalLookup(hostname, options, (err, address, family) => {
+          if (
+            err &&
+            (hostname.includes("spotify.com") ||
+              hostname.includes("scdn.co") ||
+              hostname.includes("spotifycdn.com") ||
+              err.code === "ENOTFOUND")
+          ) {
+            resolver.resolve4(hostname, (resErr, addresses) => {
+              if (resErr || !addresses || addresses.length === 0) {
+                return callback(err, address, family);
+              }
+              if (options && options.all) {
+                return callback(null, addresses.map((a) => ({ address: a, family: 4 })));
+              }
+              return callback(null, addresses[0], 4);
+            });
+            return;
           }
-          if (options && options.all) {
-            return callback(null, addresses.map((a) => ({ address: a, family: 4 })));
-          }
-          return callback(null, addresses[0], 4);
+          callback(err, address, family);
         });
-        return;
-      }
-      callback(err, address, family);
-    });
-  };
+      };
+    }
+  } catch {}
 }
 
 // In-memory cache for Spotify App Access Token

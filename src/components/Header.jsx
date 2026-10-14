@@ -101,9 +101,9 @@ export default function Header({ onToggleMobileMenu }) {
   };
 
   return (
-    <header className="h-16 bg-[#020202] z-40 flex items-center justify-between px-4 md:px-8 border-b border-[#141414] shadow-sm flex-shrink-0">
+    <header className="h-16 2xl:h-20 bg-[#020202] z-40 flex items-center justify-between px-4 md:px-8 2xl:px-12 border-b border-[#141414] shadow-sm flex-shrink-0">
       {/* Left: Title & Mobile menu button */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
+      <div className="flex items-center gap-2.5 sm:gap-3 2xl:gap-4">
         <button
           onClick={onToggleMobileMenu}
           className="md:hidden text-[#B3B3B3] hover:text-white p-1 rounded-lg hover:bg-[#181818] transition-colors"
@@ -128,9 +128,9 @@ export default function Header({ onToggleMobileMenu }) {
 
         {/* Desktop Brand Identity */}
         <div className="hidden md:flex items-center gap-2">
-          <h1 className="text-base md:text-lg font-bold text-white tracking-tight flex items-center gap-2 whitespace-nowrap">
+          <h1 className="text-base md:text-lg 2xl:text-xl font-bold text-white tracking-tight flex items-center gap-2 whitespace-nowrap">
             Enjoy Music
-            <span className="text-[10px] md:text-xs px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-medium">
+            <span className="text-[10px] md:text-xs 2xl:text-sm px-2 2xl:px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-medium">
               Studio Mode
             </span>
           </h1>
@@ -139,8 +139,8 @@ export default function Header({ onToggleMobileMenu }) {
 
       {/* Middle: Search bar with shortcut & live debouncing (Hidden on mobile and on /search) */}
       {!pathname?.startsWith("/search") ? (
-        <div className="hidden md:flex flex-1 max-w-xl mx-3 md:mx-8">
-          <div className="flex items-center gap-2.5 px-3.5 py-1.5 md:py-2 rounded-full bg-[#181818] hover:bg-[#242424] focus-within:bg-[#242424] border border-[#292929] text-white w-full transition-all group">
+        <div className="hidden md:flex flex-1 max-w-xl 2xl:max-w-2xl 3xl:max-w-3xl mx-3 md:mx-8 2xl:mx-12">
+          <div className="flex items-center gap-2.5 2xl:gap-3 px-3.5 2xl:px-4 py-1.5 md:py-2 2xl:py-2.5 rounded-full bg-[#181818] hover:bg-[#242424] focus-within:bg-[#242424] border border-[#292929] text-white w-full transition-all group">
             <button
               type="button"
               onClick={() => {
@@ -171,7 +171,7 @@ export default function Header({ onToggleMobileMenu }) {
                 }
               }}
               placeholder="Search by title, artist, or album..."
-              className="bg-transparent border-none outline-none text-xs md:text-sm text-white placeholder:text-[#8A8A8A] w-full"
+              className="bg-transparent border-none outline-none text-xs md:text-sm 2xl:text-base text-white placeholder:text-[#8A8A8A] w-full"
             />
             {localQuery && (
               <button
@@ -192,7 +192,7 @@ export default function Header({ onToggleMobileMenu }) {
       )}
 
       {/* Right: Actions and Avatar */}
-      <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 relative">
+      <div className="flex items-center gap-2 md:gap-3 2xl:gap-4 flex-shrink-0 relative">
         {/* Mobile Quick Search Button */}
         {pathname !== "/search" && (
           <Link
@@ -211,10 +211,10 @@ export default function Header({ onToggleMobileMenu }) {
               setIsNotificationsOpen((prev) => !prev);
               setIsProfileOpen(false);
             }}
-            className="relative w-8 h-8 md:w-9 md:h-9 rounded-full bg-[#181818] hover:bg-[#242424] border border-[#282828] flex items-center justify-center text-[#B3B3B3] hover:text-white transition-colors cursor-pointer"
+            className="relative w-8 h-8 md:w-9 md:h-9 2xl:w-10 2xl:h-10 rounded-full bg-[#181818] hover:bg-[#242424] border border-[#282828] flex items-center justify-center text-[#B3B3B3] hover:text-white transition-colors cursor-pointer"
             title="Notifications"
           >
-            <span className="material-symbols-outlined text-[19px]">notifications</span>
+            <span className="material-symbols-outlined text-[19px] 2xl:text-[21px]">notifications</span>
             <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary" />
           </button>
 
@@ -268,10 +268,10 @@ export default function Header({ onToggleMobileMenu }) {
             setIsNotificationsOpen(false);
             setIsSettingsModalOpen(true);
           }}
-          className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-[#181818] hover:bg-[#242424] border border-[#282828] flex items-center justify-center text-[#B3B3B3] hover:text-white transition-colors cursor-pointer"
+          className="w-8 h-8 md:w-9 md:h-9 2xl:w-10 2xl:h-10 rounded-full bg-[#181818] hover:bg-[#242424] border border-[#282828] flex items-center justify-center text-[#B3B3B3] hover:text-white transition-colors cursor-pointer"
           title="Audio & App Settings"
         >
-          <span className="material-symbols-outlined text-[19px]">settings</span>
+          <span className="material-symbols-outlined text-[19px] 2xl:text-[21px]">settings</span>
         </button>
 
         {/* Profile Avatar & Dropdown */}
@@ -281,7 +281,7 @@ export default function Header({ onToggleMobileMenu }) {
               setIsNotificationsOpen(false);
               setIsProfileOpen((prev) => !prev);
             }}
-            className={`w-8 h-8 md:w-9 md:h-9 rounded-full p-0.5 cursor-pointer transition-all ${user
+            className={`w-8 h-8 md:w-9 md:h-9 2xl:w-10 2xl:h-10 rounded-full p-0.5 cursor-pointer transition-all ${user
               ? "bg-gradient-to-tr from-primary via-cyan-300 to-secondary shadow-[0_0_14px_rgba(76,215,246,0.45)] hover:scale-105"
               : "bg-gradient-to-tr from-primary to-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.4)] hover:scale-105"
               }`}

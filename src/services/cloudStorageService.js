@@ -22,7 +22,6 @@ import { formatPlaylistDuration } from "../utils/playlistUtils";
  */
 export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
   if (!supabase || !isSupabaseConfigured()) {
-    console.warn("[CloudService] Supabase not configured; skipping playlist fetch.");
     return null;
   }
 
@@ -280,14 +279,24 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
 
     // 2. Persist tracks inside playlist_tracks table using safe delete + chunked insert
     if (rawTracks.length > 0) {
-      // Build normalized records with position
-      const trackRecords = rawTracks.map((track, idx) => ({
-        playlist_id: playlist.id,
-        track_id: String(track.id || `track-${idx}`),
-        position: idx,
-        track_data: track,
-        added_at: new Date().toISOString(),
-      }));
+      // Build normalized records with position and upfront position-safe track ID disambiguation
+      const seenTrackIds = new Set();
+      const trackRecords = rawTracks.map((track, idx) => {
+        const rawTrackId = String(track.id || track.track_id || `track-${idx}`);
+        let safeTrackId = rawTrackId;
+        if (seenTrackIds.has(safeTrackId)) {
+          safeTrackId = `${rawTrackId}__pos_${idx}`;
+        }
+        seenTrackIds.add(safeTrackId);
+
+        return {
+          playlist_id: playlist.id,
+          track_id: safeTrackId,
+          position: idx,
+          track_data: track,
+          added_at: new Date().toISOString(),
+        };
+      });
 
       // Delete existing tracks for this playlist to ensure clean replacement
       const { error: delError } = await supabase
@@ -346,21 +355,69 @@ export const deletePlaylistFromCloud = async (playlistId, userId = DEFAULT_USER_
   if (!supabase || !isSupabaseConfigured() || !playlistId) return false;
 
   try {
-    // Delete playlist_tracks first in case cascade is not set in DB
-    await supabase
+    const idStr = String(playlistId);
+
+    // 1. Delete playlist_tracks first in case cascade is not set in DB
+    const { error: tracksError } = await supabase
       .from("playlist_tracks")
       .delete()
-      .eq("playlist_id", playlistId);
+      .eq("playlist_id", idStr);
 
+    if (tracksError) {
+      console.warn("[CloudService] Notice on deleting playlist_tracks:", tracksError.message);
+    }
+
+    // 2. Delete user_playlists record
     const { error } = await supabase
       .from("user_playlists")
       .delete()
-      .eq("id", playlistId)
+      .eq("id", idStr)
       .eq("user_id", userId);
 
     if (error) {
       console.error("[CloudService] Failed to delete user_playlist:", error.message);
       return false;
+    }
+
+    // 3. Clean up user_account_data central snapshot so it does not resurrect the playlist
+    try {
+      const { data: acctRow } = await supabase
+        .from("user_account_data")
+        .select("account_data")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (acctRow?.account_data) {
+        const curAcct = acctRow.account_data;
+        const nextCustom = Array.isArray(curAcct.customPlaylists)
+          ? curAcct.customPlaylists.filter((p) => String(p.id) !== idStr)
+          : [];
+        const nextMixes = Array.isArray(curAcct.selfMixes)
+          ? curAcct.selfMixes.filter((m) => String(m.id) !== idStr)
+          : [];
+        const deletedIds = Array.isArray(curAcct.deletedPlaylistIds)
+          ? [...new Set([...curAcct.deletedPlaylistIds, idStr])]
+          : [idStr];
+
+        await supabase
+          .from("user_account_data")
+          .upsert(
+            {
+              user_id: userId,
+              account_data: {
+                ...curAcct,
+                customPlaylists: nextCustom,
+                selfMixes: nextMixes,
+                deletedPlaylistIds: deletedIds,
+                lastUpdated: new Date().toISOString(),
+              },
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" }
+          );
+      }
+    } catch (acctErr) {
+      console.warn("[CloudService] Notice updating account data for deleted playlist:", acctErr);
     }
 
     return true;
@@ -451,7 +508,6 @@ export const removeTrackFromPlaylistCloud = async (playlistId, trackId) => {
  */
 export const fetchLikedSongsFromCloud = async (userId = DEFAULT_USER_ID) => {
   if (!supabase || !isSupabaseConfigured()) {
-    console.warn("[CloudService] Supabase not configured; skipping liked songs fetch.");
     return null;
   }
 
@@ -557,7 +613,6 @@ export const removeLikedSongFromCloud = async (trackId, userId = DEFAULT_USER_ID
  */
 export const fetchRecentlyPlayedFromCloud = async (userId = DEFAULT_USER_ID, limit = 50) => {
   if (!supabase || !isSupabaseConfigured()) {
-    console.warn("[CloudService] Supabase not configured; skipping recently played fetch.");
     return null;
   }
 

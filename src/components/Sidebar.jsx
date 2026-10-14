@@ -239,7 +239,7 @@ export default function Sidebar({ className = "", onClose }) {
                 onClick={handleNavClick}
                 title={!isExpanded ? item.label : undefined}
                 className={`relative flex items-center rounded-2xl transition-all duration-200 group select-none ${
-                  isExpanded ? "w-full h-11 px-3.5 gap-3.5" : "w-11 h-11 justify-center"
+                  isExpanded ? "w-full h-11 2xl:h-12 px-3.5 2xl:px-4 gap-3.5 2xl:gap-4" : "w-11 h-11 2xl:w-12 2xl:h-12 justify-center"
                 } ${
                   isActive
                     ? "bg-[#242424] text-white font-semibold"
@@ -253,7 +253,7 @@ export default function Sidebar({ className = "", onClose }) {
 
                 {/* Nav Icon */}
                 <span
-                  className={`material-symbols-outlined text-[22px] flex-shrink-0 transition-all duration-200 ${
+                  className={`material-symbols-outlined text-[22px] 2xl:text-[24px] flex-shrink-0 transition-all duration-200 ${
                     isActive
                       ? "text-white"
                       : "text-[#B3B3B3] group-hover:text-white group-hover:scale-105"
@@ -264,7 +264,7 @@ export default function Sidebar({ className = "", onClose }) {
 
                 {/* Nav Label */}
                 <span
-                  className={`text-sm font-medium tracking-tight whitespace-nowrap transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                  className={`text-sm 2xl:text-base font-medium tracking-tight whitespace-nowrap transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                     isExpanded
                       ? "opacity-100 translate-x-0 block flex-1 truncate"
                       : "opacity-0 -translate-x-2 hidden pointer-events-none w-0"
@@ -591,17 +591,17 @@ export default function Sidebar({ className = "", onClose }) {
   // Desktop Floating/Overlay Collapsible Sidebar
   return (
     <div
-      className={`hidden md:block w-[72px] flex-shrink-0 relative z-50 ${className}`}
+      className={`hidden md:block w-[var(--sidebar-collapsed-w,72px)] flex-shrink-0 relative z-50 ${className}`}
     >
       <aside
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={`absolute inset-y-0 left-0 z-50 flex flex-col justify-between ${
-          currentTrack ? "pb-28" : "pb-5"
-        } pt-4 bg-[#020202] border-r border-[#141414] select-none transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          currentTrack ? "pb-28 2xl:pb-32" : "pb-5 2xl:pb-8"
+        } pt-4 2xl:pt-6 bg-[#020202] border-r border-[#141414] select-none transition-all duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
           isHovered
-            ? "w-[248px] shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-r-[#282828]"
-            : "w-[72px] shadow-lg"
+            ? "w-[var(--sidebar-expanded-w,248px)] shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-r-[#282828]"
+            : "w-[var(--sidebar-collapsed-w,72px)] shadow-lg"
         }`}
         style={{
           fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",

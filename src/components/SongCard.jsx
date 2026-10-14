@@ -73,7 +73,7 @@ export default function SongCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`w-[154px] sm:w-[165px] md:w-[176px] lg:w-[184px] p-0 flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-200 hover:-translate-y-0.5 ${className}`}
+      className={`w-[154px] sm:w-[165px] md:w-[176px] lg:w-[184px] xl:w-[200px] 2xl:w-[220px] 3xl:w-[245px] p-0 flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-200 hover:-translate-y-0.5 ${className}`}
     >
       {/* Portrait Artwork (Reduced height aspect-[4/5]) */}
       <div
@@ -106,7 +106,7 @@ export default function SongCard({
           <button
             type="button"
             onClick={handlePlayButtonClick}
-            className={`w-8.5 h-8.5 sm:w-9.5 sm:h-9.5 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_16px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-105 active:scale-95 ${
+            className={`w-8.5 h-8.5 sm:w-9.5 sm:h-9.5 2xl:w-11 2xl:h-11 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_16px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-105 active:scale-95 ${
               isCurrentPlaying
                 ? "translate-y-0 scale-100 shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.5)]"
                 : "translate-y-2 group-hover:translate-y-0 scale-95 group-hover:scale-100"
@@ -114,7 +114,7 @@ export default function SongCard({
             title={isCurrentPlaying ? "Pause" : "Play"}
             aria-label={isCurrentPlaying ? "Pause" : "Play"}
           >
-            <span className="material-symbols-outlined text-[19px] sm:text-[21px]">
+            <span className="material-symbols-outlined text-[19px] sm:text-[21px] 2xl:text-[24px]">
               {isCurrentPlaying ? "pause" : "play_arrow"}
             </span>
           </button>
@@ -135,7 +135,7 @@ export default function SongCard({
         {/* Row 1: Artist + 3 dots right beneath the artwork */}
         <div className="flex items-center justify-between gap-1 min-w-0 leading-none">
           <p
-            className="text-[10px] sm:text-[10.5px] font-semibold text-[#8E8E8E] uppercase tracking-wider truncate flex-1 leading-none"
+            className="text-[10px] sm:text-[10.5px] 2xl:text-xs font-semibold text-[#8E8E8E] uppercase tracking-wider truncate flex-1 leading-none"
             title={track.artist}
           >
             {track.artist}
@@ -144,7 +144,7 @@ export default function SongCard({
             <SongOptionsMenu
               track={track}
               playlistId={playlistId}
-              iconClassName="text-[15px] sm:text-[16px]"
+              iconClassName="text-[15px] sm:text-[16px] 2xl:text-[18px]"
               buttonClassName="p-0 text-[#8E8E8E] hover:text-white opacity-70 group-hover:opacity-100 transition-opacity cursor-pointer leading-none"
             />
           </div>
@@ -152,7 +152,7 @@ export default function SongCard({
 
         {/* Row 2: Song Title - Brought up tight and close under artist */}
         <h3
-          className={`text-[13px] sm:text-[14px] font-bold truncate transition-colors leading-tight mt-0.5 ${
+          className={`text-[13px] sm:text-[14px] 2xl:text-[15.5px] font-bold truncate transition-colors leading-tight mt-0.5 ${
             isCurrent ? "text-primary font-extrabold" : "text-white group-hover:text-primary"
           }`}
           title={track.title}

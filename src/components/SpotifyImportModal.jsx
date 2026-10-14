@@ -396,8 +396,16 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
       occCounts.set(fp, occ + 1);
       const sourceEntryId = `${fp}#${occ}`;
 
-      if (item.skipped) {
+      if (item.skipped || item.blocked || item.rejected || item.excluded) {
         skippedCount++;
+        const customStatus = item.blocked ? "blocked" : item.rejected ? "rejected" : item.status || "skipped";
+        syncedSnapshot.push({
+          ...createSnapshotEntry(item.spotifyTrack, occ, null, 0, customStatus),
+          status: customStatus,
+          skipped: true,
+          excluded: true,
+          skippedAt: Date.now(),
+        });
         return;
       }
 
@@ -439,11 +447,20 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
         }
       } else {
         unresolvedCount++;
+        const customStatus = item.status || (item.blocked ? "blocked" : item.rejected ? "rejected" : "unavailable");
         unresolvedTracks.push({
           sourceEntryId,
           spotifyTrack: item.spotifyTrack,
-          status: "unresolved",
+          status: customStatus,
           alternatives: item.alternatives || [],
+        });
+        syncedSnapshot.push({
+          ...createSnapshotEntry(item.spotifyTrack, occ, null, 0, customStatus),
+          status: customStatus,
+          skipped: true,
+          excluded: true,
+          unresolved: true,
+          excludedAt: Date.now(),
         });
       }
     });
@@ -469,7 +486,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
         spotifyUrl: spotifyLink,
         category: selectedCategory,
         sourceMeta: {
-          spotifyId: sourcePlaylist?.id || null,
+          spotifyId: sourcePlaylist?.id || parseSpotifyPlaylistId(playlistUrl) || null,
           spotifyUrl: spotifyLink,
           spotifyLink: spotifyLink,
           snapshotId: sourcePlaylist?.snapshotId || null,
@@ -478,6 +495,16 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
           totalSourceTracks: sourcePlaylist?.totalTracks || matchedItems.length,
           syncedSnapshot,
           unresolvedTracks,
+          excludedTracks: syncedSnapshot.filter(
+            (s) =>
+              s.skipped ||
+              s.excluded ||
+              s.status === "skipped" ||
+              s.status === "unavailable" ||
+              s.status === "blocked" ||
+              s.status === "rejected" ||
+              s.status === "unresolved"
+          ),
           importedCount,
           skippedCount,
           unresolvedCount,

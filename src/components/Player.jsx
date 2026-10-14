@@ -690,21 +690,21 @@ export default function Player() {
       {/* 3b. FULL-LENGTH FLOATING BOTTOM PLAYER BAR (Floating island bar across main content area, Image 5) */}
       {playerMode === "bar" && (
         <footer
-          className={`hidden md:flex fixed bottom-3 md:bottom-4 ${
+          className={`hidden md:flex fixed bottom-3 md:bottom-4 2xl:bottom-6 ${
             isQueueOpen
-              ? "left-[84px] right-[388px] lg:right-[408px] px-3 sm:px-4 md:px-5"
-              : "left-[84px] right-3 md:right-4 px-5 md:px-7"
-          } h-[88px] rounded-[24px] border border-[#1c1c1c] z-40 items-center justify-between select-none animate-slide-up transition-all duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.85)]`}
+              ? "left-[var(--player-island-left,84px)] right-[388px] lg:right-[408px] 2xl:right-[448px] 3xl:right-[488px] px-3 sm:px-4 md:px-5 2xl:px-6"
+              : "left-[var(--player-island-left,84px)] right-3 md:right-4 2xl:right-6 px-5 md:px-7 2xl:px-8"
+          } h-[88px] 2xl:h-[96px] 3xl:h-[104px] rounded-[24px] 2xl:rounded-[28px] border border-[#1c1c1c] z-40 items-center justify-between select-none animate-slide-up transition-all duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.85)]`}
           style={{
             backgroundColor: "#050505",
           }}
         >
           {/* Left: Track Details */}
           <div className={`flex items-center gap-3 min-w-0 flex-shrink-0 ${
-            isQueueOpen ? "w-40 sm:w-48 lg:w-56" : "w-52 sm:w-64 md:w-72 lg:w-80"
+            isQueueOpen ? "w-40 sm:w-48 lg:w-56 2xl:w-64" : "w-52 sm:w-64 md:w-72 lg:w-80 2xl:w-96"
           }`}>
             <div
-              className="relative w-12 h-12 md:w-13 md:h-13 rounded-2xl overflow-hidden bg-[#181818] flex-shrink-0 flex items-center justify-center shadow-lg border border-[#282828] group"
+              className="relative w-12 h-12 md:w-13 md:h-13 2xl:w-15 2xl:h-15 rounded-2xl overflow-hidden bg-[#181818] flex-shrink-0 flex items-center justify-center shadow-lg border border-[#282828] group"
             >
               <img
                 alt={currentTrack.title}
@@ -715,11 +715,11 @@ export default function Player() {
 
             <div className="flex flex-col min-w-0 flex-1">
               <span
-                className="text-xs md:text-sm font-bold text-white truncate"
+                className="text-xs md:text-sm 2xl:text-base font-bold text-white truncate"
               >
                 {currentTrack.title}
               </span>
-              <span className="text-[10px] md:text-[11px] font-semibold text-[#B3B3B3] uppercase tracking-wider truncate mt-0.5">
+              <span className="text-[10px] md:text-[11px] 2xl:text-xs font-semibold text-[#B3B3B3] uppercase tracking-wider truncate mt-0.5">
                 {currentTrack.artist}
               </span>
             </div>

@@ -155,13 +155,122 @@ function extractTokenFromState(obj, depth = 0) {
 }
 
 /**
- * Fetches playlist metadata and every available track from Spotify.
- * 1. Checks if official API credentials exist and retrieves the playlist with FULL pagination
- *    (fetches all available pages until all accessible tracks are retrieved, with retry/rate-limit handling).
- * 2. Fetches and preserves the true Spotify playlist artwork via official API or public oEmbed/web fallback.
- * 3. Falls back to public Spotify embed and JSON-LD parsing if credentials are not configured,
- *    reporting accurate totals, partial status, and retaining all retrieved entries.
+ * Fetches all playlist tracks via Spotify's Pathfinder GraphQL API
+ * Uses persistent query hash with chunked offset pagination (50 tracks per batch).
+ * Supports full retrieval of 100, 200, 500, 1000+ tracks.
+ *
+ * @param {string} cleanId - Spotify playlist ID
+ * @param {string} token - Session or bearer access token
+ * @returns {Promise<{ tracks: Array, total: number } | null>}
  */
+export async function fetchPathfinderPlaylistTracks(cleanId, token) {
+  if (!cleanId || !token) return null;
+  const queryHash = "8964e8eafb21aa992a7d951d256d83285c04be2105d209262901de70cb97584a";
+  const allTracks = [];
+  let offset = 0;
+  const limit = 100;
+  let totalCount = Infinity;
+  let hasMore = true;
+  let pageErrors = 0;
+
+  while (hasMore && offset < totalCount && pageErrors < 5) {
+    try {
+      const url =
+        "https://api-partner.spotify.com/pathfinder/v1/query?operationName=fetchPlaylistContents&variables=" +
+        encodeURIComponent(
+          JSON.stringify({
+            uri: `spotify:playlist:${cleanId}`,
+            offset,
+            limit,
+          })
+        ) +
+        "&extensions=" +
+        encodeURIComponent(
+          JSON.stringify({
+            persistedQuery: {
+              version: 1,
+              sha256Hash: queryHash,
+            },
+          })
+        );
+
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        },
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        pageErrors++;
+        const waitTime = res.status === 429 ? 2500 : 1000 * pageErrors;
+        console.warn(`[Spotify Pathfinder] HTTP ${res.status} at offset ${offset}. Waiting ${waitTime}ms...`);
+        await new Promise((r) => setTimeout(r, waitTime));
+        continue;
+      }
+
+      pageErrors = 0;
+      const json = await res.json();
+      const content = json?.data?.playlistV2?.content;
+      if (typeof content?.totalCount === "number") {
+        totalCount = content.totalCount;
+      }
+
+      const items = Array.isArray(content?.items) ? content.items : [];
+      if (items.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      items.forEach((item, idx) => {
+        const t = item?.itemV2?.data;
+        if (!t || !t.name) return;
+
+        const globalIdx = offset + idx;
+        const spId = t.uri ? t.uri.replace("spotify:track:", "") : (t.id || `track-${globalIdx}`);
+        const artistNames = Array.isArray(t.artists?.items)
+          ? t.artists.items.map((a) => cleanText(a.profile?.name || "")).filter(Boolean)
+          : ["Various Artists"];
+        const primaryArtist = artistNames[0] || "Various Artists";
+        const albumName = cleanText(t.albumOfTrack?.name || "");
+        const coverUrl =
+          t.albumOfTrack?.coverArt?.sources?.[0]?.url ||
+          t.albumOfTrack?.coverArt?.sources?.[t.albumOfTrack?.coverArt?.sources?.length - 1]?.url ||
+          "";
+        const durationMs = t.trackDuration?.totalMilliseconds || 0;
+
+        allTracks.push({
+          spotifyId: spId,
+          originalIndex: globalIdx,
+          name: cleanText(t.name),
+          artists: artistNames.length > 0 ? artistNames : [primaryArtist],
+          primaryArtist,
+          album: albumName,
+          duration_ms: durationMs,
+          durationFormatted: formatDuration(Math.round(durationMs / 1000)),
+          coverUrl,
+          spotifyUrl: `https://open.spotify.com/track/${spId}`,
+          isPlayable: t.playability?.playable ?? true,
+        });
+      });
+
+      offset += items.length;
+      if (items.length < limit || offset >= totalCount) {
+        hasMore = false;
+      }
+    } catch (err) {
+      console.warn(`[Spotify Pathfinder] Error at offset ${offset}:`, err?.message || err);
+      pageErrors++;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  return allTracks.length > 0 ? { tracks: allTracks, total: totalCount } : null;
+}
+
 export async function getSpotifyPlaylistMetadata(playlistId) {
   if (!playlistId || typeof playlistId !== "string") {
     return {
@@ -382,51 +491,42 @@ export async function getSpotifyPlaylistMetadata(playlistId) {
             }
           }
 
-          let allTracks = [...entity.trackList];
+          let allTracks = [];
+          let isFullPagination = false;
 
-          // Check if NextData embedded an anonymous bearer token that can paginate the tracks API
-          const anonymousToken = extractTokenFromState(json?.props?.pageProps);
-          if (anonymousToken && entity.trackList.length < (entity.totalLength || 9999)) {
-            console.log(`[Spotify Playlist] Found anonymous token, attempting pagination for ID: ${cleanId}`);
-            let offset = entity.trackList.length;
-            let canContinue = true;
+          // Check if NextData embedded an anonymous bearer token that can paginate Spotify's internal Pathfinder GraphQL API
+          const anonymousToken =
+            json?.props?.pageProps?.state?.settings?.session?.accessToken ||
+            extractTokenFromState(json?.props?.pageProps);
 
-            while (canContinue && offset < (entity.totalLength || 1000)) {
-              try {
-                const apiRes = await fetch(
-                  `https://api.spotify.com/v1/playlists/${cleanId}/tracks?offset=${offset}&limit=100&market=IN`,
-                  {
-                    headers: {
-                      Authorization: `Bearer ${anonymousToken}`,
-                      Accept: "application/json",
-                    },
-                    cache: "no-store",
-                  }
-                );
-                if (!apiRes.ok) break;
-                const apiData = await apiRes.json();
-                if (Array.isArray(apiData.items) && apiData.items.length > 0) {
-                  const mappedItems = apiData.items.map((it) => {
-                    const t = it?.track || it;
-                    return {
-                      title: t?.name,
-                      subtitle: (t?.artists || []).map((a) => a.name).join(", "),
-                      duration: t?.duration_ms,
-                      uri: t?.uri || (t?.id ? `spotify:track:${t.id}` : ""),
-                    };
-                  });
-                  allTracks.push(...mappedItems);
-                  offset += apiData.items.length;
-                  if (!apiData.next) canContinue = false;
-                } else {
-                  canContinue = false;
-                }
-              } catch (pErr) {
-                console.warn("[Spotify Playlist] Anonymous pagination error:", pErr);
-                break;
+          if (anonymousToken) {
+            console.log(`[Spotify Playlist] Found session token, fetching complete tracklist via Pathfinder API for ID: ${cleanId}`);
+            try {
+              const pathfinderTracks = await fetchPathfinderPlaylistTracks(cleanId, anonymousToken);
+              if (pathfinderTracks && pathfinderTracks.tracks.length > 0) {
+                console.log(`[Spotify Playlist] Successfully fetched all ${pathfinderTracks.tracks.length} tracks via Pathfinder`);
+                return {
+                  success: true,
+                  source: "pathfinder_api",
+                  playlist: {
+                    id: cleanId,
+                    name: cleanText(entity.name || "Spotify Playlist"),
+                    description: cleanText(entity.subtitle || ""),
+                    owner: cleanText(entity.subtitle || "Spotify"),
+                    coverUrl: coverArt,
+                    totalTracks: pathfinderTracks.total || pathfinderTracks.tracks.length,
+                    tracks: pathfinderTracks.tracks,
+                    isPartial: false,
+                    partialError: null,
+                  },
+                };
               }
+            } catch (pfErr) {
+              console.warn("[Spotify Playlist] Pathfinder error, falling back to embed tracklist:", pfErr?.message || pfErr);
             }
           }
+
+          allTracks = [...entity.trackList];
 
           const validTracks = allTracks
             .map((t, index) => {

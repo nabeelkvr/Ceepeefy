@@ -16,14 +16,17 @@ export default function LoginPage() {
   const [feedback, setFeedback] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // If already logged in, redirect to home
+  // If already logged in, redirect to destination
   useEffect(() => {
     if (user && user.isLoggedIn) {
-      router.replace("/");
+      const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      const from = searchParams?.get("from");
+      const destination = from && from.startsWith("/") && from !== "/login" ? from : "/";
+      router.replace(destination);
     }
   }, [user, router]);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
 
     if (!username.trim() || !password.trim()) {
@@ -34,68 +37,51 @@ export default function LoginPage() {
       return;
     }
 
-    const trimmedUser = username.trim().toLowerCase();
-    const trimmedPass = password.trim();
+    setIsLoading(true);
+    setFeedback(null);
 
-    const isUserMatch =
-      trimmedUser === DEFAULT_USER_ID ||
-      trimmedUser === `${DEFAULT_USER_ID}@ceepeefy.audio` ||
-      trimmedUser === `${DEFAULT_USER_ID}@gmail.com`;
-    const isPassMatch = trimmedPass === "3603";
-
-    if (isUserMatch && isPassMatch) {
-      setIsLoading(true);
-      const userObj = {
-        username: DEFAULT_USER_ID,
-        name: DEFAULT_USER_ID,
-        email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
-        plan: "Owner / Studio Master",
-        isLoggedIn: true,
-        activeUser: DEFAULT_USER_ID,
-      };
-
-      login(userObj);
-
-      setFeedback({
-        type: "success",
-        message: `Welcome back, ${DEFAULT_USER_ID}! Authenticated successfully.`,
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username.trim(),
+          password: password.trim(),
+        }),
       });
 
-      setTimeout(() => {
-        router.push("/");
-      }, 500);
-    } else {
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        login(data.user);
+
+        setFeedback({
+          type: "success",
+          message: `Welcome back, ${data.user.username}! Authenticated successfully.`,
+        });
+
+        const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+        const from = searchParams?.get("from");
+        const destination = from && from.startsWith("/") && from !== "/login" ? from : "/";
+
+        setTimeout(() => {
+          router.push(destination);
+        }, 400);
+      } else {
+        setFeedback({
+          type: "error",
+          message: data.error || "Access Denied: Private instance. Invalid credentials.",
+        });
+      }
+    } catch (err) {
+      console.error("Login request error:", err);
       setFeedback({
         type: "error",
-        message: "Access Denied: Private instance. Invalid credentials.",
+        message: "Network error connecting to authentication server. Please try again.",
       });
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  const handleQuickOwnerSignIn = () => {
-    setIsLoading(true);
-    setUsername(DEFAULT_USER_ID);
-    setPassword("3603");
-
-    const userObj = {
-      username: DEFAULT_USER_ID,
-      name: DEFAULT_USER_ID,
-      email: `${DEFAULT_USER_ID}@ceepeefy.audio`,
-      plan: "Owner / Studio Master",
-      isLoggedIn: true,
-      activeUser: DEFAULT_USER_ID,
-    };
-
-    login(userObj);
-
-    setFeedback({
-      type: "success",
-      message: `Authenticated as Owner (${DEFAULT_USER_ID})!`,
-    });
-
-    setTimeout(() => {
-      router.push("/");
-    }, 500);
   };
 
   return (

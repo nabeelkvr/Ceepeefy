@@ -232,13 +232,12 @@ export default function DownloadButton({
 
       const res = await fetch(`/api/audio/download?${params.toString()}`);
       if (!res.ok) {
-        throw new Error(`Download failed with status ${res.status}`);
+        const errJson = await res.json().catch(() => null);
+        const errMsg = errJson?.error || `Download failed with status ${res.status}`;
+        throw new Error(errMsg);
       }
 
       const blob = await res.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = blobUrl;
 
       // Extract filename from Content-Disposition header if available
       let filename = "";
@@ -251,24 +250,40 @@ export default function DownloadButton({
       }
 
       if (!filename) {
+        // Detect format from blob header bytes or mime-type
+        const headerBytes = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+        const isId3 = headerBytes[0] === 0x49 && headerBytes[1] === 0x44 && headerBytes[2] === 0x33;
+        const isMpegSync =
+          headerBytes[0] === 0xff &&
+          (headerBytes[1] & 0xe0) === 0xe0 &&
+          ((headerBytes[1] >> 1) & 0x03) === 0x01;
+        const isMp3 = isId3 || isMpegSync;
+
+        let ext = isMp3 ? "mp3" : "m4a";
+        if (blob.type.includes("wav")) ext = "wav";
+        else if (blob.type.includes("ogg")) ext = "ogg";
+        else if (blob.type.includes("flac")) ext = "flac";
+        else if (blob.type.includes("aac")) ext = "aac";
+
         const safeArtist = (track.artist || "").replace(/[\/\\?%*:|"<>]/g, "").trim();
         const safeTitle = (track.title || "Track").replace(/[\/\\?%*:|"<>]/g, "").trim();
-        const ext = blob.type.includes("mp4") ? "m4a" : "mp3";
         filename = safeArtist
           ? `${safeTitle} - ${safeArtist} [${qualityOpt.label}].${ext}`
           : `${safeTitle} [${qualityOpt.label}].${ext}`;
       }
 
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
     } catch (err) {
-      console.error("Audio download error:", err);
-      // Fallback: If direct stream is known, open in new tab
-      if (track.audioUrl) {
-        window.open(track.audioUrl, "_blank");
+      console.warn("Audio download notice:", err.message);
+      if (typeof window !== "undefined") {
+        alert(err.message || "This song could not be downloaded.");
       }
     } finally {
       setIsDownloading(false);
