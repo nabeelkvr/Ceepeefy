@@ -205,9 +205,14 @@ export function classifySongDetailed(track) {
   }
 
   // 2. Song Type / BGM Detection
+  // Important: Movie soundtrack albums contain vocal songs. Do not classify a vocal track as BGM
+  // simply because its album contains the word "Soundtrack" or "Score".
+  const titleAndGenreText = `${rawTitle} ${rawGenre} ${rawMood}`;
   const hasLyricsExplicit = track.has_lyrics === "false" || track.has_lyrics === false || track.has_lyrics === 0;
-  const isCinematicBgm = regexCinematicBgm.test(fullText);
-  const isInstrumentalBgm = regexInstrumentalBgm.test(fullText) || (hasLyricsExplicit && /\b(theme|bgm|instrumental|tune|score)\b/i.test(rawTitle));
+  const hasLyricsPositive = track.has_lyrics === "true" || track.has_lyrics === true || track.has_lyrics === 1;
+  const isTitleBgm = regexCinematicBgm.test(titleAndGenreText) || /\b(theme|bgm|instrumental|tune|original score|cinematic score)\b/i.test(rawTitle);
+  const isCinematicBgm = !hasLyricsPositive && isTitleBgm;
+  const isInstrumentalBgm = !hasLyricsPositive && (regexInstrumentalBgm.test(titleAndGenreText) || (hasLyricsExplicit && isTitleBgm));
   const isBgm = isCinematicBgm || isInstrumentalBgm;
   const isInstrumental = isInstrumentalBgm || (hasLyricsExplicit && isBgm);
   const contentType = isBgm ? (isInstrumental ? "instrumental_bgm" : "cinematic_bgm") : "vocal";

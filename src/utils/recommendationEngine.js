@@ -952,9 +952,16 @@ export function calculateQueueScore(candidate, seedTrack, options = {}) {
   );
 
   // Anti-Repetition Penalty (Section 15):
-  // If track was already recommended in the immediate recent queue of another starting song, dampen it by 12 points
-  if (recentQueueTrackIds.has(tid)) {
-    totalScore = Math.max(0, totalScore - 12);
+  // If track was already recommended in the immediate recent queue of another starting song, dampen it by 45 points
+  const cid = String(candidate.id || "").replace(/^track-/, "").trim();
+  const cTitle = normalizeBaseTitle(candidate.title || candidate.song || "");
+  const isRecentQueueTrack =
+    recentQueueTrackIds.has(tid) ||
+    (cid && recentQueueTrackIds.has(cid)) ||
+    (cTitle && (recentQueueTrackIds.has(cTitle) || recentQueueTrackIds.has(`title:${cTitle}`)));
+
+  if (isRecentQueueTrack) {
+    totalScore = Math.max(0, totalScore - 45);
   }
 
   return {
@@ -971,6 +978,7 @@ export function calculateQueueScore(candidate, seedTrack, options = {}) {
     movieScore,
     discoveryScore,
     isSameArtist: isSameArt,
+    isRecentQueueTrack,
     seedProfile,
     candProfile,
   };
@@ -1205,6 +1213,9 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
       const mCount = movieCounts.get(movie) || 0;
       if (movie && mCount >= 1) return false;
 
+      // Anti-Repetition Rule: Do not allow recently queued tracks in the top 5 slots if alternative fresh candidates exist
+      if (queueIndex < 5 && item.isRecentQueueTrack) return false;
+
       // Artist appearances cap (max 2)
       if (isSeedArtist && seedArtistAppearances >= 2) return false;
       const aCount = artistCounts.get(lead) || 0;
@@ -1231,7 +1242,7 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     eligible.sort((a, b) => b.totalScore - a.totalScore);
 
     // Beautiful Sequencing Layer:
-    // Slot 0: #1 highest scoring compatible hit
+    // Slot 0: #1 highest scoring compatible hit (with top-tier dynamic variety)
     // Slot 1: Top trending / energetic match
     // Slot 2: High genre & energy match
     // Slot 3: Newer release matching mood
@@ -1240,7 +1251,11 @@ export function buildIntelligentQueue(seedTrack, candidatePool, options = {}) {
     // Slots 6-19: Balanced alternation of trending and evergreen hits
     let selectedItem;
     if (queueIndex === 0) {
-      selectedItem = eligible[0];
+      // Pick among top scoring compatible candidates (within 4 points of top score) with controlled variation
+      // This strictly respects the 100-point algorithm while ensuring songs vary across plays
+      const topScore = eligible[0].totalScore;
+      const topTier = eligible.filter((e) => e.totalScore >= topScore - 4).slice(0, 3);
+      selectedItem = topTier[Math.floor(Math.random() * topTier.length)];
     } else if (queueIndex === 4 && eligible.some((e) => e.isSameArtist && e.totalScore >= 60)) {
       selectedItem = eligible.find((e) => e.isSameArtist && e.totalScore >= 60) || eligible[0];
     } else if (queueIndex === 5 && eligible.some((e) => e.discoveryScore === 2 && e.moodScore >= 12)) {

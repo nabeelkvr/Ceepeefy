@@ -135,6 +135,7 @@ export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
         tracks: plTracks,
         isCustom: true,
         isSelfMix: isSelfMix,
+        category: pl.category || pl.source_meta?.category || null,
         source: pl.source || (pl.badge === "SPOTIFY" ? "spotify_import" : "custom"),
         sourceMeta: pl.source_meta || pl.sourceMeta || null,
       };
@@ -252,11 +253,18 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
       updated_at: new Date().toISOString(),
     };
 
+    const resolvedSourceMeta = {
+      ...(playlist.sourceMeta || {}),
+      category: playlist.category || playlist.sourceMeta?.category || null,
+      spotifyId: playlist.spotifyId || playlist.sourceMeta?.spotifyId || null,
+      spotifyUrl: playlist.spotifyUrl || playlist.sourceMeta?.spotifyUrl || null,
+    };
+
     const fullRecord = {
       ...record,
       tracks: rawTracks,
       source: playlist.source || (playlist.badge === "SPOTIFY" ? "spotify_import" : "custom"),
-      source_meta: playlist.sourceMeta || null,
+      source_meta: resolvedSourceMeta,
     };
 
     // 1. Upsert into user_playlists with full tracks JSONB

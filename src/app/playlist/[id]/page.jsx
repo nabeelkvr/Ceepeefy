@@ -701,31 +701,12 @@ export default function PlaylistPage() {
     <div className="w-full flex flex-col pb-12 select-none">
       {/* Dynamic Hero Banner */}
       <div className="relative w-full p-4 sm:p-6 md:p-8 2xl:p-12 bg-gradient-to-b from-surface-container-high/60 via-surface-container-low/40 to-transparent border-b border-white/5">
-        {/* Upper Right Edge: Pin to Library Button */}
-        <div className="absolute top-3.5 right-3.5 sm:top-5 sm:right-5 md:top-6 md:right-6 z-20">
-          <button
-            type="button"
-            onClick={() => togglePinPlaylist(playlist.id, playlist)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full border text-xs font-semibold backdrop-blur-md transition-all cursor-pointer shadow-lg active:scale-95 ${isPlaylistPinned(playlist.id)
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_16px_rgba(245,158,11,0.35)]"
-                : "bg-surface-container-high/80 text-outline hover:text-amber-300 hover:bg-surface-container-highest border-white/10 hover:border-amber-500/40"
-              }`}
-            title={isPlaylistPinned(playlist.id) ? "Unpin playlist from library" : "Pin playlist to top of library"}
-          >
-            <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${isPlaylistPinned(playlist.id) ? "rotate-45 text-amber-300" : ""}`}>
-              push_pin
-            </span>
-            <span className="hidden sm:inline">
-              {isPlaylistPinned(playlist.id) ? "Pinned" : "Pin"}
-            </span>
-          </button>
-        </div>
-
-        <div className="flex flex-col md:flex-row items-center md:items-end gap-3.5 sm:gap-6 md:gap-8 2xl:gap-10 max-w-6xl 2xl:max-w-7xl 3xl:max-w-[1800px]">
+        <div className="w-full max-w-6xl 2xl:max-w-7xl 3xl:max-w-[1800px]">
+          <div className="flex flex-row items-center gap-4 sm:gap-6 md:gap-7 w-full">
           {/* Cover Art with Love button on upper right edge */}
           <div
             onClick={() => coverImageInputRef.current?.click()}
-            className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-56 md:h-56 2xl:w-64 2xl:h-64 3xl:w-72 3xl:h-72 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group mx-auto md:mx-0 cursor-pointer"
+            className="relative w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 2xl:w-52 2xl:h-52 rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-shrink-0 border border-white/10 group cursor-pointer"
             title="Click to change playlist cover with local photo"
           >
             {/* Hidden file input for cover photo */}
@@ -779,29 +760,82 @@ export default function PlaylistPage() {
           </div>
 
           {/* Metadata info */}
-          <div className="flex flex-col gap-1.5 sm:gap-2.5 text-center md:text-left flex-1 min-w-0 w-full">
-            <div className="flex items-center justify-center md:justify-start gap-1.5 sm:gap-2 flex-wrap">
-              <span
-                className={`px-2.5 py-0.5 rounded-full border text-[9px] sm:text-[11px] font-bold tracking-wider uppercase ${isSelfMix
-                  ? "bg-cyan-950/80 text-cyan-300 border-cyan-700/60"
-                  : "bg-primary/15 border-primary/30 text-primary"
+          <div className="flex flex-col justify-between self-stretch flex-1 min-w-0 py-0.5 sm:py-1">
+            {/* Top Row: [📁 Mixed] on Left, (📌 Pin) on Right */}
+            <div className="flex items-center justify-between gap-2 w-full">
+              {isCustomPlaylist ? (
+                <div className="relative" data-moveto-container="true">
+                  <button
+                    type="button"
+                    onClick={() => setIsMoveToMenuOpen(!isMoveToMenuOpen)}
+                    className="px-2.5 py-1 rounded-lg bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    title={`Current category: ${currentCategory} (Click to change)`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">folder</span>
+                    <span>{currentCategory}</span>
+                  </button>
+
+                  {isMoveToMenuOpen && (
+                    <div className="absolute top-full left-0 mt-1.5 z-50 w-44 bg-surface-container-highest/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl py-1.5 max-h-56 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1 text-[10px] font-bold text-outline uppercase tracking-wider border-b border-white/10 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[12px] text-primary">drive_file_move</span>
+                        <span>Move to</span>
+                      </div>
+                      {PLAYLIST_CATEGORIES.map((catName) => {
+                        const isCurrent = currentCategory === catName;
+                        return (
+                          <button
+                            key={catName}
+                            type="button"
+                            onClick={() => {
+                              updatePlaylistCategory(playlist.id, catName);
+                              setIsMoveToMenuOpen(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                              isCurrent
+                                ? "bg-primary/20 text-primary font-bold"
+                                : "text-white/90 hover:bg-white/10 hover:text-white"
+                            }`}
+                          >
+                            <span>{catName}</span>
+                            {isCurrent && (
+                              <span className="material-symbols-outlined text-[14px] text-primary">check</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span className="px-2.5 py-1 rounded-lg bg-primary/15 border border-primary/30 text-primary text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px]">folder</span>
+                  <span>{currentCategory}</span>
+                </span>
+              )}
+
+              {/* Pin to Library Button */}
+              <button
+                type="button"
+                onClick={() => togglePinPlaylist(playlist.id, playlist)}
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border flex items-center justify-center backdrop-blur-md transition-all cursor-pointer shadow-md active:scale-95 flex-shrink-0 ${isPlaylistPinned(playlist.id)
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.35)]"
+                    : "bg-surface-container-high/80 text-outline hover:text-amber-300 hover:bg-surface-container-highest border-white/10 hover:border-amber-500/40"
                   }`}
+                title={isPlaylistPinned(playlist.id) ? "Unpin playlist from library" : "Pin playlist to library"}
+                aria-label={isPlaylistPinned(playlist.id) ? "Unpin playlist from library" : "Pin playlist to library"}
               >
-                {isSelfMix ? "Self Mix • Hi-Res Lossless" : (playlist.fidelity || "Public Playlist • Hi-Res Lossless")}
-              </span>
-              <span className="px-2 py-0.5 rounded-md bg-tertiary/15 text-tertiary text-[9px] sm:text-[10px] font-mono font-bold">
-                {playlist.spec || "24-Bit • 192kHz"}
-              </span>
-              <span className="px-2 py-0.5 rounded-md bg-primary/15 text-primary text-[9px] sm:text-[10px] font-mono font-bold flex items-center gap-1">
-                <span className="material-symbols-outlined text-[11px]">folder</span>
-                {currentCategory}
-              </span>
+                <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${isPlaylistPinned(playlist.id) ? "rotate-45 text-amber-300" : ""}`}>
+                  push_pin
+                </span>
+              </button>
             </div>
 
+            {/* Middle: Title */}
             {isEditingTitle ? (
               <form
                 onSubmit={handleRenameSubmit}
-                className="flex items-center justify-center md:justify-start gap-2 w-full max-w-xl my-1"
+                className="flex items-center gap-2 w-full max-w-xl my-1"
                 onClick={(e) => e.stopPropagation()}
               >
                 <input
@@ -816,7 +850,7 @@ export default function PlaylistPage() {
                     }
                   }}
                   onBlur={handleRenameSubmit}
-                  className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white bg-surface-container-high/90 border border-primary/50 focus:border-primary rounded-xl px-3 py-1 outline-none w-full shadow-[0_0_15px_rgba(76,215,246,0.3)] transition-all"
+                  className="text-lg sm:text-2xl md:text-3xl font-extrabold text-white bg-surface-container-high/90 border border-primary/50 focus:border-primary rounded-xl px-3 py-1 outline-none w-full shadow-[0_0_15px_rgba(76,215,246,0.3)] transition-all"
                   autoFocus
                   placeholder="Playlist name"
                 />
@@ -840,14 +874,14 @@ export default function PlaylistPage() {
                 </button>
               </form>
             ) : (
-              <div className="flex items-center justify-center md:justify-start gap-2 group/title">
+              <div className="flex items-center gap-2 group/title my-0.5 sm:my-1">
                 <h1
                   onDoubleClick={() => {
                     setIsEditingTitle(true);
                     setEditedTitle(playlist.title || "");
                   }}
                   title="Double-click to rename"
-                  className="text-xl sm:text-2xl md:text-4xl 2xl:text-5xl font-extrabold text-white tracking-tight leading-tight line-clamp-2 cursor-pointer hover:text-primary transition-colors select-none"
+                  className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight line-clamp-2 cursor-pointer hover:text-primary transition-colors select-none text-left"
                 >
                   {playlist.title}
                 </h1>
@@ -861,7 +895,7 @@ export default function PlaylistPage() {
                   title="Rename playlist (or double-click title)"
                   aria-label="Rename playlist"
                 >
-                  <span className="material-symbols-outlined text-[18px]">edit</span>
+                  <span className="material-symbols-outlined text-[16px] sm:text-[18px]">edit</span>
                 </button>
                 {isSpotifyLinked && (
                   <button
@@ -875,7 +909,7 @@ export default function PlaylistPage() {
                     title="Sync with Spotify"
                     aria-label="Sync with Spotify"
                   >
-                    <span className={`material-symbols-outlined text-[18px] ${isSyncing ? "animate-spin" : ""}`}>
+                    <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${isSyncing ? "animate-spin" : ""}`}>
                       sync
                     </span>
                   </button>
@@ -883,12 +917,13 @@ export default function PlaylistPage() {
               </div>
             )}
 
-            <div className="flex items-center justify-center md:justify-start gap-2 sm:gap-3 text-xs text-outline pt-0.5 sm:pt-1">
-              <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Bottom: Curator • Tracks • Duration */}
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-outline flex-wrap text-left">
+              <div className="flex items-center gap-1.5">
                 <img
                   src={playlist.curatorAvatar || "https://lh3.googleusercontent.com/aida-public/AB6AXuB0776cuJDNwyUTJA-rmqEC0bmxGrVq2yheMO1LRRjEKa8X3Cf3UEDu0hJn4mdmjyKKeTpXvIjAXGckcnVAnrz3t0pLZyIHxk3oSWIBKnTAewK0vZY8jNgt5WWU1mB33uzQZJtQJNQfehNFMnRCim5JQVgBeDcIsQ21sOVpfHhvACpeifEiQ9VMkYu25PbaQ5RDOCGsSjDtlsMuC8kifyPcZ62qnvBUyplbvUNIWKL7azjlQ_ONJ0ZS"}
                   alt="Curator"
-                  className="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover"
+                  className="w-4 h-4 rounded-full object-cover"
                 />
                 <span className="text-white font-medium">{playlist.curator}</span>
               </div>
@@ -898,22 +933,20 @@ export default function PlaylistPage() {
               </span>
               <span>•</span>
               <span className="font-mono text-outline">{totalDurationStr}</span>
-              <span className="hidden sm:inline">•</span>
-              <span className="hidden sm:inline">{playlist.updatedDate || "Updated today"}</span>
             </div>
           </div>
         </div>
 
-        {/* Action Controls Bar - Clean Unboxed Standard Layout */}
-        <div className="flex flex-row items-center gap-2.5 sm:gap-3.5 mt-4 sm:mt-6 w-full max-w-full overflow-x-auto no-scrollbar py-1">
+        {/* Action Controls Bar */}
+        <div className="flex flex-row items-center gap-2.5 sm:gap-3.5 mt-5 sm:mt-6 w-full max-w-full overflow-x-auto no-scrollbar py-1">
           {/* Master Play Button - Glowing Gradient Orb */}
           <button
             onClick={handleMasterPlay}
             disabled={tracks.length === 0}
-            className="w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-gradient-to-tr from-cyan-500 via-primary to-blue-400 text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.65)] hover:shadow-[0_0_32px_rgba(76,215,246,0.9)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-tr from-cyan-500 via-primary to-blue-400 text-surface-container-lowest flex items-center justify-center shadow-[0_0_24px_rgba(76,215,246,0.65)] hover:shadow-[0_0_32px_rgba(76,215,246,0.9)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
             title={isCurrentPlaylistPlaying ? "Pause playlist" : "Play playlist"}
           >
-            <span className="material-symbols-outlined text-[24px] sm:text-[30px]">
+            <span className="material-symbols-outlined text-[24px] sm:text-[28px]">
               {isCurrentPlaylistPlaying ? "pause" : "play_arrow"}
             </span>
           </button>
@@ -947,25 +980,6 @@ export default function PlaylistPage() {
             </span>
           </button>
 
-          {/* Spotify Sync Button (Only for Spotify-imported playlists) */}
-          {isSpotifyLinked && (
-            <button
-              type="button"
-              onClick={handleStartSync}
-              disabled={isSyncing}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed ${isSyncing
-                  ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/50 shadow-[0_0_18px_rgba(16,185,129,0.4)] animate-pulse"
-                  : "bg-surface-container-high/60 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border-white/10 hover:border-emerald-500/40 shadow-sm hover:shadow-[0_0_15px_rgba(16,185,129,0.25)]"
-                }`}
-              title="Sync with Spotify"
-              aria-label="Sync with Spotify"
-            >
-              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isSyncing ? "animate-spin" : ""}`}>
-                sync
-              </span>
-            </button>
-          )}
-
           {/* Offline Download Control */}
           <div className="relative flex-shrink-0">
             {isDownloadingOffline ? (
@@ -989,7 +1003,7 @@ export default function PlaylistPage() {
 
                 {isOfflineMenuOpen && (
                   <div className="absolute top-full left-0 mt-2 w-52 bg-[#181818] backdrop-blur-2xl border border-[#282828] rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-3 py-1.5 text-[11px] text-outline border-b border-[#282828] mb-1">
+                    <div className="px-3 py-1 text-[11px] text-outline border-b border-[#282828] mb-1">
                       {downloadedTrackCount} of {totalTrackCount} songs offline
                     </div>
                     <button
@@ -1058,7 +1072,7 @@ export default function PlaylistPage() {
             </>
           )}
 
-          {/* Move to Category Button */}
+          {/* Move to Category Button (Folder Icon) */}
           {isCustomPlaylist && (
             <div className="relative" data-moveto-container="true">
               <button
@@ -1074,53 +1088,41 @@ export default function PlaylistPage() {
               >
                 <span className="material-symbols-outlined text-[18px] sm:text-[20px]">drive_file_move</span>
               </button>
-
-              {isMoveToMenuOpen && (
-                <div className="absolute top-full left-0 mt-2 z-50 w-44 bg-surface-container-highest/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl py-1.5 max-h-56 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-3 py-1 text-[10px] font-bold text-outline uppercase tracking-wider border-b border-white/10 flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[12px] text-primary">drive_file_move</span>
-                    <span>Move to</span>
-                  </div>
-                  {PLAYLIST_CATEGORIES.map((catName) => {
-                    const isCurrent = currentCategory === catName;
-                    return (
-                      <button
-                        key={catName}
-                        type="button"
-                        onClick={() => {
-                          updatePlaylistCategory(playlist.id, catName);
-                          setIsMoveToMenuOpen(false);
-                        }}
-                        className={`w-full px-3 py-1.5 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                          isCurrent
-                            ? "bg-primary/20 text-primary font-bold"
-                            : "text-white/90 hover:bg-white/10 hover:text-white"
-                        }`}
-                      >
-                        <span>{catName}</span>
-                        {isCurrent && (
-                          <span className="material-symbols-outlined text-[14px] text-primary">check</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           )}
 
-          {/* Delete Playlist Button */}
+          {/* Spotify Sync Button (Only for Spotify-imported playlists) */}
+          {isSpotifyLinked && (
+            <button
+              type="button"
+              onClick={handleStartSync}
+              disabled={isSyncing}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed ${isSyncing
+                  ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/50 shadow-[0_0_18px_rgba(16,185,129,0.4)] animate-pulse"
+                  : "bg-surface-container-high/60 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border-white/10 hover:border-emerald-500/40 shadow-sm hover:shadow-[0_0_15px_rgba(16,185,129,0.25)]"
+                }`}
+              title="Sync with Spotify"
+              aria-label="Sync with Spotify"
+            >
+              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isSyncing ? "animate-spin" : ""}`}>
+                sync
+              </span>
+            </button>
+          )}
+
+          {/* Delete Playlist Button - PUSHED TO FAR RIGHT (ml-auto) */}
           {isCustomPlaylist && (
             <button
               type="button"
               onClick={() => setIsDeleteModalOpen(true)}
               aria-label={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
               title={isSelfMix ? "Delete Self Mix" : "Delete Playlist"}
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 hover:border-red-500/50 shadow-sm hover:shadow-[0_0_15px_rgba(239,68,68,0.35)] transition-all active:scale-90 cursor-pointer flex-shrink-0"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 hover:border-red-500/50 shadow-sm hover:shadow-[0_0_15px_rgba(239,68,68,0.35)] transition-all active:scale-90 cursor-pointer flex-shrink-0 ml-auto"
             >
               <span className="material-symbols-outlined text-[18px] sm:text-[20px]">delete</span>
             </button>
           )}
+        </div>
         </div>
       </div>
 
@@ -1173,16 +1175,16 @@ export default function PlaylistPage() {
       )}
 
       {/* Tracklist Table */}
-      <div className="px-4 md:px-8 2xl:px-12 3xl:px-16 pt-6 flex flex-col gap-2 max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2100px]">
+      <div className="px-2 sm:px-4 md:px-8 2xl:px-12 3xl:px-16 pt-6 flex flex-col gap-2 max-w-7xl 2xl:max-w-[1700px] 3xl:max-w-[2100px]">
         {/* Table Header */}
-        <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 py-2 border-b border-white/10 text-[11px] font-semibold uppercase tracking-wider text-outline select-none">
+        <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-3 md:gap-4 px-2 sm:px-4 py-2 border-b border-white/10 text-[10.5px] sm:text-[11px] font-semibold uppercase tracking-wider text-outline select-none">
           <span className="text-center">#</span>
           <span>Title</span>
           <span className="hidden md:block">Artist</span>
-          <span className="text-right flex items-center justify-end pr-1">
-            <span className="material-symbols-outlined text-[15px]">schedule</span>
+          <span className="text-right flex items-center justify-end pr-0.5 sm:pr-1">
+            <span className="material-symbols-outlined text-[14px] sm:text-[15px]">schedule</span>
           </span>
-          <span className="text-right pr-2">Actions</span>
+          <span className="text-right pr-1 sm:pr-2">Actions</span>
         </div>
 
         {/* Tracks List */}
@@ -1280,12 +1282,13 @@ export default function PlaylistPage() {
             tracks.map((track, idx) => {
               const isCurrent = currentTrack?.id === track.id;
               const isCurrentPlaying = isCurrent && isPlaying;
+              const rowKey = track.sourceEntryId ? `${track.id}__${track.sourceEntryId}` : `${track.id || "track"}__pos_${idx}`;
 
               return (
                 <div
-                  key={track.id}
+                  key={rowKey}
                   onClick={() => handleRowClick(track)}
-                  className={`group grid grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 py-2.5 rounded-xl transition-all duration-200 cursor-pointer select-none ${isCurrent
+                  className={`group grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-3 md:gap-4 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all duration-200 cursor-pointer select-none ${isCurrent
                     ? "bg-primary/10 border border-primary/40 shadow-[0_0_20px_rgba(76,215,246,0.15)]"
                     : "bg-surface-container/30 hover:bg-surface-container-high/80 hover:border-white/10 border border-transparent hover:shadow-md"
                     }`}
@@ -1294,7 +1297,7 @@ export default function PlaylistPage() {
                   <div className="flex items-center justify-center w-full">
                     {isCurrentPlaying ? (
                       <span className="text-primary flex items-center justify-center">
-                        <svg className="w-4 h-4 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" fill="currentColor" viewBox="0 0 24 24">
                           <rect height="10" rx="1.5" width="3" x="3" y="10">
                             <animate
                               attributeName="height"
@@ -1355,43 +1358,44 @@ export default function PlaylistPage() {
                       </span>
                     ) : (
                       <>
-                        <span className="group-hover:hidden text-xs font-mono text-outline">
+                        <span className="group-hover:hidden text-[11px] sm:text-xs font-mono text-outline">
                           {idx + 1}
                         </span>
                         <span className="hidden group-hover:block text-white">
-                          <span className="material-symbols-outlined text-[20px]">play_arrow</span>
+                          <span className="material-symbols-outlined text-[17px] sm:text-[20px]">play_arrow</span>
                         </span>
                       </>
                     )}
                   </div>
 
                   {/* Cover & Title */}
-                  <div className="flex items-center gap-3 min-w-0 pr-2">
-                    <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high shadow">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-1 sm:pr-2">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high shadow">
                       <img
                         src={track.coverUrl}
                         alt={track.title}
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-1.5">
+                    <div className="flex flex-col min-w-0 flex-1 justify-center">
+                      <div className="flex items-center gap-1 min-w-0">
                         <span
-                          className={`text-sm font-semibold truncate transition-colors ${isCurrent ? "text-primary" : "text-white group-hover:text-primary"
+                          className={`text-xs sm:text-sm font-semibold line-clamp-2 md:truncate break-words leading-tight transition-colors ${isCurrent ? "text-primary" : "text-white group-hover:text-primary"
                             }`}
+                          title={track.title}
                         >
                           {track.title}
                         </span>
                         {offlineTrackIds?.has(String(track.id)) && (
                           <span
-                            className="material-symbols-outlined text-primary text-[14px] flex-shrink-0"
+                            className="material-symbols-outlined text-primary text-[13px] sm:text-[14px] flex-shrink-0"
                             title="Available offline on this device"
                           >
                             download_done
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-on-surface-variant md:hidden truncate mt-0.5">
+                      <span className="text-[10.5px] sm:text-xs text-on-surface-variant md:hidden truncate mt-0.5 leading-normal" title={track.artist}>
                         {track.artist}
                       </span>
                     </div>
@@ -1403,17 +1407,17 @@ export default function PlaylistPage() {
                   </div>
 
                   {/* Duration with clean tabular font and dedicated space */}
-                  <div className="text-right text-xs font-mono text-outline tabular-nums whitespace-nowrap pl-1 pr-1 sm:pr-2">
+                  <div className="text-right text-[11px] sm:text-xs font-mono text-outline tabular-nums whitespace-nowrap px-0.5 sm:px-2">
                     {track.durationFormatted || formatTime(track.duration)}
                   </div>
 
                   {/* Actions: Download, Like, & Remove from playlist */}
-                  <div className="flex items-center justify-end gap-1 sm:gap-1.5 flex-shrink-0">
+                  <div className="flex items-center justify-end gap-0.5 sm:gap-1.5 flex-shrink-0">
                     {!track.isLocal && (
                       <DownloadButton
                         track={track}
-                        buttonSize="w-8 h-8"
-                        iconSize="text-[18px]"
+                        buttonSize="w-7 h-7 sm:w-8 sm:h-8"
+                        iconSize="text-[16px] sm:text-[18px]"
                         className="hover:scale-110 active:scale-95"
                       />
                     )}
@@ -1423,12 +1427,12 @@ export default function PlaylistPage() {
                         e.stopPropagation();
                         toggleLike(track.id);
                       }}
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${isLiked(track.id) ? "text-primary shadow-[0_0_12px_rgba(76,215,246,0.3)]" : "text-outline hover:text-white"
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${isLiked(track.id) ? "text-primary shadow-[0_0_12px_rgba(76,215,246,0.3)]" : "text-outline hover:text-white"
                         }`}
                       title={isLiked(track.id) ? "Remove from favorites" : "Add to favorites"}
                     >
                       <span
-                        className="material-symbols-outlined text-[18px]"
+                        className="material-symbols-outlined text-[16px] sm:text-[18px]"
                         style={{ fontVariationSettings: isLiked(track.id) ? "'FILL' 1" : "'FILL' 0" }}
                       >
                         {isLiked(track.id) ? "favorite" : "favorite_border"}
@@ -1441,13 +1445,18 @@ export default function PlaylistPage() {
                           e.stopPropagation();
                           removeTrackFromPlaylist(playlist.id, track.id);
                         }}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-outline hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
                         title="Remove from playlist"
                       >
-                        <span className="material-symbols-outlined text-[17px]">close</span>
+                        <span className="material-symbols-outlined text-[15px] sm:text-[17px]">close</span>
                       </button>
                     )}
-                    <SongOptionsMenu track={track} playlistId={isCustomPlaylist ? playlist.id : null} />
+                    <SongOptionsMenu
+                      track={track}
+                      playlistId={isCustomPlaylist ? playlist.id : null}
+                      buttonClassName="w-7 h-7 sm:w-8 sm:h-8"
+                      iconClassName="text-[17px] sm:text-[20px]"
+                    />
                   </div>
                 </div>
               );
@@ -1582,14 +1591,14 @@ export default function PlaylistPage() {
 
                   {searchResults.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                      {searchResults.map((track) => {
+                      {searchResults.map((track, sIdx) => {
                         const inPlaylist =
                           tracks.some((t) => String(t.id) === String(track.id)) ||
                           justAddedIds.has(String(track.id));
 
                         return (
                           <div
-                            key={track.id}
+                            key={`search_${track.id}__${sIdx}`}
                             className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container/60 hover:bg-surface-container border border-white/5 hover:border-primary/30 transition-all group"
                           >
                             <div className="flex items-center gap-3 min-w-0">
@@ -1672,9 +1681,9 @@ export default function PlaylistPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     {POPULAR_RECOMMENDED_POOL.filter((nt) => !tracks.some((t) => String(t.id) === String(nt.id)) && !justAddedIds.has(String(nt.id)))
                       .slice(0, 10)
-                      .map((track) => (
+                      .map((track, rIdx) => (
                         <div
-                          key={track.id}
+                          key={`rec_${track.id}__${rIdx}`}
                           className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container/50 hover:bg-surface-container/80 border border-white/5 hover:border-primary/30 transition-all group"
                         >
                           <div className="flex items-center gap-3 min-w-0">

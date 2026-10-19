@@ -275,7 +275,7 @@ export default function LocalPlaylistDetailView({
                   {/* Title & Artist */}
                   <div className="flex flex-col min-w-0 flex-1">
                     <span
-                      className={`text-xs sm:text-sm font-semibold truncate ${
+                      className={`text-xs sm:text-sm font-semibold line-clamp-2 md:truncate break-words leading-tight ${
                         isCurrent
                           ? "text-primary font-bold"
                           : "text-white group-hover:text-primary transition-colors"

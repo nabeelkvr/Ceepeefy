@@ -362,13 +362,13 @@ export default function AlbumPage() {
       </div>
 
       {/* Tracklist Table (Exact Image 2 Structure) */}
-      <div className="px-4 md:px-8 pt-6 flex flex-col gap-2">
+      <div className="px-2 sm:px-4 md:px-8 pt-6 flex flex-col gap-2">
         {/* Table Header */}
-        <div className="grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
+        <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-1.5 sm:px-3 md:px-4 py-2 border-b border-white/10 text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-outline">
           <span className="text-center">#</span>
           <span>Title</span>
           <span className="hidden md:block">Artist</span>
-          <span className="text-right flex items-center justify-end pr-1">
+          <span className="text-right flex items-center justify-end px-0.5 sm:pr-1">
             <span className="material-symbols-outlined text-[16px]">schedule</span>
           </span>
           <span className="text-right hidden md:block pr-2">Actions</span>
@@ -413,7 +413,7 @@ export default function AlbumPage() {
                 <div
                   key={track.id || idx}
                   onClick={() => handleRowClick(track)}
-                  className={`group grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2.5 rounded-xl transition-all cursor-pointer select-none ${
+                  className={`group grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-1.5 sm:px-3 md:px-4 py-2 sm:py-2.5 rounded-xl transition-all cursor-pointer select-none ${
                     isCurrent
                       ? "bg-surface-container-high/80 border border-primary/30 text-primary shadow-[0_0_15px_rgba(76,215,246,0.15)]"
                       : "hover:bg-surface-container/60 hover:border-white/5 border border-transparent text-on-surface"
@@ -481,8 +481,8 @@ export default function AlbumPage() {
                   </div>
 
                   {/* Title with thumbnail */}
-                  <div className="flex items-center gap-3 min-w-0 pr-4">
-                    <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high relative shadow-sm">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-1 sm:pr-4">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high relative shadow-sm">
                       <img
                         src={track.thumbnail || track.coverUrl || album?.image || "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80"}
                         alt={track.title}
@@ -491,13 +491,13 @@ export default function AlbumPage() {
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span
-                        className={`text-sm font-semibold truncate transition-colors ${
+                        className={`text-xs sm:text-sm font-semibold line-clamp-2 md:truncate break-words leading-tight transition-colors ${
                           isCurrent ? "text-primary" : "text-white group-hover:text-primary"
                         }`}
                       >
                         {track.title}
                       </span>
-                      <span className="text-xs text-on-surface-variant md:hidden truncate mt-0.5">
+                      <span className="text-[10.5px] sm:text-xs text-on-surface-variant md:hidden truncate mt-0.5 leading-normal">
                         {track.artist || album?.artist || "Unknown Artist"}
                       </span>
                     </div>
@@ -509,31 +509,31 @@ export default function AlbumPage() {
                   </span>
 
                   {/* Duration */}
-                  <span className="text-xs font-mono text-outline text-right pr-2">
+                  <span className="text-[11px] sm:text-xs font-mono text-outline text-right px-0.5 sm:pr-2 tabular-nums">
                     {track.durationFormatted || formatTime(track.duration || 210)}
                   </span>
 
                   {/* Row Actions: Download, Like, & 3-dot options */}
-                  <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
-                    <DownloadButton track={track} iconSize="text-[16px]" buttonSize="p-1" />
+                  <div className="flex items-center justify-end gap-0.5 sm:gap-1 opacity-90 sm:opacity-80 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
+                    <DownloadButton track={track} iconSize="text-[15px] sm:text-[16px]" buttonSize="w-7 h-7 sm:w-8 sm:h-8 p-0 flex items-center justify-center" />
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleLike(track);
                       }}
-                      className={`p-1 rounded-full transition-colors cursor-pointer ${
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
                         isLiked(track.id) ? "text-primary" : "text-outline hover:text-white"
                       }`}
                       title={isLiked(track.id) ? "Liked" : "Like song"}
                     >
                       <span
-                        className="material-symbols-outlined text-[16px]"
+                        className="material-symbols-outlined text-[15px] sm:text-[16px]"
                         style={{ fontVariationSettings: isLiked(track.id) ? "'FILL' 1" : "'FILL' 0" }}
                       >
                         {isLiked(track.id) ? "favorite" : "favorite_border"}
                       </span>
                     </button>
-                    <SongOptionsMenu track={track} iconClassName="text-[18px]" buttonClassName="p-1" />
+                    <SongOptionsMenu track={track} iconClassName="text-[16px] sm:text-[18px]" buttonClassName="w-7 h-7 sm:w-8 sm:h-8 p-0 flex items-center justify-center" />
                   </div>
                 </div>
               );

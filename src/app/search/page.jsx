@@ -48,6 +48,7 @@ function SearchContent() {
     customPlaylists,
     selfMixes,
     recentlyPlayedTracks,
+    offlineTrackIds,
   } = useMusic();
 
   const [recommendationSeed, setRecommendationSeed] = useState(0);
@@ -731,49 +732,130 @@ function SearchContent() {
     }
   };
 
-  // Reusable Tracklist Row Component (used in both 'All' and 'Songs' layouts)
-  const renderSongRow = (track, idx) => {
+  // Table Header matching Playlist (Image 1)
+  const renderSongTableHeader = () => (
+    <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-3 md:gap-4 px-2 sm:px-4 py-2 border-b border-white/10 text-[10.5px] sm:text-[11px] font-semibold uppercase tracking-wider text-outline select-none">
+      <span className="text-center">#</span>
+      <span>Title</span>
+      <span className="hidden md:block">Artist</span>
+      <span className="text-right flex items-center justify-end pr-0.5 sm:pr-1">
+        <span className="material-symbols-outlined text-[14px] sm:text-[15px]">schedule</span>
+      </span>
+      <span className="text-right pr-1 sm:pr-2">Actions</span>
+    </div>
+  );
+
+  // Reusable Tracklist Row Component matching Playlist Cards (Image 1)
+  const renderSongRow = (track, idx, customTrackList = null) => {
     const isCurrent = currentTrack?.id === track.id;
     const isCurrentPlaying = isCurrent && isPlaying;
+    const rowKey = track.sourceEntryId
+      ? `${track.id}__${track.sourceEntryId}`
+      : `${track.id || "track"}__pos_${idx}`;
+    const coverUrl =
+      track.coverUrl ||
+      track.thumbnail ||
+      track.image ||
+      (Array.isArray(track.image) && track.image[track.image.length - 1]?.url) ||
+      "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80";
+
+    const handleRowClick = () => {
+      const listToPlay = customTrackList || (liveTracks && liveTracks.length > 0 ? liveTracks : null);
+      handleTrackClick(track, listToPlay);
+    };
 
     return (
       <div
-        key={track.id || idx}
-        onClick={() => handleTrackClick(track, liveTracks)}
-        className={`group flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer border ${isCurrent
-          ? "bg-white/10 border-primary/30"
-          : "hover:bg-white/5 border-transparent hover:border-white/5"
-          }`}
+        key={rowKey}
+        onClick={handleRowClick}
+        className={`group grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-3 md:gap-4 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all duration-200 cursor-pointer select-none ${
+          isCurrent
+            ? "bg-primary/10 border border-primary/40 shadow-[0_0_20px_rgba(76,215,246,0.15)]"
+            : "bg-surface-container/30 hover:bg-surface-container-high/80 hover:border-white/10 border border-transparent hover:shadow-md"
+        }`}
       >
-        {/* Left: Index + Play Icon + Thumbnail + Title & Artist */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          {/* Number & Play Icon */}
-          <div className="w-5 text-center flex items-center justify-center flex-shrink-0">
-            {isCurrentPlaying ? (
-              <div className="flex items-end gap-[2.5px] h-3.5">
-                <span className="w-1 bg-primary animate-pulse rounded-full h-full" />
-                <span className="w-1 bg-primary animate-pulse rounded-full h-3/4 delay-75" />
-                <span className="w-1 bg-primary animate-pulse rounded-full h-1/2 delay-150" />
-              </div>
-            ) : (
-              <span className="text-xs font-semibold text-outline group-hover:hidden">
+        {/* Index / Play status */}
+        <div className="flex items-center justify-center w-full">
+          {isCurrentPlaying ? (
+            <span className="text-primary flex items-center justify-center">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                <rect height="10" rx="1.5" width="3" x="3" y="10">
+                  <animate
+                    attributeName="height"
+                    dur="0.8s"
+                    repeatCount="indefinite"
+                    values="10;4;14;10"
+                  />
+                  <animate
+                    attributeName="y"
+                    dur="0.8s"
+                    repeatCount="indefinite"
+                    values="10;16;6;10"
+                  />
+                </rect>
+                <rect height="15" rx="1.5" width="3" x="8.5" y="5">
+                  <animate
+                    attributeName="height"
+                    dur="0.6s"
+                    repeatCount="indefinite"
+                    values="15;8;18;15"
+                  />
+                  <animate
+                    attributeName="y"
+                    dur="0.6s"
+                    repeatCount="indefinite"
+                    values="5;12;2;5"
+                  />
+                </rect>
+                <rect height="12" rx="1.5" width="3" x="14" y="8">
+                  <animate
+                    attributeName="height"
+                    dur="0.7s"
+                    repeatCount="indefinite"
+                    values="12;16;6;12"
+                  />
+                  <animate
+                    attributeName="y"
+                    dur="0.7s"
+                    repeatCount="indefinite"
+                    values="8;4;14;8"
+                  />
+                </rect>
+                <rect height="8" rx="1.5" width="3" x="19.5" y="12">
+                  <animate
+                    attributeName="height"
+                    dur="0.9s"
+                    repeatCount="indefinite"
+                    values="8;14;5;8"
+                  />
+                  <animate
+                    attributeName="y"
+                    dur="0.9s"
+                    repeatCount="indefinite"
+                    values="12;6;15;12"
+                  />
+                </rect>
+              </svg>
+            </span>
+          ) : (
+            <>
+              <span className="group-hover:hidden text-[11px] sm:text-xs font-mono text-outline">
                 {idx + 1}
               </span>
-            )}
-            <span
-              className={`material-symbols-outlined text-primary text-[19px] ${isCurrentPlaying ? "block" : "hidden group-hover:block"
-                }`}
-            >
-              {isCurrentPlaying ? "pause" : "play_arrow"}
-            </span>
-          </div>
+              <span className="hidden group-hover:block text-white">
+                <span className="material-symbols-outlined text-[17px] sm:text-[20px]">play_arrow</span>
+              </span>
+            </>
+          )}
+        </div>
 
-          {/* Rounded Thumbnail */}
-          <div className="w-11 h-11 md:w-12 md:h-12 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high relative shadow-sm border border-white/5">
+        {/* Cover & Title */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-1 sm:pr-2">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high shadow relative">
             <img
-              src={track.thumbnail || track.image || track.coverUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80"}
+              src={coverUrl}
               alt={track.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+              className="w-full h-full object-cover"
               loading="lazy"
             />
             {isCurrent && isBuffering && (
@@ -782,74 +864,84 @@ function SearchContent() {
               </div>
             )}
           </div>
-
-          {/* Title & Subtitle (Artist • Album) */}
-          <div className="flex flex-col min-w-0 pr-2">
-            <span
-              className={`text-sm md:text-base font-bold truncate transition-colors ${isCurrent ? "text-primary" : "text-white group-hover:text-primary"
+          <div className="flex flex-col min-w-0 flex-1 justify-center">
+            <div className="flex items-center gap-1 min-w-0">
+              <span
+                className={`text-xs sm:text-sm font-semibold line-clamp-2 md:truncate break-words leading-tight transition-colors ${
+                  isCurrent ? "text-primary" : "text-white group-hover:text-primary"
                 }`}
+                title={track.title}
+              >
+                {track.title}
+              </span>
+              {offlineTrackIds?.has(String(track.id)) && (
+                <span
+                  className="material-symbols-outlined text-primary text-[13px] sm:text-[14px] flex-shrink-0"
+                  title="Available offline on this device"
+                >
+                  download_done
+                </span>
+              )}
+            </div>
+            <span
+              className="text-[10.5px] sm:text-xs text-on-surface-variant md:hidden truncate mt-0.5 leading-normal"
+              title={track.artist}
             >
-              {track.title}
-            </span>
-            <span className="text-xs text-on-surface-variant truncate mt-0.5">
               {track.artist}
             </span>
           </div>
         </div>
 
-        {/* Right: Duration, Download (desktop only), Like, 3-Dot Options */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
-          {/* Duration */}
-          <span className="text-[11px] sm:text-xs font-mono text-outline w-8 sm:w-10 text-right">
-            {track.durationFormatted || formatTime(track.duration || 210)}
-          </span>
+        {/* Artist */}
+        <div className="hidden md:block truncate text-xs text-on-surface-variant hover:text-white" title={track.artist}>
+          {track.artist}
+        </div>
 
-          {/* Download Button (displayed in mobile responsive and desktop) */}
-          <DownloadButton
-            track={track}
-            buttonSize="p-1 sm:p-1.5"
-            iconSize="text-[17px] sm:text-[18px]"
-            onDownloadStart={() => {
-              if (searchQuery.trim()) {
-                addRecentSearch(searchQuery.trim(), "search");
-              }
-            }}
-          />
+        {/* Duration with clean tabular font and dedicated space */}
+        <div className="text-right text-[11px] sm:text-xs font-mono text-outline tabular-nums whitespace-nowrap px-0.5 sm:px-2">
+          {track.durationFormatted || formatTime(track.duration || 210)}
+        </div>
 
-          {/* Quick Add to Queue Button */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              addToQueue(track);
-            }}
-            className="p-1 sm:p-1.5 rounded-lg text-outline hover:text-primary hover:bg-white/10 transition-colors cursor-pointer"
-            title="Add to Queue"
-          >
-            <span className="material-symbols-outlined text-[18px]">playlist_add</span>
-          </button>
-
-          {/* Heart / Like Button */}
+        {/* Actions: Download, Like, & 3-dot options */}
+        <div className="flex items-center justify-end gap-0.5 sm:gap-1.5 flex-shrink-0">
+          {!track.isLocal && (
+            <DownloadButton
+              track={track}
+              buttonSize="w-7 h-7 sm:w-8 sm:h-8"
+              iconSize="text-[16px] sm:text-[18px]"
+              className="hover:scale-110 active:scale-95"
+              onDownloadStart={() => {
+                if (searchQuery.trim()) {
+                  addRecentSearch(searchQuery.trim(), "search");
+                }
+              }}
+            />
+          )}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               toggleLike(track);
             }}
-            className={`p-1 sm:p-1.5 rounded-lg transition-colors cursor-pointer ${isLiked(track.id) ? "text-primary" : "text-outline hover:text-white hover:bg-white/10"
-              }`}
-            title={isLiked(track.id) ? "Liked" : "Like song"}
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${
+              isLiked(track.id)
+                ? "text-primary shadow-[0_0_12px_rgba(76,215,246,0.3)]"
+                : "text-outline hover:text-white"
+            }`}
+            title={isLiked(track.id) ? "Remove from favorites" : "Add to favorites"}
           >
             <span
-              className="material-symbols-outlined text-[18px]"
+              className="material-symbols-outlined text-[16px] sm:text-[18px]"
               style={{ fontVariationSettings: isLiked(track.id) ? "'FILL' 1" : "'FILL' 0" }}
             >
               {isLiked(track.id) ? "favorite" : "favorite_border"}
             </span>
           </button>
-
-          {/* 3-Dot Options Menu */}
-          <SongOptionsMenu track={track} />
+          <SongOptionsMenu
+            track={track}
+            buttonClassName="w-7 h-7 sm:w-8 sm:h-8"
+            iconClassName="text-[17px] sm:text-[20px]"
+          />
         </div>
       </div>
     );
@@ -1718,6 +1810,7 @@ function SearchContent() {
 
                           {liveTracks.length > 0 ? (
                             <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 border border-white/5">
+                              {renderSongTableHeader()}
                               {liveTracks.slice(0, 8).map((track, idx) => renderSongRow(track, idx))}
                             </div>
                           ) : (
@@ -1765,6 +1858,7 @@ function SearchContent() {
                               </div>
                             </div>
                             <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 border border-white/5">
+                              {renderSongTableHeader()}
                               {liveTracks.slice(8, 16).map((track, idx) => renderSongRow(track, idx + 8))}
                             </div>
                           </div>
@@ -1821,6 +1915,7 @@ function SearchContent() {
                               </div>
                             </div>
                             <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 border border-white/5">
+                              {renderSongTableHeader()}
                               {liveTracks.slice(16, 24).map((track, idx) => renderSongRow(track, idx + 16))}
                             </div>
                           </div>
@@ -1994,6 +2089,7 @@ function SearchContent() {
 
                           {liveTracks.length > 0 ? (
                             <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 border border-white/5">
+                              {renderSongTableHeader()}
                               {liveTracks.slice(0, 25).map((track, idx) => renderSongRow(track, idx))}
                             </div>
                           ) : (
@@ -2144,6 +2240,7 @@ function SearchContent() {
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 sm:p-3 border border-white/5">
+                      {renderSongTableHeader()}
                       {liveTracks.map((track, idx) => renderSongRow(track, idx))}
                     </div>
                   )}
@@ -2449,110 +2546,11 @@ function SearchContent() {
               </span>
             </div>
 
-            <div className="flex flex-col divide-y divide-white/5 bg-surface-container/40 rounded-2xl border border-white/10 overflow-hidden shadow-xl">
-              {selectedGenre.tracks?.map((track, idx) => {
-                const isThisTrackPlaying = currentTrack?.id === track.id && isPlaying;
-                const isThisTrackActive = currentTrack?.id === track.id;
-
-                return (
-                  <div
-                    key={track.id}
-                    onClick={() => playTrack(track, selectedGenre.tracks)}
-                    className={`group flex items-center gap-3.5 sm:gap-4 p-3 sm:px-4 sm:py-3 transition-colors cursor-pointer ${isThisTrackActive
-                      ? "bg-white/10 text-primary"
-                      : "hover:bg-white/5 text-white"
-                      }`}
-                  >
-                    {/* Index Number or Sound Equalizer Animation */}
-                    <div className="w-8 text-center flex items-center justify-center flex-shrink-0">
-                      {isThisTrackPlaying ? (
-                        <div className="flex items-end justify-center gap-0.5 h-4">
-                          <span className="w-1 bg-primary rounded-full animate-[soundBar1_0.8s_ease-in-out_infinite] h-3.5" />
-                          <span className="w-1 bg-primary rounded-full animate-[soundBar2_1.1s_ease-in-out_infinite] h-2.5" />
-                          <span className="w-1 bg-primary rounded-full animate-[soundBar3_0.9s_ease-in-out_infinite] h-4" />
-                        </div>
-                      ) : (
-                        <>
-                          <span className="text-xs font-bold text-outline group-hover:hidden">
-                            {idx + 1}
-                          </span>
-                          <span className="material-symbols-outlined text-[20px] text-white hidden group-hover:inline-block">
-                            play_arrow
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Cover Thumbnail */}
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg overflow-hidden flex-shrink-0 shadow-md border border-white/10">
-                      <img
-                        src={track.coverUrl}
-                        alt={track.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-
-                    {/* Title & Artist */}
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span
-                        className={`text-sm font-semibold truncate ${isThisTrackActive ? "text-primary font-bold" : "text-white"
-                          }`}
-                      >
-                        {track.title}
-                      </span>
-                      <span className="text-xs text-outline truncate group-hover:text-white/80 transition-colors mt-0.5">
-                        {track.artist}
-                      </span>
-                    </div>
-
-                    {/* Play Count (Desktop) */}
-                    {track.plays && (
-                      <div className="hidden sm:block text-xs text-outline/80 font-medium">
-                        {track.plays} plays
-                      </div>
-                    )}
-
-                    {/* Actions: Like, Download & Duration */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleLike(track);
-                        }}
-                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isLiked(track.id)
-                          ? "text-primary"
-                          : "text-outline hover:text-white hover:bg-white/10"
-                          }`}
-                        title={isLiked(track.id) ? "Liked" : "Like song"}
-                      >
-                        <span
-                          className="material-symbols-outlined text-[18px]"
-                          style={{
-                            fontVariationSettings: isLiked(track.id)
-                              ? "'FILL' 1"
-                              : "'FILL' 0",
-                          }}
-                        >
-                          {isLiked(track.id) ? "favorite" : "favorite_border"}
-                        </span>
-                      </button>
-
-                      <DownloadButton
-                        track={track}
-                        buttonSize="p-1"
-                        iconSize="text-[18px]"
-                      />
-
-                      <span className="text-xs text-outline font-medium w-10 text-right">
-                        {track.durationFormatted}
-                      </span>
-
-                      <SongOptionsMenu track={track} />
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex flex-col gap-1 bg-surface-container-lowest/40 rounded-2xl p-2 sm:p-3 border border-white/5 overflow-hidden shadow-xl">
+              {renderSongTableHeader()}
+              {selectedGenre.tracks?.map((track, idx) =>
+                renderSongRow(track, idx, selectedGenre.tracks)
+              )}
             </div>
           </div>
 
@@ -2710,9 +2708,9 @@ function SearchContent() {
 
             {/* Responsive Grid: 3 cards per row on Desktop, 2 on Tablet, 2 on Mobile */}
             <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 lg:gap-3.5">
-              {recommendedTracks.map((track) => (
+              {recommendedTracks.map((track, idx) => (
                 <RecommendationCard
-                  key={track.id}
+                  key={track.sourceEntryId ? `${track.id}__${track.sourceEntryId}` : `${track.id || "reco"}__pos_${idx}`}
                   track={track}
                   trackList={recommendedTracks}
                   onPlay={() => {

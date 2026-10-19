@@ -16,6 +16,7 @@ export default function FullLyricsPanel() {
     syncedLyrics,
     isLoadingLyrics,
     lyricsError,
+    refreshLyrics,
   } = useMusic();
 
   const {
@@ -175,6 +176,16 @@ export default function FullLyricsPanel() {
               <p className="text-sm text-outline max-w-sm">
                 Synchronized vocal timestamps are not recorded for this track. Enjoy the instrumental audio playback!
               </p>
+              {typeof refreshLyrics === "function" && (
+                <button
+                  onClick={() => refreshLyrics(true)}
+                  className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-full bg-surface-container hover:bg-surface-container-high border border-white/10 text-xs font-semibold text-primary transition-colors cursor-pointer"
+                  title="Try re-fetching lyrics"
+                >
+                  <span className="material-symbols-outlined text-[16px]">refresh</span>
+                  <span>Retry Lyrics Search</span>
+                </button>
+              )}
             </div>
           ) : (
             syncedLyrics.map((line, idx) => {

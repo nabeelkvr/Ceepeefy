@@ -1555,7 +1555,7 @@ export default function MusicPlayerPage() {
 
                       return (
                         <div
-                          key={track.id}
+                          key={track.sourceEntryId ? `${track.id}__${track.sourceEntryId}` : `${track.id || "track"}__pos_${idx}`}
                           onClick={() => {
                             if (isSelectionMode) {
                               toggleSelectTrack(track.id);

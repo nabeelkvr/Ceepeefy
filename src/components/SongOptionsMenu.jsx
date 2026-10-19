@@ -44,6 +44,7 @@ export default function SongOptionsMenu({
   const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0, openUpwards: false });
   const [isMounted, setIsMounted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDirectDownloading, setIsDirectDownloading] = useState(false);
 
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
@@ -60,7 +61,7 @@ export default function SongOptionsMenu({
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     const menuWidth = 220;
-    const menuHeight = 250;
+    const menuHeight = 290;
 
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUpwards = spaceBelow < menuHeight && rect.top > menuHeight;
@@ -259,6 +260,64 @@ export default function SongOptionsMenu({
     setIsOpen(false);
   };
 
+  const handleDirectDownload = async (e) => {
+    e.stopPropagation();
+    if (isDirectDownloading || !track) return;
+    setIsDirectDownloading(true);
+
+    if (showOfflineNotice) {
+      showOfflineNotice(`Downloading "${track.title}"...`);
+    }
+
+    try {
+      const params = new URLSearchParams({
+        trackId: String(track.id || track.trackId || ""),
+        audioUrl: track.audioUrl || "",
+        title: track.title || "",
+        artist: track.artist || "",
+        album: track.album || "",
+        year: track.year ? String(track.year) : "",
+        coverUrl: track.coverUrl || track.thumbnail || track.image || "",
+        quality: "premium",
+      });
+
+      const dlRes = await fetch(`/api/audio/download?${params.toString()}`);
+      if (dlRes.ok) {
+        const blob = await dlRes.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        const safeArtist = (track.artist || "").replace(/[\/\\?%*:|"<>]/g, "").trim();
+        const safeTitle = (track.title || "Track").replace(/[\/\\?%*:|"<>]/g, "").trim();
+        const ext = blob.type.includes("mp4") ? "m4a" : "mp3";
+        link.download = safeArtist ? `${safeTitle} - ${safeArtist}.${ext}` : `${safeTitle}.${ext}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+        if (showOfflineNotice) {
+          showOfflineNotice(`Downloaded "${track.title}" to device`);
+        }
+      } else if (track.audioUrl) {
+        const link = document.createElement("a");
+        link.href = track.audioUrl;
+        link.download = `${track.title || "audio"}.mp3`;
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (err) {
+      console.error("Direct download error:", err);
+      if (track.audioUrl) {
+        window.open(track.audioUrl, "_blank");
+      }
+    } finally {
+      setIsDirectDownloading(false);
+      setIsOpen(false);
+    }
+  };
+
   const handleRemoveFromThisPlaylist = (e) => {
     e.stopPropagation();
     if (playlistId && removeTrackFromPlaylist) {
@@ -411,7 +470,28 @@ export default function SongOptionsMenu({
                 </span>
               </button>
 
-              {/* Download to device */}
+              {/* Download (Save audio file to device) */}
+              <button
+                type="button"
+                onClick={handleDirectDownload}
+                disabled={isDirectDownloading}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
+              >
+                {isDirectDownloading ? (
+                  <div className="w-5 h-5 flex items-center justify-center">
+                    <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <span className="material-symbols-outlined text-[20px] text-neutral-400 group-hover:text-primary transition-colors">
+                    download
+                  </span>
+                )}
+                <span className="font-medium text-[13px]">
+                  {isDirectDownloading ? "Downloading file..." : "Download"}
+                </span>
+              </button>
+
+              {/* Download Offline (Save to offline storage) */}
               <button
                 type="button"
                 onClick={handleToggleDownload}
@@ -428,15 +508,15 @@ export default function SongOptionsMenu({
                       isDownloaded ? "text-cyan-400" : "text-neutral-400 group-hover:text-primary"
                     }`}
                   >
-                    {isDownloaded ? "download_done" : "download"}
+                    {isDownloaded ? "offline_pin" : "cloud_download"}
                   </span>
                 )}
                 <span className="font-medium text-[13px]">
                   {isDownloading
-                    ? "Downloading..."
+                    ? "Saving offline..."
                     : isDownloaded
-                    ? "Downloaded to device"
-                    : "Download to device"}
+                    ? "Remove from Offline"
+                    : "Download Offline"}
                 </span>
               </button>
 

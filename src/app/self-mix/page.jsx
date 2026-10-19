@@ -4,7 +4,12 @@ import React, { useState, useRef, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMusic } from "../../context/MusicContext";
-import { formatPlaylistDuration, processLocalImage } from "../../utils/playlistUtils";
+import {
+  formatPlaylistDuration,
+  formatPlaylistTracksAndDurationUppercase,
+  processLocalImage,
+} from "../../utils/playlistUtils";
+import PlaylistCover from "../../components/PlaylistCover";
 import { getAccountUserId, DEFAULT_USER_ID } from "../../config/authConfig";
 import DownloadButton from "../../components/DownloadButton";
 import SongOptionsMenu from "../../components/SongOptionsMenu";
@@ -22,6 +27,8 @@ import {
   fetchSelfMixesFromCloud,
   deleteSelfMixFromCloud,
 } from "../../services/supabaseClient";
+import Mp3ConverterSection from "../../components/Mp3ConverterSection";
+import SocialMediaDownloaderSection from "../../components/SocialMediaDownloaderSection";
 
 const COVER_ART_OPTIONS = [
   "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
@@ -195,6 +202,13 @@ function SelfMixContent() {
       );
     } finally {
       setIsLoadingCloud(false);
+    }
+  };
+
+  const handleConverterPlaylistUpdated = async (targetMixId) => {
+    await loadCloudTracks();
+    if (targetMixId) {
+      setSelectedMixId(String(targetMixId));
     }
   };
 
@@ -809,14 +823,14 @@ function SelfMixContent() {
         />
 
         {/* Tracklist Table Header */}
-        <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 py-2 border-b border-white/10 text-[11px] font-semibold uppercase tracking-wider text-outline select-none">
+        <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-3 md:gap-4 px-2 sm:px-4 py-2 border-b border-white/10 text-[10.5px] sm:text-[11px] font-semibold uppercase tracking-wider text-outline select-none">
           <span className="text-center">#</span>
           <span>Title</span>
           <span className="hidden md:block">Artist</span>
-          <span className="text-right flex items-center justify-end pr-1">
-            <span className="material-symbols-outlined text-[15px]">schedule</span>
+          <span className="text-right flex items-center justify-end pr-0.5 sm:pr-1">
+            <span className="material-symbols-outlined text-[14px] sm:text-[15px]">schedule</span>
           </span>
-          <span className="text-right pr-2">Actions</span>
+          <span className="text-right pr-1 sm:pr-2">Actions</span>
         </div>
 
         {/* Local Tracklist */}
@@ -829,7 +843,7 @@ function SelfMixContent() {
               <div
                 key={track.id || idx}
                 onClick={() => playTrack(track, tracks)}
-                className={`group grid grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 py-2.5 rounded-xl transition-all duration-200 cursor-pointer border select-none ${
+                className={`group grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-3 md:gap-4 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all duration-200 cursor-pointer border select-none ${
                   isCurrent
                     ? "bg-primary/10 border-primary/40 shadow-[0_0_20px_rgba(76,215,246,0.15)]"
                     : "bg-surface-container/30 hover:bg-surface-container-high/80 border-transparent hover:border-white/10 hover:shadow-md"
@@ -845,8 +859,8 @@ function SelfMixContent() {
                     </div>
                   ) : (
                     <>
-                      <span className="text-xs font-mono text-outline group-hover:hidden">{idx + 1}</span>
-                      <span className="material-symbols-outlined text-primary text-[19px] hidden group-hover:block transition-transform hover:scale-110">
+                      <span className="text-[11px] sm:text-xs font-mono text-outline group-hover:hidden">{idx + 1}</span>
+                      <span className="material-symbols-outlined text-primary text-[17px] sm:text-[19px] hidden group-hover:block transition-transform hover:scale-110">
                         play_arrow
                       </span>
                     </>
@@ -854,8 +868,8 @@ function SelfMixContent() {
                 </div>
 
                 {/* Title & Cover & Artist */}
-                <div className="flex items-center gap-3 min-w-0 pr-1">
-                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high border border-white/10 shadow-sm group-hover:border-primary/30 transition-colors">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-1 sm:pr-2">
+                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high border border-white/10 shadow-sm group-hover:border-primary/30 transition-colors">
                     <img
                       src={
                         track.coverUrl ||
@@ -867,15 +881,16 @@ function SelfMixContent() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                   </div>
-                  <div className="flex flex-col min-w-0">
+                  <div className="flex flex-col min-w-0 flex-1 justify-center">
                     <span
-                      className={`text-xs sm:text-sm font-bold truncate transition-colors ${
+                      className={`text-xs sm:text-sm font-bold line-clamp-2 md:truncate break-words leading-tight transition-colors ${
                         isCurrent ? "text-primary" : "text-white group-hover:text-primary"
                       }`}
+                      title={track.title}
                     >
                       {track.title}
                     </span>
-                    <span className="text-[11px] text-on-surface-variant truncate md:hidden mt-0.5">
+                    <span className="text-[10.5px] sm:text-[11px] text-on-surface-variant truncate md:hidden mt-0.5 leading-normal" title={track.artist || "Self Mix"}>
                       {track.artist || "Self Mix"}
                     </span>
                   </div>
@@ -889,16 +904,16 @@ function SelfMixContent() {
                 </div>
 
                 {/* Duration with clean tabular font and dedicated space */}
-                <div className="text-right font-mono text-xs text-outline tabular-nums whitespace-nowrap pl-1 pr-1 sm:pr-2">
+                <div className="text-right font-mono text-[11px] sm:text-xs text-outline tabular-nums whitespace-nowrap px-0.5 sm:px-2">
                   {track.durationFormatted || formatTime(track.duration || 180)}
                 </div>
 
                 {/* Actions container with comfortable spacing preventing any collision */}
-                <div className="flex items-center justify-end gap-1 sm:gap-1.5 flex-shrink-0">
+                <div className="flex items-center justify-end gap-0.5 sm:gap-1.5 flex-shrink-0">
                   <DownloadButton
                     track={track}
-                    buttonSize="w-8 h-8"
-                    iconSize="text-[18px]"
+                    buttonSize="w-7 h-7 sm:w-8 sm:h-8"
+                    iconSize="text-[16px] sm:text-[18px]"
                     className="hover:scale-110 active:scale-95"
                   />
                   <button
@@ -907,13 +922,13 @@ function SelfMixContent() {
                       e.stopPropagation();
                       toggleLike(track);
                     }}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${
                       isLiked(track.id) ? "text-primary shadow-[0_0_12px_rgba(76,215,246,0.3)]" : "text-outline hover:text-white"
                     }`}
                     title={isLiked(track.id) ? "Remove from favorites" : "Add to favorites"}
                   >
                     <span
-                      className="material-symbols-outlined text-[18px]"
+                      className="material-symbols-outlined text-[16px] sm:text-[18px]"
                       style={{
                         fontVariationSettings: isLiked(track.id) ? "'FILL' 1" : "'FILL' 0",
                       }}
@@ -927,12 +942,17 @@ function SelfMixContent() {
                       e.stopPropagation();
                       removeTrackFromPlaylist(activeMix.id, track.id);
                     }}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-outline hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
                     title="Remove from mix"
                   >
-                    <span className="material-symbols-outlined text-[17px]">close</span>
+                    <span className="material-symbols-outlined text-[15px] sm:text-[17px]">close</span>
                   </button>
-                  <SongOptionsMenu track={track} playlistId={activeMix?.id} />
+                  <SongOptionsMenu
+                    track={track}
+                    playlistId={activeMix?.id}
+                    buttonClassName="w-7 h-7 sm:w-8 sm:h-8"
+                    iconClassName="text-[17px] sm:text-[20px]"
+                  />
                 </div>
               </div>
             );
@@ -1049,328 +1069,182 @@ function SelfMixContent() {
         }}
       />
 
-      {/* Grid of Self Mixes: Mobile Horizontal Cards (< md) + Desktop Responsive Grid (md:) */}
-      <>
-        {/* 1. Mobile Horizontal List (< md) matching Image 2 */}
-        <div className="flex flex-col gap-2.5 md:hidden">
-          {/* Mobile 'New Self Mix' Card */}
-          <div
-            onClick={() => {
-              setNewTitle("");
-              setPendingFiles([]);
-              setShowCreateModal(true);
-            }}
-            className="flex items-center gap-3.5 p-3 rounded-2xl glass-card border border-dashed border-cyan-500/40 hover:border-cyan-400 active:scale-[0.98] transition-all cursor-pointer shadow-lg group"
-          >
-            <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 flex-shrink-0 group-hover:scale-105 group-hover:bg-primary group-hover:text-surface-container-lowest transition-all">
-              <span className="material-symbols-outlined text-[24px]">cloud_upload</span>
+      {/* Playlist Card Grid (matching Playlists section style and Image 1 with YOU badge and uppercase track & duration header) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 gap-3.5 sm:gap-4 md:gap-5 2xl:gap-6">
+        {/* 'New Self Mix' Card */}
+        <div
+          onClick={() => {
+            setNewTitle("");
+            setPendingFiles([]);
+            setShowCreateModal(true);
+          }}
+          className="w-full flex flex-col group cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1"
+        >
+          <div className="relative aspect-square w-full rounded-[10px] overflow-hidden border-2 border-dashed border-cyan-500/40 group-hover:border-cyan-400 bg-[#161922] group-hover:bg-primary/10 transition-all duration-200 flex flex-col items-center justify-center gap-1.5 shadow-md">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/15 border border-primary/30 group-hover:scale-110 group-hover:bg-primary text-primary group-hover:text-black flex items-center justify-center transition-all shadow-[0_0_16px_rgba(76,215,246,0.3)]">
+              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">cloud_upload</span>
             </div>
-            <div className="flex flex-col min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs sm:text-sm font-bold text-white group-hover:text-cyan-300 transition-colors truncate">
-                  New Self Mix
-                </span>
-                <span className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex-shrink-0">
-                  UPLOAD
-                </span>
-              </div>
-              <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                Upload &amp; create personal mixes
-              </p>
-            </div>
-            <span className="material-symbols-outlined text-outline text-[20px] mr-1">
-              chevron_right
+            <span className="text-[10px] sm:text-[11px] font-bold text-white/90 group-hover:text-primary transition-colors">
+              New Self Mix
             </span>
           </div>
 
-          {/* Self Mix Playlist Horizontal Cards */}
-          {filteredPlaylists.map((mix) => {
-            const tracks = mix.tracks || [];
-            const isThisPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+          <div className="flex flex-col min-w-0 mt-1.5">
+            <p className="text-[10px] sm:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate leading-tight">
+              <span className="text-primary/90 font-bold">SELF MIX</span> • UPLOAD
+            </p>
+            <h3 className="text-xs sm:text-[13px] font-bold text-white group-hover:text-primary transition-colors truncate mt-0.5 leading-tight">
+              Create New Mix
+            </h3>
+          </div>
+        </div>
 
-            return (
+        {/* Loading State */}
+        {isLoadingCloud && allPlaylists.length === 0 && (
+          <div className="w-full aspect-square rounded-[10px] bg-[#161922] border border-white/5 flex flex-col items-center justify-center gap-2 text-center p-3">
+            <span className="material-symbols-outlined text-primary text-[24px] animate-spin">
+              progress_activity
+            </span>
+            <span className="text-[10px] text-outline font-medium">
+              Loading mixes...
+            </span>
+          </div>
+        )}
+
+        {/* Self Mix Playlist Cards */}
+        {filteredPlaylists.map((mix) => {
+          const tracks = mix.tracks || [];
+          const isThisPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
+          const headerSubtitle = formatPlaylistTracksAndDurationUppercase(tracks, mix.duration);
+          const categoryName = (mix.category || "SELF MIX").toUpperCase();
+
+          const coverUrl =
+            mix.customCover ||
+            mix.coverUrl ||
+            (Array.isArray(mix.images) && mix.images[0]?.url) ||
+            COVER_ART_OPTIONS[0];
+
+          return (
+            <div
+              key={mix.id}
+              onClick={() => {
+                setSelectedMixId(mix.id);
+                router.push(`/self-mix?id=${mix.id}`);
+              }}
+              className="w-full flex flex-col group cursor-pointer select-none relative transition-transform duration-200 hover:-translate-y-1"
+            >
+              {/* Square Artwork (Rounded-[10px]) matching Image 1 */}
               <div
-                key={mix.id}
-                onClick={() => {
-                  setSelectedMixId(mix.id);
-                  router.push(`/self-mix?id=${mix.id}`);
-                }}
-                className="flex items-center gap-3.5 p-3 rounded-2xl glass-card border border-white/5 hover:border-primary/40 active:scale-[0.98] transition-all cursor-pointer shadow-lg group"
+                className={`relative aspect-square w-full rounded-[10px] overflow-hidden bg-[#161922] shadow-md transition-all duration-200 ${
+                  isThisPlaying
+                    ? "ring-2 ring-primary shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.35)]"
+                    : "ring-1 ring-white/10 group-hover:ring-white/25"
+                }`}
               >
-                <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-surface-container-highest flex-shrink-0 shadow border border-white/10 group/cover">
-                  <img
-                    src={mix.customCover || mix.coverUrl || COVER_ART_OPTIONS[0]}
-                    alt={mix.title}
-                    className="w-full h-full object-cover"
-                  />
+                <PlaylistCover
+                  tracks={tracks}
+                  coverUrl={coverUrl}
+                  fallbackUrl={COVER_ART_OPTIONS[0]}
+                  alt={mix.title}
+                  className="w-full h-full object-cover rounded-[10px] group-hover:scale-105 transition-transform duration-500"
+                />
+
+                {/* Change Cover quick button on hover */}
+                <button
+                  type="button"
+                  onClick={(e) => handleOpenCoverPicker(mix.id, e)}
+                  className="absolute bottom-2 left-2 z-10 opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-white/20 text-[9px] font-bold text-white/90 hover:text-white hover:bg-black/95 flex items-center gap-1 transition-all cursor-pointer shadow-md"
+                  title="Change cover with local photo"
+                >
+                  <span className="material-symbols-outlined text-[12px] text-cyan-300">photo_camera</span>
+                  <span>Cover</span>
+                </button>
+
+                {/* Badges top-left: YOU badge in cyan matching Image 1 */}
+                <div className="absolute top-1.5 left-1.5 flex items-center gap-1 z-10">
+                  <span className="text-[8px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded backdrop-blur-md border bg-black/70 text-cyan-300 border-cyan-400/30 flex items-center gap-0.5 shadow-md">
+                    <span className="material-symbols-outlined text-[10px]">person</span>
+                    YOU
+                  </span>
+                </div>
+
+                {/* Action buttons top-right on hover */}
+                <div className="absolute top-1.5 right-1.5 flex items-center gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <button
                     type="button"
                     onClick={(e) => handleOpenCoverPicker(mix.id, e)}
-                    className="absolute inset-0 bg-black/60 opacity-0 group-hover/cover:opacity-100 flex items-center justify-center text-cyan-300 transition-opacity cursor-pointer"
-                    title="Change cover image"
+                    className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-white/80 hover:text-cyan-300 hover:bg-black/90 hover:scale-105 flex items-center justify-center transition-all cursor-pointer"
+                    title="Change cover with local photo"
                   >
-                    <span className="material-symbols-outlined text-[18px]">photo_camera</span>
-                  </button>
-                  {isThisPlaying && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
-                      <span className="material-symbols-outlined text-primary text-[16px] animate-pulse">
-                        graphic_eq
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-col min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
-                      {mix.title}
-                    </h3>
-                    <span className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-950/85 text-cyan-300 border border-cyan-700/60 flex-shrink-0">
-                      PLAYLIST
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                    {tracks.length} {tracks.length === 1 ? "track" : "tracks"} • @{mix.curator || "You"}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={(e) => handleOpenCoverPicker(mix.id, e)}
-                    className="w-8 h-8 rounded-full text-outline hover:text-cyan-300 hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
-                    title="Change Cover Image"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">photo_camera</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => handleLocalMixPlay(mix, e)}
-                    className="w-9 h-9 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_12px_rgba(76,215,246,0.5)] active:scale-90 transition-transform cursor-pointer"
-                    title={isThisPlaying ? "Pause Mix" : "Play Mix"}
-                  >
-                    <span className="material-symbols-outlined text-[20px]">
-                      {isThisPlaying ? "pause" : "play_arrow"}
-                    </span>
+                    <span className="material-symbols-outlined text-[13px] sm:text-[14px]">photo_camera</span>
                   </button>
                   <button
                     type="button"
                     onClick={(e) => handleDeleteSelfMixPlaylist(mix, e)}
-                    className="w-8 h-8 rounded-full text-outline hover:text-red-400 hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
-                    title="Delete Playlist"
+                    className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-white/80 hover:text-red-400 hover:bg-black/90 hover:scale-105 flex items-center justify-center transition-all cursor-pointer"
+                    title="Delete playlist"
                   >
-                    <span className="material-symbols-outlined text-[17px]">delete</span>
+                    <span className="material-symbols-outlined text-[13px] sm:text-[14px]">delete</span>
                   </button>
                 </div>
-              </div>
-            );
-          })}
-        </div>
 
-        {/* 2. Desktop Grid (md:) */}
-        <div className="hidden md:flex md:flex-wrap items-start justify-start gap-5">
-          {/* 1. First Card: 'New Self Mix' Upload Box with Drag & Drop */}
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              setIsDragging(false);
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              setIsDragging(false);
-              if (e.dataTransfer.files) {
-                handleFilesSelected(e.dataTransfer.files);
-                setShowCreateModal(true);
-              }
-            }}
-            onClick={() => {
-              setNewTitle("");
-              setPendingFiles([]);
-              setShowCreateModal(true);
-            }}
-            className={`w-full sm:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border transition-all duration-300 hover:-translate-y-1.5 shadow-xl cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none ${
-              isDragging
-                ? "border-primary bg-primary/10 shadow-[0_0_24px_rgba(76,215,246,0.3)]"
-                : "border-white/10 hover:border-primary/50 hover:bg-surface-container/90"
-            }`}
-          >
-            <div>
-              {/* Dashed Drag/Drop Area */}
-              <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden border-2 border-dashed border-cyan-500/30 group-hover:border-cyan-400 bg-surface-container-high/40 group-hover:bg-cyan-500/5 transition-all flex flex-col items-center justify-center gap-1 sm:gap-1.5 mb-2.5 sm:mb-3">
-                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-cyan-500/10 border border-cyan-500/30 group-hover:scale-110 group-hover:bg-primary text-cyan-400 group-hover:text-surface-container-lowest flex items-center justify-center transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)]">
-                  <span className="material-symbols-outlined text-[20px] sm:text-[24px]">cloud_upload</span>
+                {/* Floating Play Button on Hover */}
+                <div
+                  className={`absolute inset-0 bg-black/35 flex items-end justify-end p-1.5 sm:p-2 transition-all duration-200 ${
+                    isThisPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => handleLocalMixPlay(mix, e)}
+                    className={`w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-110 active:scale-95 ${
+                      isThisPlaying
+                        ? "translate-y-0 scale-100 shadow-[0_0_14px_rgba(var(--color-primary-rgb),0.6)]"
+                        : "translate-y-2 group-hover:translate-y-0 scale-95 group-hover:scale-100"
+                    }`}
+                    title={isThisPlaying ? "Pause Playlist" : "Play Playlist"}
+                    aria-label={isThisPlaying ? "Pause Playlist" : "Play Playlist"}
+                  >
+                    <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
+                      {isThisPlaying ? "pause" : "play_arrow"}
+                    </span>
+                  </button>
                 </div>
-                <span className="text-xs font-bold text-white/90 group-hover:text-cyan-300 transition-colors">
-                  New Self Mix
-                </span>
-                <span className="text-[9px] sm:text-[10px] text-outline font-mono uppercase tracking-wider text-center px-1">
-                  Drop audio or click
-                </span>
+
+                {/* Animated equalizer if playing */}
+                {isThisPlaying && (
+                  <div className="absolute bottom-2 left-2 px-1 py-0.5 rounded-sm bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-0.5">
+                    <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse" />
+                    <span className="w-0.5 h-3 bg-primary rounded-full animate-pulse delay-75" />
+                    <span className="w-0.5 h-1.5 bg-primary rounded-full animate-pulse delay-150" />
+                  </div>
+                )}
               </div>
 
-              {/* Title & Description */}
-              <div className="flex flex-col">
-                <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
-                  Upload & Create
-                </h3>
-                <p className="text-[10px] sm:text-[11px] text-on-surface-variant mt-0.5 truncate">
-                  Build your stems & tracks
+              {/* Details: Uppercase Subtitle Above Title + Playlist Name matching Image 1 */}
+              <div className="flex flex-col min-w-0 mt-1.5">
+                {/* Row 1: Uppercase format above playlist name with Category prefix */}
+                <p
+                  className="text-[10px] sm:text-[11px] font-semibold text-neutral-400 uppercase tracking-wider truncate leading-tight"
+                  title={`${categoryName} • ${headerSubtitle}`}
+                >
+                  <span className="text-primary/90 font-bold">{categoryName}</span> • {headerSubtitle}
                 </p>
+
+                {/* Row 2: Playlist Name */}
+                <h3
+                  className={`text-xs sm:text-[13px] font-bold truncate transition-colors leading-tight mt-0.5 ${
+                    isThisPlaying ? "text-primary font-extrabold" : "text-white group-hover:text-primary"
+                  }`}
+                  title={mix.title}
+                >
+                  {mix.title}
+                </h3>
               </div>
             </div>
-
-            <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-outline mt-2">
-              <span className="flex items-center gap-1 font-mono text-[9px] sm:text-[10px] text-primary">
-                <span className="material-symbols-outlined text-[12px] sm:text-[13px]">cloud_done</span>
-                Cloud Sync
-              </span>
-              <span className="font-mono text-[9px] sm:text-[10px] text-outline">Cross-Device</span>
-            </div>
-          </div>
-
-          {/* 2. Loading State */}
-          {isLoadingCloud && allPlaylists.length === 0 && (
-            <div className="w-full sm:w-56 p-6 rounded-xl sm:rounded-2xl glass-card border border-white/5 flex flex-col items-center justify-center gap-3 text-center">
-              <span className="material-symbols-outlined text-primary text-[28px] animate-spin">
-                progress_activity
-              </span>
-              <span className="text-xs text-outline font-medium">
-                Loading playlists...
-              </span>
-            </div>
-          )}
-
-          {/* 3. Self Mix Playlist Cards */}
-          {filteredPlaylists.map((mix) => {
-            const tracks = mix.tracks || [];
-            const isThisPlaying = isPlaying && tracks.some((t) => t.id === currentTrack?.id);
-            const totalDurationStr = formatPlaylistDuration(tracks);
-
-            return (
-              <div
-                key={mix.id}
-                onClick={() => {
-                  setSelectedMixId(mix.id);
-                  router.push(`/self-mix?id=${mix.id}`);
-                }}
-                className="w-full sm:w-56 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl glass-card border border-white/10 hover:border-primary/50 hover:bg-surface-container/90 transition-all duration-300 hover:-translate-y-1.5 shadow-xl relative overflow-hidden cursor-pointer group flex flex-col justify-between flex-shrink-0 select-none"
-              >
-                <div>
-                  {/* Cover Image with Play Overlay */}
-                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface-container-highest shadow-md mb-3">
-                    <img
-                      src={
-                        mix.customCover ||
-                        mix.coverUrl ||
-                        COVER_ART_OPTIONS[0]
-                      }
-                      alt={mix.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-
-                    {/* Top-left Playlist Badge */}
-                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
-                      <span className="text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-md backdrop-blur-md border bg-cyan-950/85 text-cyan-300 border-cyan-700/60 shadow-[0_0_12px_rgba(6,182,212,0.3)] flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[11px]">queue_music</span>
-                        PLAYLIST
-                      </span>
-                    </div>
-
-                    {/* Action buttons top-right */}
-                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1 z-10">
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenCoverPicker(mix.id, e)}
-                        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-primary hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-sm"
-                        title="Change Cover Image"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">photo_camera</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteSelfMixPlaylist(mix, e)}
-                        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-outline hover:text-red-400 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-sm"
-                        title="Delete Playlist"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">delete</span>
-                      </button>
-                    </div>
-
-                    {/* Change Cover quick button on hover (bottom-left) */}
-                    <button
-                      type="button"
-                      onClick={(e) => handleOpenCoverPicker(mix.id, e)}
-                      className="absolute bottom-2 left-2 z-10 opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-white/20 text-[9px] font-bold text-white/90 hover:text-primary hover:bg-black/95 flex items-center gap-1 transition-all cursor-pointer shadow-md"
-                      title="Change cover with custom photo"
-                    >
-                      <span className="material-symbols-outlined text-[12px] text-cyan-300">photo_camera</span>
-                      <span>Cover</span>
-                    </button>
-
-                    {/* Play Button Overlay */}
-                    <div
-                      className={`absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center ${
-                        isThisPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={(e) => handleLocalMixPlay(mix, e)}
-                        className="w-11 h-11 rounded-full bg-primary text-surface-container-lowest flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.85)] hover:scale-110 active:scale-95 transition-all cursor-pointer"
-                        title={isThisPlaying ? "Pause Mix" : "Play Mix"}
-                      >
-                        <span className="material-symbols-outlined text-[26px]">
-                          {isThisPlaying ? "pause" : "play_arrow"}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Playlist Details */}
-                  <div className="flex flex-col">
-                    <h3
-                      className="text-sm font-bold text-white group-hover:text-primary transition-colors truncate"
-                      title={mix.title}
-                    >
-                      {mix.title}
-                    </h3>
-                    <div className="flex items-center gap-1 mt-0.5 text-[11px] text-on-surface-variant">
-                      <span className="text-cyan-400 font-medium">@{mix.curator || "You"}</span>
-                      <span>•</span>
-                      <span>{tracks.length} {tracks.length === 1 ? "song" : "songs"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Modern Audio Telemetry Capsule for Track Count & Duration */}
-                <div className="pt-2.5 mt-2">
-                  <div className="flex items-center justify-between p-1.5 rounded-xl bg-surface-container-high/60 backdrop-blur-md border border-white/10 group-hover:border-primary/30 transition-all duration-300 shadow-inner">
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-[10.5px] font-bold tracking-tight shadow-[0_0_10px_rgba(76,215,246,0.15)]">
-                      <div className="flex items-end gap-[1.5px] h-2.5">
-                        <span className="w-[2px] h-full bg-primary rounded-full animate-pulse" />
-                        <span className="w-[2px] h-2/3 bg-primary rounded-full animate-pulse delay-75" />
-                        <span className="w-[2px] h-1/2 bg-primary rounded-full animate-pulse delay-150" />
-                      </div>
-                      <span className="tabular-nums">
-                        {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-white/80 text-[10.5px] font-mono font-medium">
-                      <span className="material-symbols-outlined text-[12px] text-outline">schedule</span>
-                      <span className="truncate">{totalDurationStr || "0:00"}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </>
+          );
+        })}
+      </div>
 
       {/* Empty State when no playlists */}
       {!isLoadingCloud && allPlaylists.length === 0 && (
@@ -1396,6 +1270,12 @@ function SelfMixContent() {
           </button>
         </div>
       )}
+
+      {/* MP3 Converter Section (Isolated, Professional Audio Utility) */}
+      <Mp3ConverterSection onPlaylistUpdated={handleConverterPlaylistUpdated} />
+
+      {/* Social Media Downloader Section (Directly Below MP3 Converter) */}
+      <SocialMediaDownloaderSection />
 
       {/* Creation Modal with Direct Cloud Upload */}
       {showCreateModal && (

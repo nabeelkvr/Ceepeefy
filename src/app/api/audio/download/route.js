@@ -409,7 +409,9 @@ export async function GET(request) {
     let ext = "mp3";
     let contentType = "audio/mpeg";
 
-    if (isGenuineMp3) {
+    const requestedFormat = (searchParams.get("format") || "").toLowerCase();
+
+    if (isGenuineMp3 || requestedFormat === "mp3") {
       ext = "mp3";
       contentType = "audio/mpeg";
       outputBuffer = rawAudioBuffer;
@@ -456,11 +458,11 @@ export async function GET(request) {
       }
     }
 
-    // Format clean filename: "[Title] - [Artist] [Quality].[ext]"
+    // Format clean filename: "[Title] - [Artist].[ext]" or "[Title].[ext]" from platform
     const safeArtist = artist.replace(/[\/\\?%*:|"<>]/g, "").trim();
     const safeTitle = title.replace(/[\/\\?%*:|"<>]/g, "").trim();
-    const cleanFilename = safeTitle && safeArtist ? `${safeTitle} - ${safeArtist}` : safeTitle || safeArtist || "track";
-    const downloadFilename = `${cleanFilename} [${qualityLabel}].${ext}`;
+    const cleanFilename = safeTitle && safeArtist && safeArtist !== "Various Artists" ? `${safeTitle} - ${safeArtist}` : safeTitle || safeArtist || "track";
+    const downloadFilename = `${cleanFilename}.${ext}`;
 
     return new NextResponse(outputBuffer, {
       status: 200,

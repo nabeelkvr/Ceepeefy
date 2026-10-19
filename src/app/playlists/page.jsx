@@ -35,6 +35,8 @@ export default function PlaylistsPage() {
     updatePlaylistCategory,
     bumpPlaylistToTop,
     refreshCloudPlaylists,
+    updateSpotifyPlaylist,
+    syncingPlaylistIds,
   } = useMusic();
 
   // Authoritatively load fresh playlists from Supabase cloud whenever the playlist page is opened
@@ -43,7 +45,72 @@ export default function PlaylistsPage() {
   }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("ceepeefy_playlist_active_category");
+        if (saved && (saved === "All" || PLAYLIST_CATEGORIES.includes(saved))) {
+          return saved;
+        }
+      } catch {}
+    }
+    return "All";
+  });
+
+  const handleSelectCategory = (cat) => {
+    setActiveCategory(cat);
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem("ceepeefy_playlist_active_category", cat);
+      } catch {}
+    }
+  };
+
+  const [syncNotice, setSyncNotice] = useState(null);
+
+  // Auto-dismiss sync notice toast after 4.5 seconds
+  React.useEffect(() => {
+    if (syncNotice) {
+      const timer = setTimeout(() => {
+        setSyncNotice(null);
+      }, 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [syncNotice]);
+
+  const handleUpdateSpotifyPlaylist = async (playlist, e) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+
+    if (!playlist?.id || syncingPlaylistIds?.has(playlist.id)) return;
+    setSyncNotice(null);
+
+    try {
+      const result = await updateSpotifyPlaylist(playlist.id);
+      if (result.success) {
+        setSyncNotice({
+          type: result.count > 0 ? "success" : "info",
+          message:
+            result.message ||
+            (result.count > 0
+              ? `Added ${result.count} new tracks to "${playlist.title}"!`
+              : "Playlist is already up to date."),
+        });
+      } else {
+        setSyncNotice({
+          type: "error",
+          message: result.message || "Failed to update playlist from Spotify.",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to update Spotify playlist:", err);
+      setSyncNotice({
+        type: "error",
+        message: err.message || "Network error occurred while syncing with Spotify.",
+      });
+    }
+  };
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [playlistToDelete, setPlaylistToDelete] = useState(null);
@@ -125,13 +192,15 @@ export default function PlaylistsPage() {
     const map = new Map();
     // 1. Add user custom playlists
     (customPlaylists || []).filter((pl) => !pl.isSelfMix).forEach((pl) => {
-      const cat = getPlaylistCategory(pl);
+      const storedCat = storedCategories[String(pl.id)];
+      const cat = storedCat || pl.category || pl.sourceMeta?.category || getPlaylistCategory(pl);
       map.set(String(pl.id), { ...pl, isCustom: true, category: cat });
     });
     // 2. Add pinned / added playlists (e.g. from search / curated)
     (addedPlaylists || []).filter((pl) => !pl.isSelfMix).forEach((pl) => {
       if (!map.has(String(pl.id))) {
-        const cat = getPlaylistCategory(pl);
+        const storedCat = storedCategories[String(pl.id)];
+        const cat = storedCat || pl.category || pl.sourceMeta?.category || getPlaylistCategory(pl);
         map.set(String(pl.id), { ...pl, category: cat });
       }
     });
@@ -211,7 +280,31 @@ export default function PlaylistsPage() {
   };
 
   return (
-    <div className="w-full px-3 md:px-8 2xl:px-12 3xl:px-16 py-4 md:py-8 2xl:py-10 flex flex-col gap-6 md:gap-10 2xl:gap-12 select-none">
+    <div className="w-full px-3 md:px-8 2xl:px-12 3xl:px-16 py-4 md:py-8 2xl:py-10 flex flex-col gap-6 md:gap-10 2xl:gap-12 select-none relative">
+      {/* Sync / Update Notice Toast */}
+      {syncNotice && (
+        <div
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[120] px-4 py-2.5 rounded-full shadow-[0_15px_35px_rgba(0,0,0,0.85)] backdrop-blur-xl border flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200 select-none ${
+            syncNotice.type === "error"
+              ? "bg-red-950/90 border-red-500/50 text-red-200"
+              : syncNotice.type === "info"
+              ? "bg-sky-950/90 border-sky-500/50 text-sky-200"
+              : "bg-emerald-950/90 border-emerald-500/50 text-emerald-200"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[17px]">
+            {syncNotice.type === "error" ? "error" : syncNotice.type === "info" ? "info" : "check_circle"}
+          </span>
+          <span>{syncNotice.message}</span>
+          <button
+            onClick={() => setSyncNotice(null)}
+            className="text-white/60 hover:text-white ml-1 text-[15px] cursor-pointer"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex flex-col gap-2.5 md:gap-3">
         <div className="flex items-center gap-2">
@@ -292,7 +385,7 @@ export default function PlaylistsPage() {
               <button
                 key={cat}
                 type="button"
-                onClick={() => setActiveCategory(cat)}
+                onClick={() => handleSelectCategory(cat)}
                 className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all select-none whitespace-nowrap cursor-pointer min-h-[36px] sm:min-h-[40px] flex items-center justify-center ${isSelected
                   ? "bg-white text-surface-container-lowest shadow-md font-bold scale-105"
                   : "bg-surface-container/70 text-on-surface-variant hover:text-white hover:bg-surface-container-high border border-white/10"
@@ -371,6 +464,13 @@ export default function PlaylistsPage() {
 
             const headerSubtitle = formatPlaylistTracksAndDurationUppercase(tracks, pl.duration);
             const playlistCategory = pl.category || "Mixed";
+            const isSpotifyPlaylist = Boolean(
+              pl.badge === "SPOTIFY" ||
+              pl.source === "spotify_import" ||
+              pl.sourceMeta?.spotifyId ||
+              pl.spotifyId
+            );
+            const isUpdatingThisPlaylist = Boolean(syncingPlaylistIds?.has(pl.id));
 
             return (
               <div
@@ -415,6 +515,12 @@ export default function PlaylistsPage() {
                         PINNED
                       </span>
                     )}
+                    {isUpdatingThisPlaylist && (
+                      <span className="text-[8px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded backdrop-blur-md border bg-[#1DB954] text-black border-[#1DB954] flex items-center gap-0.5 shadow-md animate-pulse">
+                        <span className="material-symbols-outlined text-[10px] animate-spin">sync</span>
+                        UPDATING
+                      </span>
+                    )}
                     {pl.isCustom ? (
                       <span className="text-[8px] sm:text-[9px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded backdrop-blur-md border bg-black/70 text-cyan-300 border-cyan-400/30 flex items-center gap-0.5 shadow-md">
                         <span className="material-symbols-outlined text-[10px]">person</span>
@@ -428,7 +534,28 @@ export default function PlaylistsPage() {
                   </div>
 
                   {/* Discrete Action buttons top-right */}
-                  <div className="absolute top-1.5 right-1.5 flex items-center gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <div className={`absolute top-1.5 right-1.5 flex items-center gap-1 z-10 transition-opacity duration-200 ${
+                    isUpdatingThisPlaylist ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  }`}>
+                    {/* Spotify Update Button (Persistent for Spotify-linked playlists) */}
+                    {isSpotifyPlaylist && (
+                      <button
+                        type="button"
+                        disabled={isUpdatingThisPlaylist}
+                        onClick={(e) => handleUpdateSpotifyPlaylist(pl, e)}
+                        className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full backdrop-blur-md border flex items-center justify-center transition-all cursor-pointer ${
+                          isUpdatingThisPlaylist
+                            ? "bg-[#1DB954] text-black border-[#1DB954] shadow-[0_0_12px_rgba(29,185,84,0.5)]"
+                            : "bg-black/70 text-white/80 border-[#1DB954]/40 hover:text-[#1DB954] hover:border-[#1DB954] hover:bg-black/90 hover:scale-105"
+                        }`}
+                        title={isUpdatingThisPlaylist ? "Synchronizing with Spotify..." : "Update playlist from Spotify"}
+                      >
+                        <span className={`material-symbols-outlined text-[13px] sm:text-[14px] ${isUpdatingThisPlaylist ? "animate-spin text-black" : "text-[#1DB954]"}`}>
+                          sync
+                        </span>
+                      </button>
+                    )}
+
                     {/* Pin/Unpin Toggle Button */}
                     <button
                       type="button"

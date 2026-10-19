@@ -152,7 +152,7 @@ export default function SongCard({
 
         {/* Row 2: Song Title - Brought up tight and close under artist */}
         <h3
-          className={`text-[13px] sm:text-[14px] 2xl:text-[15.5px] font-bold truncate transition-colors leading-tight mt-0.5 ${
+          className={`text-[13px] sm:text-[14px] 2xl:text-[15.5px] font-bold line-clamp-2 md:truncate break-words transition-colors leading-tight mt-0.5 ${
             isCurrent ? "text-primary font-extrabold" : "text-white group-hover:text-primary"
           }`}
           title={track.title}

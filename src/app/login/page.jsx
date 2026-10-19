@@ -18,13 +18,17 @@ export default function LoginPage() {
 
   // If already logged in, redirect to destination
   useEffect(() => {
-    if (user && user.isLoggedIn) {
+    if (user && user.isLoggedIn && !isLoading) {
       const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
       const from = searchParams?.get("from");
       const destination = from && from.startsWith("/") && from !== "/login" ? from : "/";
-      router.replace(destination);
+      if (typeof window !== "undefined") {
+        window.location.replace(destination);
+      } else {
+        router.replace(destination);
+      }
     }
-  }, [user, router]);
+  }, [user, isLoading, router]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -65,8 +69,12 @@ export default function LoginPage() {
         const destination = from && from.startsWith("/") && from !== "/login" ? from : "/";
 
         setTimeout(() => {
-          router.push(destination);
-        }, 400);
+          if (typeof window !== "undefined") {
+            window.location.replace(destination);
+          } else {
+            router.replace(destination);
+          }
+        }, 250);
       } else {
         setFeedback({
           type: "error",

@@ -21,42 +21,53 @@ import {
   extractLanguage,
   classifySongMood,
   calculatePopularityScore,
-} from "./recommendationEngine";
+} from "./recommendationEngine.js";
+
+import {
+  normalizeTrackId,
+  getTrackCompositeKey,
+  createTrackDeduplicator,
+  areTracksEqual,
+} from "./trackIdentity.js";
 
 import {
   NOCTURNE_TRACKS,
-} from "../data/nocturneData";
+} from "../data/nocturneData.js";
 import {
   MALAYALAM_HITS,
   MADE_FOR_YOU_TRACKS,
   CHILL_RELAX_TRACKS,
-} from "../data/curatedDiscovery";
-import { CURATED_GENRES } from "../data/genreData";
+} from "../data/curatedDiscovery.js";
+import { CURATED_GENRES } from "../data/genreData.js";
 
 /**
  * Builds the comprehensive candidate pool combining all catalog sources
  */
 export function getAllCandidatePool() {
   const map = new Map();
+  const deduplicator = createTrackDeduplicator();
 
   const add = (track) => {
     if (!track || !track.id) return;
     const tid = String(track.id);
-    if (!map.has(tid)) {
-      map.set(tid, {
-        ...track,
-        id: tid,
-        title: track.title || track.name || "Unknown Track",
-        artist: track.artist || track.primary_artist || "Various Artists",
-        album: track.album || track.movie || "",
-        coverUrl:
-          track.coverUrl ||
-          track.thumbnail ||
-          track.image ||
-          (Array.isArray(track.image) && track.image[track.image.length - 1]?.url) ||
-          null,
-      });
-    }
+    if (deduplicator.has(track)) return;
+
+    const formatted = {
+      ...track,
+      id: tid,
+      title: track.title || track.name || "Unknown Track",
+      artist: track.artist || track.primary_artist || "Various Artists",
+      album: track.album || track.movie || "",
+      coverUrl:
+        track.coverUrl ||
+        track.thumbnail ||
+        track.image ||
+        (Array.isArray(track.image) && track.image[track.image.length - 1]?.url) ||
+        null,
+    };
+
+    deduplicator.add(formatted);
+    map.set(tid, formatted);
   };
 
   MADE_FOR_YOU_TRACKS.forEach(add);
@@ -274,16 +285,15 @@ export function getPersonalizedRecommendations(recentlyPlayedTracks = [], option
 
   // 3. Selection with Diversity & De-duplication Constraints
   const selected = [];
-  const selectedIds = new Set();
+  const deduplicator = createTrackDeduplicator();
   const artistRepetitions = new Map();
   const albumRepetitions = new Map();
 
   for (const item of scoredCandidates) {
     if (selected.length >= limit) break;
     const { track } = item;
-    const tid = String(track.id);
 
-    if (selectedIds.has(tid)) continue;
+    if (deduplicator.has(track)) continue;
 
     // Check artist diversity: limit to max 2 songs from the same artist
     const primaryArtist = cleanStr(track.artist || track.primary_artist || "").split(",")[0].trim();
@@ -300,7 +310,7 @@ export function getPersonalizedRecommendations(recentlyPlayedTracks = [], option
     }
 
     selected.push(track);
-    selectedIds.add(tid);
+    deduplicator.add(track);
     if (primaryArtist) artistRepetitions.set(primaryArtist, artistCount + 1);
     if (albumKey) albumRepetitions.set(albumKey, albumCount + 1);
   }
@@ -309,10 +319,9 @@ export function getPersonalizedRecommendations(recentlyPlayedTracks = [], option
   if (selected.length < limit) {
     for (const item of scoredCandidates) {
       if (selected.length >= limit) break;
-      const tid = String(item.track.id);
-      if (!selectedIds.has(tid)) {
+      if (!deduplicator.has(item.track)) {
         selected.push(item.track);
-        selectedIds.add(tid);
+        deduplicator.add(item.track);
       }
     }
   }

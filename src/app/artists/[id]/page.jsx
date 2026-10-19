@@ -333,7 +333,7 @@ export default function ArtistPage() {
       </div>
 
       {/* Popular Tracks Section */}
-      <div className="px-4 md:px-8 pt-6 flex flex-col gap-4">
+      <div className="px-2 sm:px-4 md:px-8 pt-6 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-white tracking-tight">Recent & Popular Songs</h2>
@@ -370,11 +370,11 @@ export default function ArtistPage() {
         ) : (
           <>
             {/* Table Header */}
-            <div className="grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
+            <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-1.5 sm:px-3 md:px-4 py-2 border-b border-white/10 text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-outline">
               <span className="text-center">#</span>
               <span>Title</span>
               <span className="hidden md:block">Artist</span>
-              <span className="text-right flex items-center justify-end pr-1">
+              <span className="text-right flex items-center justify-end px-0.5 sm:pr-1">
                 <span className="material-symbols-outlined text-[16px]">schedule</span>
               </span>
               <span className="text-right hidden md:block pr-2">Actions</span>
@@ -390,7 +390,7 @@ export default function ArtistPage() {
                   <div
                     key={track.id || idx}
                     onClick={() => handleRowClick(track)}
-                    className={`group grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-3 md:px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+                    className={`group grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_8rem] items-center px-1.5 sm:px-3 md:px-4 py-2 sm:py-2.5 rounded-xl transition-all cursor-pointer ${
                       isCurrent
                         ? "bg-primary/15 border border-primary/40 text-primary shadow-[0_0_15px_rgba(76,215,246,0.15)]"
                         : "hover:bg-surface-container/70 hover:border-white/5 border border-transparent text-on-surface"
@@ -417,8 +417,8 @@ export default function ArtistPage() {
                     </div>
 
                     {/* Thumbnail & Title */}
-                    <div className="flex items-center gap-3 min-w-0 pr-2">
-                      <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high shadow relative">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-1 sm:pr-2">
+                      <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high shadow relative">
                         <img
                           src={track.thumbnail || track.coverUrl}
                           alt={track.title}
@@ -428,13 +428,13 @@ export default function ArtistPage() {
                       </div>
                       <div className="flex flex-col min-w-0">
                         <span
-                          className={`text-sm font-semibold truncate transition-colors ${
+                          className={`text-xs sm:text-sm font-semibold line-clamp-2 md:truncate break-words leading-tight transition-colors ${
                             isCurrent ? "text-primary" : "text-white group-hover:text-primary"
                           }`}
                         >
                           {track.title}
                         </span>
-                        <span className="text-xs text-on-surface-variant md:hidden truncate mt-0.5">
+                        <span className="text-[10.5px] sm:text-xs text-on-surface-variant md:hidden truncate mt-0.5 leading-normal">
                           {track.artist}
                         </span>
                       </div>
@@ -446,33 +446,33 @@ export default function ArtistPage() {
                     </div>
 
                     {/* Duration Column */}
-                    <div className="text-right text-xs font-mono text-outline pr-2">
+                    <div className="text-right text-[11px] sm:text-xs font-mono text-outline px-0.5 sm:pr-2 tabular-nums">
                       {track.durationFormatted || formatTime(track.duration)}
                     </div>
 
                     {/* Actions: Download & Favorite Buttons */}
-                    <div className="flex items-center justify-end gap-1 flex-shrink-0">
-                      <DownloadButton track={track} />
+                    <div className="flex items-center justify-end gap-0.5 sm:gap-1 opacity-90 sm:opacity-80 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
+                      <DownloadButton track={track} iconSize="text-[15px] sm:text-[16px]" buttonSize="w-7 h-7 sm:w-8 sm:h-8 p-0 flex items-center justify-center" />
 
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleLike(track);
                         }}
-                        className={`p-1.5 rounded-full hover:bg-surface-container transition-colors ${
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center hover:bg-surface-container transition-colors cursor-pointer ${
                           isLiked(track.id) ? "text-primary" : "text-outline hover:text-white"
                         }`}
                         title={isLiked(track.id) ? "Remove from favorites" : "Add to favorites"}
                       >
                         <span
-                          className="material-symbols-outlined text-[18px]"
+                          className="material-symbols-outlined text-[15px] sm:text-[18px]"
                           style={{ fontVariationSettings: isLiked(track.id) ? "'FILL' 1" : "'FILL' 0" }}
                         >
                           {isLiked(track.id) ? "favorite" : "favorite_border"}
                         </span>
                       </button>
 
-                      <SongOptionsMenu track={track} iconClassName="text-[18px]" />
+                      <SongOptionsMenu track={track} iconClassName="text-[16px] sm:text-[18px]" buttonClassName="w-7 h-7 sm:w-8 sm:h-8 p-0 flex items-center justify-center" />
                     </div>
                   </div>
                 );

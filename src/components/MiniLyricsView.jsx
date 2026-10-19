@@ -11,6 +11,7 @@ export default function MiniLyricsView() {
     syncedLyrics,
     isLoadingLyrics,
     setLyricsMode,
+    refreshLyrics,
   } = useMusic();
 
   const {
@@ -38,12 +39,23 @@ export default function MiniLyricsView() {
         <span className="material-symbols-outlined text-[24px] text-outline">music_off</span>
         <p className="text-xs font-bold text-white">No Synced Lyrics</p>
         <p className="text-[10px] text-outline">Instrumental audio playback</p>
-        <button
-          onClick={() => setLyricsMode("hidden")}
-          className="mt-1 px-2.5 py-1 rounded-full bg-surface-container hover:bg-surface-container-high text-[10px] text-primary border border-white/10 transition-colors cursor-pointer"
-        >
-          View Artwork
-        </button>
+        <div className="flex items-center gap-2 mt-1">
+          {typeof refreshLyrics === "function" && (
+            <button
+              onClick={() => refreshLyrics(true)}
+              className="px-2.5 py-1 rounded-full bg-surface-container hover:bg-surface-container-high text-[10px] text-primary border border-white/10 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-[12px]">refresh</span>
+              Retry
+            </button>
+          )}
+          <button
+            onClick={() => setLyricsMode("hidden")}
+            className="px-2.5 py-1 rounded-full bg-surface-container hover:bg-surface-container-high text-[10px] text-outline hover:text-white border border-white/10 transition-colors cursor-pointer"
+          >
+            Artwork
+          </button>
+        </div>
       </div>
     );
   }

@@ -8,6 +8,12 @@ import {
   NOCTURNE_PLAYLISTS,
   INITIAL_RECENT_SEARCHES
 } from "../data/nocturneData";
+import {
+  normalizeTrackId,
+  getTrackCompositeKey,
+  areTracksEqual,
+  createTrackDeduplicator,
+} from "../utils/trackIdentity";
 import { getDirectAudioStreamUrl } from "../services/audioService";
 import {
   getLocalAudioUrl,
@@ -33,6 +39,7 @@ import { formatPlaylistDuration } from "../utils/playlistUtils";
 import {
   applySyncPlan,
   buildSnapshotFromExistingPlaylist,
+  createSnapshotEntry,
 } from "../services/spotifySyncService";
 import {
   DEFAULT_USER_ID,
@@ -64,8 +71,14 @@ import {
   mirrorRemoteArtworkToCloud,
   isSupabaseConfigured,
 } from "../services/supabaseClient";
-import { parseSpotifyPlaylistId } from "../services/spotifyPlaylistService";
-import { generateRecommendedQueue, extractLanguage, classifySongMood } from "../utils/recommendationEngine";
+import {
+  generateRecommendedQueue,
+  buildIntelligentQueue,
+  normalizeBaseTitle,
+  extractLanguage,
+  classifySongMood,
+} from "../utils/recommendationEngine";
+import { classifySongDetailed } from "../utils/songClassifier";
 
 export const DEFAULT_MOCK_TRACK_IDS = new Set([
   "track-midnight-pulse",
@@ -138,7 +151,10 @@ export const normalizeTrack = (track) => {
   const isLocal = Boolean(
     track.isLocal ||
     String(rawId).startsWith("local-") ||
-    track.source === "local-upload"
+    String(rawId).startsWith("selfmix-") ||
+    String(rawId).startsWith("converted-") ||
+    track.source === "local-upload" ||
+    track.source === "local-device"
   );
 
   return {
@@ -243,6 +259,16 @@ export const MusicProvider = ({ children }) => {
   // User Authentication State (Strict Personal Instance: centralized account identity)
   const [user, setUser] = useState(null);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ceepeefy_user");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.isLoggedIn) setUser(parsed);
+      }
+    } catch {}
+  }, []);
+
   // Playback Context State (tracks active playlist/album source)
   const [playbackContext, setPlaybackContext] = useState(null);
   const playbackContextRef = useRef(null);
@@ -327,6 +353,31 @@ export const MusicProvider = ({ children }) => {
               savePlaylistToCloud({ ...base, tracks }, userId).catch(() => {});
             }
 
+            const resolvedCategory =
+              base.category ||
+              ac?.category ||
+              lc?.category ||
+              base.sourceMeta?.category ||
+              ac?.sourceMeta?.category ||
+              lc?.sourceMeta?.category ||
+              null;
+            const resolvedSpotifyId =
+              base.spotifyId ||
+              ac?.spotifyId ||
+              lc?.spotifyId ||
+              base.sourceMeta?.spotifyId ||
+              ac?.sourceMeta?.spotifyId ||
+              lc?.sourceMeta?.spotifyId ||
+              null;
+            const resolvedSpotifyUrl =
+              base.spotifyUrl ||
+              ac?.spotifyUrl ||
+              lc?.spotifyUrl ||
+              base.sourceMeta?.spotifyUrl ||
+              ac?.sourceMeta?.spotifyUrl ||
+              lc?.sourceMeta?.spotifyUrl ||
+              null;
+
             merged.push({
               ...base,
               tracks,
@@ -334,7 +385,15 @@ export const MusicProvider = ({ children }) => {
               duration: formatPlaylistDuration(tracks),
               subtitle: base.subtitle?.replace(/\d+\s+tracks/, `${tracks.length} tracks`) || `By ${base.curator || "You"} • ${tracks.length} tracks`,
               source: base.source || ac?.source || lc?.source || (base.badge === "SPOTIFY" ? "spotify_import" : "custom"),
-              sourceMeta: base.sourceMeta || ac?.sourceMeta || lc?.sourceMeta || null,
+              sourceMeta: {
+                ...(base.sourceMeta || ac?.sourceMeta || lc?.sourceMeta || {}),
+                ...(resolvedSpotifyId ? { spotifyId: resolvedSpotifyId } : {}),
+                ...(resolvedSpotifyUrl ? { spotifyUrl: resolvedSpotifyUrl } : {}),
+                ...(resolvedCategory ? { category: resolvedCategory } : {}),
+              },
+              category: resolvedCategory,
+              spotifyId: resolvedSpotifyId,
+              spotifyUrl: resolvedSpotifyUrl,
               coverUrl: base.coverUrl || ac?.coverUrl || lc?.coverUrl,
               customCover: base.customCover || ac?.customCover || lc?.customCover || base.coverUrl,
               isCustom: true,
@@ -964,9 +1023,12 @@ export const MusicProvider = ({ children }) => {
             localStorage.setItem("ceepeefy_user", JSON.stringify(data.user));
             localStorage.setItem("isLoggedIn", "true");
           } else {
-            setUser(null);
-            localStorage.removeItem("ceepeefy_user");
-            localStorage.removeItem("isLoggedIn");
+            // Only clear if localStorage has no active logged-in user
+            const localUser = localStorage.getItem("ceepeefy_user");
+            if (!localUser) {
+              setUser(null);
+              localStorage.removeItem("isLoggedIn");
+            }
           }
         })
         .catch(() => {});
@@ -1523,6 +1585,202 @@ export const MusicProvider = ({ children }) => {
     };
   };
 
+  /**
+   * Additive, safe update for an imported Spotify playlist.
+   * Discovers newly added Spotify songs, matches them with JioSaavn,
+   * and appends ONLY genuinely new tracks to the local playlist.
+   * Never deletes or alters existing local tracks or manual additions.
+   *
+   * @param {string} playlistId
+   * @returns {Promise<{ success: boolean, count?: number, message: string, error?: string }>}
+   */
+  const updateSpotifyPlaylist = async (playlistId) => {
+    if (!playlistId) return { success: false, message: "Playlist ID is required." };
+    if (syncingPlaylistIds.has(playlistId)) {
+      return { success: false, message: "Update operation is already in progress for this playlist." };
+    }
+
+    const playlist = customPlaylists.find((p) => String(p.id) === String(playlistId));
+    if (!playlist) {
+      return { success: false, message: "Playlist not found in your custom playlists." };
+    }
+
+    const spotifyId =
+      playlist.sourceMeta?.spotifyId ||
+      playlist.source_meta?.spotifyId ||
+      playlist.spotifyId ||
+      parseSpotifyPlaylistId(
+        playlist.sourceMeta?.spotifyUrl ||
+        playlist.sourceMeta?.spotifyLink ||
+        playlist.spotifyUrl ||
+        playlist.source_meta?.spotifyUrl ||
+        playlist.description
+      );
+
+    if (!spotifyId) {
+      return { success: false, message: "This playlist is not linked to a Spotify source." };
+    }
+
+    setSyncingPlaylistIds((prev) => new Set([...prev, playlistId]));
+
+    try {
+      const baselineSnapshot =
+        Array.isArray(playlist.sourceMeta?.syncedSnapshot) && playlist.sourceMeta.syncedSnapshot.length > 0
+          ? playlist.sourceMeta.syncedSnapshot
+          : buildSnapshotFromExistingPlaylist(playlist);
+
+      const res = await fetch("/api/spotify/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playlistId,
+          spotifyId,
+          currentSnapshot: baselineSnapshot,
+          existingTracks: playlist.tracks || [],
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${res.status}: Failed to reach Spotify sync service.`);
+      }
+
+      const syncData = await res.json();
+      if (!syncData.success) {
+        return {
+          success: false,
+          message: syncData.error || "Failed to retrieve playlist updates from Spotify.",
+        };
+      }
+
+      // Check if already up to date
+      if (syncData.isUpToDate || !Array.isArray(syncData.addedMatches) || syncData.addedMatches.length === 0) {
+        return {
+          success: true,
+          count: 0,
+          message: "Playlist is already up to date.",
+        };
+      }
+
+      // Deduplicate additions against existing tracks using canonical track identity
+      const existingTracks = playlist.tracks || [];
+      const deduplicator = createTrackDeduplicator(existingTracks);
+      const newTracks = [];
+      const newSnapshotEntries = [];
+
+      for (const match of syncData.addedMatches) {
+        const cand = match.userSelectedTrack || match.matchedTrack;
+        if (!cand || !cand.id) continue;
+
+        const playableTrack = {
+          id: String(cand.id),
+          title: cand.title || match.spotifyTrack.name,
+          artist: cand.artist || match.spotifyTrack.primaryArtist || "Various Artists",
+          album: cand.album || match.spotifyTrack.album || "Imported Album",
+          duration: cand.duration || Math.round((match.spotifyTrack.duration_ms || 210000) / 1000),
+          durationFormatted:
+            cand.durationFormatted || match.spotifyTrack.durationFormatted || "3:30",
+          audioUrl: cand.audioUrl || null,
+          coverUrl: cand.coverUrl || playlist.coverUrl || match.spotifyTrack.coverUrl,
+          year: cand.year || null,
+          type: "song",
+          source: "jiosaavn",
+          sourceEntryId: match.sourceEntryId,
+          isSpotifyTrack: true,
+          spotifyId: match.spotifyTrack.spotifyId || null,
+        };
+
+        if (deduplicator.add(playableTrack)) {
+          newTracks.push(playableTrack);
+          newSnapshotEntries.push(
+            createSnapshotEntry(
+              match.spotifyTrack,
+              0,
+              playableTrack.id,
+              cand.matchScore || match.score || 100
+            )
+          );
+        }
+      }
+
+      if (newTracks.length === 0) {
+        return {
+          success: true,
+          count: 0,
+          message: "Playlist is already up to date.",
+        };
+      }
+
+      // Additive update: append new tracks preserving existing tracks & ordering
+      const updatedTracks = [...existingTracks, ...newTracks];
+      const formattedDuration = formatPlaylistDuration(updatedTracks);
+      const currentUserId = getAccountUserId(user);
+
+      const updatedSourceMeta = {
+        ...(playlist.sourceMeta || {}),
+        spotifyId: syncData.spotifyMetadata?.id || spotifyId,
+        spotifyUrl: playlist.sourceMeta?.spotifyUrl || `https://open.spotify.com/playlist/${spotifyId}`,
+        lastSyncedAt: Date.now(),
+        lastSyncStatus: "success",
+        totalSourceTracks: (playlist.sourceMeta?.totalSourceTracks || existingTracks.length) + newTracks.length,
+        syncedSnapshot: [
+          ...(playlist.sourceMeta?.syncedSnapshot || []),
+          ...newSnapshotEntries,
+        ],
+      };
+
+      const updatedPlaylist = {
+        ...playlist,
+        tracks: updatedTracks,
+        songsCount: updatedTracks.length,
+        duration: formattedDuration,
+        subtitle: `Imported • ${updatedTracks.length} tracks`,
+        sourceMeta: updatedSourceMeta,
+        spotifyId,
+      };
+
+      // Persist to local state & account storage
+      setCustomPlaylists((prev) => {
+        const next = prev.map((p) =>
+          String(p.id) === String(playlistId) ? updatedPlaylist : p
+        );
+        try {
+          localStorage.setItem(
+            getAccountStorageKey("ceepeefy_custom_playlists", currentUserId),
+            JSON.stringify(next)
+          );
+          persistAccountData({ customPlaylists: next });
+        } catch {}
+        return next;
+      });
+
+      // Persist to Supabase Cloud
+      try {
+        await savePlaylistToCloud(updatedPlaylist, currentUserId);
+      } catch (cloudErr) {
+        console.warn("[MusicContext] Cloud sync notice during playlist update:", cloudErr);
+      }
+
+      return {
+        success: true,
+        count: newTracks.length,
+        message: `Successfully added ${newTracks.length} new track${newTracks.length > 1 ? "s" : ""} from Spotify.`,
+      };
+    } catch (err) {
+      console.error("[MusicContext] updateSpotifyPlaylist error:", err);
+      return {
+        success: false,
+        message: err.message || "Failed to update playlist from Spotify.",
+      };
+    } finally {
+      setSyncingPlaylistIds((prev) => {
+        const next = new Set(prev);
+        next.delete(playlistId);
+        return next;
+      });
+    }
+  };
+
   const deleteCustomPlaylist = async (id) => {
     if (!id) return { success: false, error: "Playlist ID required" };
     const currentUserId = getAccountUserId(user);
@@ -1947,11 +2205,13 @@ export const MusicProvider = ({ children }) => {
   const addLocalTracksToSelfMix = (mixId, newTracks = []) => {
     if (!mixId || !Array.isArray(newTracks) || newTracks.length === 0) return;
     const normalizedNew = newTracks.map(normalizeTrack).filter(Boolean);
+    const targetMixIdStr = String(mixId);
+    const currentUserId = getAccountUserId(user);
 
     let updatedTarget = null;
     setSelfMixes((prev) => {
       const updated = prev.map((mix) => {
-        if (mix.id !== mixId) return mix;
+        if (String(mix.id) !== targetMixIdStr) return mix;
         const existing = mix.tracks || [];
         const existingIds = new Set(existing.map((t) => String(t.id)));
         const toAdd = normalizedNew.filter((t) => !existingIds.has(String(t.id)));
@@ -2129,6 +2389,7 @@ export const MusicProvider = ({ children }) => {
   const queueRequestIdRef = useRef(0);
   const recentRecommendedTrackIdsRef = useRef(new Set());
   const isTransitioningTrackRef = useRef(false);
+  const lyricsRequestIdRef = useRef(0);
 
   // Centralized Playback History (tracks played prior to current song)
   const [playbackHistory, setPlaybackHistory] = useState([]);
@@ -2347,67 +2608,60 @@ export const MusicProvider = ({ children }) => {
   }, [currentTrack?.id, manualQueue, autoQueue, currentTracklist, repeatMode, offlineTrackIds, resolveNextTrackInQueue]);
 
   // Synchronized Lyrics Fetching
-  useEffect(() => {
-    if (!currentTrack) {
+  const fetchLyricsForTrack = useCallback(async (track, options = {}) => {
+    if (!track) {
       setSyncedLyrics([]);
       setIsLoadingLyrics(false);
       setLyricsError(null);
       return;
     }
 
-    let isMounted = true;
+    const reqId = ++lyricsRequestIdRef.current;
     setIsLoadingLyrics(true);
     setLyricsError(null);
 
-    const trackTitle = currentTrack.title || "";
-    const artistName = currentTrack.artist || "";
-    const trackDuration = currentTrack.duration || 210;
-    const trackId = currentTrack.id || "";
+    const trackTitle = track.title || "";
+    const artistName = track.artist || "";
+    const trackDuration = track.duration || durationRef.current || 0;
+    const trackId = track.id || "";
+    const trackAlbum = track.album || track.albumName || track.movieName || "";
+    const trackLanguage = (
+      track.language ||
+      track.more_info?.language ||
+      ""
+    ).toLowerCase().trim();
 
-    const fetchLyrics = async () => {
-      try {
-        const params = new URLSearchParams({
-          id: trackId,
-          track: trackTitle,
-          artist: artistName,
-          duration: String(trackDuration),
-        });
-        const res = await fetch(`/api/audio/lyrics?${params.toString()}`);
-        if (!res.ok) throw new Error(`Lyrics request failed with status ${res.status}`);
-        const data = await res.json();
-        if (isMounted) {
-          if (data.lines && Array.isArray(data.lines) && data.lines.length > 0) {
-            setSyncedLyrics(data.lines);
-          } else if (currentTrack.lyrics && typeof currentTrack.lyrics === "string") {
-            const rawLines = currentTrack.lyrics
-              .split("\n")
-              .map((l) => l.trim())
-              .filter(Boolean);
-            if (rawLines.length > 0) {
-              const dur = trackDuration > 10 ? trackDuration : 210;
-              const step = dur / (rawLines.length + 1);
-              setSyncedLyrics(
-                rawLines.map((text, idx) => ({
-                  time: Math.round((idx * step + step * 0.5) * 10) / 10,
-                  text,
-                }))
-              );
-            } else {
-              setSyncedLyrics([]);
-            }
-          } else {
-            setSyncedLyrics([]);
-          }
-          setIsLoadingLyrics(false);
-        }
-      } catch (err) {
-        if (isMounted) {
-          console.warn("[Lyrics] Failed to fetch lyrics:", err);
-          if (currentTrack.lyrics && typeof currentTrack.lyrics === "string") {
-            const rawLines = currentTrack.lyrics
-              .split("\n")
-              .map((l) => l.trim())
-              .filter(Boolean);
+    try {
+      const params = new URLSearchParams({
+        id: trackId,
+        track: trackTitle,
+        artist: artistName,
+        album: trackAlbum,
+        duration: String(trackDuration),
+        language: trackLanguage,
+      });
+      if (options.force) {
+        params.set("refresh", "true");
+        params.set("_t", String(Date.now()));
+      }
+
+      const res = await fetch(`/api/audio/lyrics?${params.toString()}`, {
+        cache: options.force ? "no-store" : "default",
+      });
+      if (!res.ok) throw new Error(`Lyrics request failed with status ${res.status}`);
+      const data = await res.json();
+
+      if (reqId === lyricsRequestIdRef.current) {
+        if (data.lines && Array.isArray(data.lines) && data.lines.length > 0) {
+          setSyncedLyrics(data.lines);
+        } else if (data.lyrics && Array.isArray(data.lyrics) && data.lyrics.length > 0) {
+          setSyncedLyrics(data.lyrics);
+        } else if (track.lyrics && typeof track.lyrics === "string") {
+          const rawLines = track.lyrics
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean);
+          if (rawLines.length > 0) {
             const dur = trackDuration > 10 ? trackDuration : 210;
             const step = dur / (rawLines.length + 1);
             setSyncedLyrics(
@@ -2419,18 +2673,73 @@ export const MusicProvider = ({ children }) => {
           } else {
             setSyncedLyrics([]);
           }
-          setLyricsError(err.message);
-          setIsLoadingLyrics(false);
+        } else {
+          setSyncedLyrics([]);
         }
+        setIsLoadingLyrics(false);
       }
-    };
+    } catch (err) {
+      if (reqId === lyricsRequestIdRef.current) {
+        console.warn("[Lyrics] Failed to fetch lyrics:", err);
+        if (track.lyrics && typeof track.lyrics === "string") {
+          const rawLines = track.lyrics
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean);
+          const dur = trackDuration > 10 ? trackDuration : 210;
+          const step = dur / (rawLines.length + 1);
+          setSyncedLyrics(
+            rawLines.map((text, idx) => ({
+              time: Math.round((idx * step + step * 0.5) * 10) / 10,
+              text,
+            }))
+          );
+        } else {
+          setSyncedLyrics([]);
+        }
+        setLyricsError(err.message);
+        setIsLoadingLyrics(false);
+      }
+    }
+  }, []);
 
-    fetchLyrics();
+  const refreshLyrics = useCallback(async (force = true) => {
+    if (currentTrack) {
+      setIsLoadingLyrics(true);
+      setLyricsError(null);
+      await fetchLyricsForTrack(currentTrack, { force });
+    }
+  }, [currentTrack, fetchLyricsForTrack]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [currentTrack?.id]);
+  const handleSetLyricsMode = useCallback((val) => {
+    let nextMode = "hidden";
+    if (typeof val === "function") {
+      setLyricsMode((prev) => {
+        nextMode = val(prev);
+        if ((nextMode === "full" || nextMode === "mini") && currentTrack && syncedLyrics.length === 0) {
+          fetchLyricsForTrack(currentTrack, { force: true });
+        }
+        return nextMode;
+      });
+    } else {
+      nextMode = val;
+      setLyricsMode(nextMode);
+      if ((nextMode === "full" || nextMode === "mini") && currentTrack && syncedLyrics.length === 0) {
+        fetchLyricsForTrack(currentTrack, { force: true });
+      }
+    }
+  }, [currentTrack, syncedLyrics.length, fetchLyricsForTrack]);
+
+  // Synchronized Lyrics Fetching Effect
+  useEffect(() => {
+    if (!currentTrack) {
+      setSyncedLyrics([]);
+      setIsLoadingLyrics(false);
+      setLyricsError(null);
+      return;
+    }
+    fetchLyricsForTrack(currentTrack);
+  }, [currentTrack?.id, fetchLyricsForTrack]);
 
   // Stall & Network Recovery Tracking
   const retryCountRef = useRef(0);
@@ -2651,11 +2960,11 @@ export const MusicProvider = ({ children }) => {
       lastProgressTimeRef.current = cur;
 
       // Smart Background Autoplay Injection & Continuation:
-      // When the active queue is nearly exhausted (<= 2 songs left),
+      // When the active queue is running low (<= 4 songs left),
       // and playback reaches within 25s before ending (or 75% progress), silently fetch & append next similar tracks!
       if (
         isAutoplayEnabledRef.current &&
-        (manualQueueRef.current.length + autoQueueRef.current.length) <= 2 &&
+        (manualQueueRef.current.length + autoQueueRef.current.length) <= 4 &&
         dur > 15 &&
         (cur >= dur - 25 || cur >= dur * 0.75) &&
         !isFetchingAutoplayRef.current
@@ -2905,12 +3214,24 @@ export const MusicProvider = ({ children }) => {
         if (seedMeta.title) params.set("title", seedMeta.title);
         if (seedMeta.artist) params.set("artist", seedMeta.artist);
 
-        // Exclude currently playing track & manual queue tracks
+        // Exclude currently playing track, manual queue tracks, and existing queue
         const excludeSet = new Set();
-        if (seedMeta.id) excludeSet.add(String(seedMeta.id));
-        if (seedMeta.cleanId) excludeSet.add(String(seedMeta.cleanId));
-        if (currentTrackRef.current?.id) excludeSet.add(String(currentTrackRef.current.id));
-        (manualQueueRef.current || []).forEach((t) => { if (t.id) excludeSet.add(String(t.id)); });
+        const addIdToExcludes = (id) => {
+          if (!id) return;
+          const s = String(id).trim();
+          excludeSet.add(s);
+          const c = normalizeTrackId(s);
+          if (c) excludeSet.add(c);
+        };
+
+        addIdToExcludes(seedMeta.id);
+        addIdToExcludes(seedMeta.cleanId);
+        if (currentTrackRef.current?.id) addIdToExcludes(currentTrackRef.current.id);
+        (manualQueueRef.current || []).forEach((t) => addIdToExcludes(t.id));
+        if (mode === "append") {
+          (autoQueueRef.current || []).forEach((t) => addIdToExcludes(t.id));
+        }
+        (sessionPlayedTrackIdsRef.current || []).forEach((id) => addIdToExcludes(id));
 
         const excludeList = Array.from(excludeSet).join(",");
         if (excludeList) params.set("excludeIds", excludeList);
@@ -2939,43 +3260,44 @@ export const MusicProvider = ({ children }) => {
 
       if (reqId !== queueRequestIdRef.current) return;
 
-      // Filter out seedTrack, currently playing track, and current queue duplicates
-      const playedIds = sessionPlayedTrackIdsRef.current;
-      const playedKeys = sessionPlayedKeysRef.current;
-      const currentQueueIds = new Set((queueRef.current || []).map((t) => String(t.id)));
-      const curId = String(currentTrackRef.current?.id || "");
-      const seedId = String(seedMeta.id);
-      const cleanSeedId = String(seedMeta.cleanId || "");
+      // Filter out seedTrack, currently playing track, and current queue duplicates using stable identity
+      const activeDeduplicator = createTrackDeduplicator();
+      activeDeduplicator.add(seedMeta);
+      if (currentTrackRef.current) activeDeduplicator.add(currentTrackRef.current);
+      (manualQueueRef.current || []).forEach((t) => activeDeduplicator.add(t));
+      if (mode !== "initial") {
+        (autoQueueRef.current || []).forEach((t) => activeDeduplicator.add(t));
+      }
 
       let candidateTracks = rawTracks
         .map(normalizeTrack)
         .filter((t) => {
           if (!t || !t.id) return false;
-          const tid = String(t.id);
-          if (tid === seedId || tid === cleanSeedId || tid === curId) return false;
-          if (mode !== "initial" && currentQueueIds.has(tid)) return false;
+          if (activeDeduplicator.has(t)) return false;
           return true;
         });
 
       // Filter session played tracks if enough fresh tracks exist
+      const playedIds = sessionPlayedTrackIdsRef.current;
+      const playedKeys = sessionPlayedKeysRef.current;
       const freshTracks = candidateTracks.filter((t) => {
         const tid = String(t.id);
-        if (playedIds.has(tid)) return false;
-        const cleanT = (t.title || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
-        const cleanA = (t.artist || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
-        if (cleanT && cleanA && playedKeys.has(`${cleanT}:::${cleanA}`)) return false;
+        const cid = normalizeTrackId(t.id);
+        if (playedIds.has(tid) || playedIds.has(cid)) return false;
+        const compKey = getTrackCompositeKey(t);
+        if (compKey && playedKeys.has(compKey)) return false;
         return true;
       });
 
-      // Ensure exactly 20 ranked tracks for initial queue, or 10 tracks for append
-      const countToTake = mode === "initial" ? 20 : 10;
+      // Ensure target count: 15 for initial, or 10 tracks for append
+      const countToTake = mode === "initial" ? 15 : 10;
       let tracksToUse = [...freshTracks];
       if (tracksToUse.length < countToTake && candidateTracks.length > tracksToUse.length) {
-        const usedIds = new Set(tracksToUse.map((t) => String(t.id)));
+        const poolDedup = createTrackDeduplicator(tracksToUse);
         for (const cand of candidateTracks) {
-          if (!usedIds.has(String(cand.id))) {
+          if (!poolDedup.has(cand)) {
             tracksToUse.push(cand);
-            usedIds.add(String(cand.id));
+            poolDedup.add(cand);
             if (tracksToUse.length >= countToTake) break;
           }
         }
@@ -2996,10 +3318,19 @@ export const MusicProvider = ({ children }) => {
 
           // Track recommended tracks for anti-repetition across subsequent clicks
           topRankedTracks.forEach((t) => {
-            if (t.id) recentRecommendedTrackIdsRef.current.add(String(t.id));
+            if (t.id) {
+              recentRecommendedTrackIdsRef.current.add(String(t.id));
+              const cid = normalizeTrackId(t.id);
+              if (cid) recentRecommendedTrackIdsRef.current.add(cid);
+              const baseTitle = normalizeBaseTitle(t.title || t.song || "");
+              if (baseTitle) {
+                recentRecommendedTrackIdsRef.current.add(baseTitle);
+                recentRecommendedTrackIdsRef.current.add(`title:${baseTitle}`);
+              }
+            }
           });
-          if (recentRecommendedTrackIdsRef.current.size > 60) {
-            const arr = Array.from(recentRecommendedTrackIdsRef.current).slice(-40);
+          if (recentRecommendedTrackIdsRef.current.size > 50) {
+            const arr = Array.from(recentRecommendedTrackIdsRef.current).slice(-30);
             recentRecommendedTrackIdsRef.current = new Set(arr);
           }
         } else if (mode === "append") {
@@ -3008,8 +3339,12 @@ export const MusicProvider = ({ children }) => {
             topRankedTracks.map((t) => `[Tier ${t.tier}: ${t.tierReason}] ${t.title}`).join(", ")
           );
           setAutoQueue((prev) => {
-            const existingIds = new Set(prev.map((t) => String(t.id)));
-            const fresh = topRankedTracks.filter((t) => !existingIds.has(String(t.id)));
+            const appendDedup = createTrackDeduplicator([
+              ...(manualQueueRef.current || []),
+              ...prev,
+              currentTrackRef.current
+            ]);
+            const fresh = topRankedTracks.filter((t) => !appendDedup.has(t));
             return [...prev, ...fresh];
           });
           setCurrentTracklist((prev) => [...prev, ...topRankedTracks]);
@@ -3150,6 +3485,8 @@ export const MusicProvider = ({ children }) => {
     const isLocalTrack = Boolean(
       track.isLocal ||
       String(track.id).startsWith("local-") ||
+      String(track.id).startsWith("selfmix-") ||
+      String(track.id).startsWith("converted-") ||
       track.source === "local-upload" ||
       track.source === "local-device"
     );
@@ -3177,6 +3514,7 @@ export const MusicProvider = ({ children }) => {
       setPlaybackHistory((prev) => [...prev.slice(-30), currentTrackRef.current]);
     }
 
+    const trackIdStr = String(track?.id || "");
     const norm = normalizeTrack(track);
     const resolvedTrack = norm || track;
 
@@ -3224,7 +3562,6 @@ export const MusicProvider = ({ children }) => {
 
       originalPlaylistTracksRef.current = tracklist;
       setCurrentTracklist(tracklist);
-      const trackIdStr = String(track.id);
       const idx = tracklist.findIndex((t) => String(t.id) === trackIdStr);
 
       if (options?.isShuffle || isShuffleRef.current) {
@@ -3250,24 +3587,82 @@ export const MusicProvider = ({ children }) => {
         // User clicked a song directly inside the queue drawer: regenerate queue for this new song!
         setAutoQueue([]);
         fetchAndInjectAutoplayQueue(track, { mode: "initial" });
-      } else if (playbackContextRef.current?.type !== "playlist" && isAutoplayEnabledRef.current && autoQueueRef.current.length <= 5) {
+      } else if (
+        playbackContextRef.current?.type !== "playlist" &&
+        isAutoplayEnabledRef.current &&
+        autoQueueRef.current.length <= 4 &&
+        !isFetchingAutoplayRef.current
+      ) {
         fetchAndInjectAutoplayQueue(track, { mode: "append" });
       }
     } else {
       // Individual track played outside playlist (Search, Home page, SongCard, RecommendationCard, etc.):
       setPlaybackContext(null);
       if (tracklist && Array.isArray(tracklist) && tracklist.length > 1) {
-        const seedLang = (track.language || track.more_info?.language || "").toLowerCase().trim();
-        const initialSeed = tracklist
-          .filter((t) => {
-            if (!t || String(t.id) === String(track.id)) return false;
-            const tLang = (t.language || t.more_info?.language || "").toLowerCase().trim();
-            if (seedLang && tLang && tLang !== seedLang) return false;
-            return true;
-          })
-          .slice(0, 20);
-        if (initialSeed.length > 0) {
-          setAutoQueue(initialSeed);
+        const seedLang = (
+          track.language ||
+          track.more_info?.language ||
+          extractLanguage(track) ||
+          classifySongDetailed(track).language ||
+          ""
+        ).toLowerCase().trim();
+
+        // Filter tracklist for compatible same-language tracks excluding the clicked song
+        const sameLangCandidates = tracklist.filter((t) => {
+          if (!t || String(t.id) === trackIdStr) return false;
+          if (seedLang) {
+            const tLang = (
+              t.language ||
+              t.more_info?.language ||
+              extractLanguage(t) ||
+              classifySongDetailed(t).language ||
+              ""
+            ).toLowerCase().trim();
+            if (tLang && tLang !== seedLang) return false;
+          }
+          return true;
+        });
+
+        // Anti-repetition: filter out tracks recently queued or played in this session if plenty of tracks exist
+        const recentRecos = recentRecommendedTrackIdsRef.current;
+        const playedTracks = sessionPlayedTrackIdsRef.current;
+        const freshCandidates = sameLangCandidates.filter((t) => {
+          const tid = String(t.id);
+          const cid = normalizeTrackId(t.id);
+          const baseTitle = normalizeBaseTitle(t.title || t.song || "");
+          if (recentRecos.has(tid) || recentRecos.has(cid) || playedTracks.has(tid) || playedTracks.has(cid)) return false;
+          if (baseTitle && (recentRecos.has(baseTitle) || recentRecos.has(`title:${baseTitle}`))) return false;
+          return true;
+        });
+
+        const poolToUse = freshCandidates.length >= 6 ? freshCandidates : sameLangCandidates;
+
+        // Build initial queue using intelligent scoring model so the immediate queue is diverse and context-aware
+        const initialIntelligentQueue = buildIntelligentQueue(track, poolToUse, {
+          maxResults: 15,
+          recentQueueTrackIds: recentRecos,
+        });
+
+        const tracksToSet = initialIntelligentQueue.length > 0 ? initialIntelligentQueue : poolToUse.slice(0, 15);
+        if (tracksToSet.length > 0) {
+          setAutoQueue(tracksToSet);
+          // Immediately track these queued songs to prevent repetition across rapid consecutive clicks
+          tracksToSet.forEach((t) => {
+            if (t.id) {
+              recentRecommendedTrackIdsRef.current.add(String(t.id));
+              const cid = normalizeTrackId(t.id);
+              if (cid) recentRecommendedTrackIdsRef.current.add(cid);
+              const baseTitle = normalizeBaseTitle(t.title || t.song || "");
+              if (baseTitle) {
+                recentRecommendedTrackIdsRef.current.add(baseTitle);
+                recentRecommendedTrackIdsRef.current.add(`title:${baseTitle}`);
+              }
+            }
+          });
+          if (recentRecommendedTrackIdsRef.current.size > 50) {
+            const arr = Array.from(recentRecommendedTrackIdsRef.current).slice(-30);
+            recentRecommendedTrackIdsRef.current = new Set(arr);
+          }
         } else {
           setAutoQueue([]);
         }
@@ -3291,6 +3686,12 @@ export const MusicProvider = ({ children }) => {
       // Record into current session history for filtering in ListenFree tiered recommendations
       if (norm.id) {
         sessionPlayedTrackIdsRef.current.add(String(norm.id));
+        const cid = normalizeTrackId(norm.id);
+        if (cid) sessionPlayedTrackIdsRef.current.add(cid);
+      }
+      const compKey = getTrackCompositeKey(norm);
+      if (compKey) {
+        sessionPlayedKeysRef.current.add(compKey);
       }
       const cleanT = (norm.title || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
       const cleanA = (norm.artist || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
@@ -3334,6 +3735,11 @@ export const MusicProvider = ({ children }) => {
       // Hit IndexedDB for local offline audio, local uploads, or remote streams
       let rawAudioUrl = track.audioUrl;
 
+      // Discard expired session blob: URLs so IndexedDB can revive a fresh valid Object URL
+      if (rawAudioUrl && typeof rawAudioUrl === "string" && rawAudioUrl.startsWith("blob:")) {
+        rawAudioUrl = null;
+      }
+
       // 0. Check Queue Background Pre-download Cache for 0ms Instant Playback!
       const prefetchHit = prefetchCacheRef.current?.get(String(track.id));
       if (prefetchHit) {
@@ -3355,12 +3761,12 @@ export const MusicProvider = ({ children }) => {
       }
 
       // 2. Check local user uploads (Self Mix & Local Music Player) if not found in offline storage
-      if (!rawAudioUrl && isLocalTrack) {
+      if (!rawAudioUrl || isLocalTrack) {
         try {
           const localUrl = await getLocalAudioUrl(track.id);
           if (localUrl) {
             rawAudioUrl = localUrl;
-          } else {
+          } else if (!rawAudioUrl) {
             const localDeviceUrl = await getLocalDeviceTrackUrl(track.id);
             if (localDeviceUrl) {
               rawAudioUrl = localDeviceUrl;
@@ -3496,7 +3902,8 @@ export const MusicProvider = ({ children }) => {
       if (
         playbackContextRef.current?.type !== "playlist" &&
         isAutoplayEnabledRef.current &&
-        remainingAuto.length <= 5
+        remainingAuto.length <= 4 &&
+        !isFetchingAutoplayRef.current
       ) {
         fetchAndInjectAutoplayQueue(next, { mode: "append" });
       }
@@ -4135,7 +4542,9 @@ export const MusicProvider = ({ children }) => {
         setRepeatMode,
         setIsQueueOpen,
         setIsLyricsOpen,
-        setLyricsMode,
+        setLyricsMode: handleSetLyricsMode,
+        refreshLyrics,
+        fetchLyricsForTrack,
         setSyncedLyrics,
         audioRef,
         setIsDeviceModalOpen,
@@ -4163,6 +4572,7 @@ export const MusicProvider = ({ children }) => {
         syncingPlaylistIds,
         fetchSpotifySyncPlan,
         commitSpotifySync,
+        updateSpotifyPlaylist,
         deleteCustomPlaylist,
         deletePlaylist,
         updatePlaylistCover,

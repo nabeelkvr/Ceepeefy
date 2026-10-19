@@ -226,7 +226,7 @@ export default function OfflineSongsPage() {
       </div>
 
       {/* Main Content Area */}
-      <div className="px-4 md:px-8 pt-6 flex flex-col gap-6">
+      <div className="px-2 sm:px-4 md:px-8 pt-6 flex flex-col gap-6">
         {/* Section: Offline Playlists */}
         {offlinePlaylists.length > 0 && (
           <div className="flex flex-col gap-4 mb-2">
@@ -389,11 +389,11 @@ export default function OfflineSongsPage() {
           ) : (
             <>
               {/* Table Header */}
-              <div className="grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_6.5rem] items-center px-3 md:px-4 py-2 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-outline">
+              <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_6.5rem] items-center px-1.5 sm:px-3 md:px-4 py-2 border-b border-white/10 text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-outline">
                 <span className="text-center">#</span>
                 <span>Title</span>
                 <span className="hidden md:block">Artist / Album</span>
-                <span className="text-right flex items-center justify-end pr-1">
+                <span className="text-right flex items-center justify-end px-0.5 sm:pr-1">
                   <span className="material-symbols-outlined text-[16px]">schedule</span>
                 </span>
                 <span className="text-right hidden md:block pr-2">Action</span>
@@ -414,7 +414,7 @@ export default function OfflineSongsPage() {
                     <div
                       key={tid}
                       onClick={() => handleRowClick(track)}
-                      className={`grid grid-cols-[2rem_1fr_3.5rem_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_6.5rem] items-center px-3 md:px-4 py-2.5 rounded-xl border transition-all cursor-pointer group ${
+                      className={`grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(200px,3fr)_minmax(140px,2fr)_4rem_6.5rem] items-center px-1.5 sm:px-3 md:px-4 py-2 sm:py-2.5 rounded-xl border transition-all cursor-pointer group ${
                         isCurrent
                           ? "bg-surface-container-high/80 border-primary/50 text-white"
                           : "border-transparent hover:bg-surface-container/60 hover:border-white/5"
@@ -441,8 +441,8 @@ export default function OfflineSongsPage() {
                       </div>
 
                       {/* Title & Cover */}
-                      <div className="flex items-center gap-3 min-w-0 pr-4">
-                        <div className="w-10 h-10 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative border border-white/10 shadow-sm">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-1 sm:pr-4">
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative border border-white/10 shadow-sm">
                           <img
                             src={displayCover}
                             alt={track.title}
@@ -455,22 +455,22 @@ export default function OfflineSongsPage() {
                           <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-tl bg-cyan-400" />
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1">
                             <span
-                              className={`text-sm font-semibold truncate ${
+                              className={`text-xs sm:text-sm font-semibold line-clamp-2 md:truncate break-words leading-tight ${
                                 isCurrent ? "text-primary" : "text-white group-hover:text-primary transition-colors"
                               }`}
                             >
                               {track.title}
                             </span>
                             <span
-                              className="material-symbols-outlined text-primary text-[14px] flex-shrink-0"
+                              className="material-symbols-outlined text-primary text-[12px] sm:text-[14px] flex-shrink-0"
                               title="Available offline"
                             >
                               download_done
                             </span>
                           </div>
-                          <span className="text-xs text-outline truncate md:hidden">
+                          <span className="text-[10.5px] sm:text-xs text-outline truncate md:hidden mt-0.5 leading-normal">
                             {track.artist}
                           </span>
                         </div>
@@ -489,7 +489,7 @@ export default function OfflineSongsPage() {
                       </div>
 
                       {/* Duration */}
-                      <div className="text-right text-xs font-mono text-outline pr-2">
+                      <div className="text-right text-[11px] sm:text-xs font-mono text-outline px-0.5 sm:pr-2 tabular-nums">
                         {track.durationFormatted ||
                           (typeof track.duration === "number"
                             ? formatTime(track.duration)
@@ -497,18 +497,18 @@ export default function OfflineSongsPage() {
                       </div>
 
                       {/* Action: Remove from offline & 3-dot context menu */}
-                      <div className="flex items-center justify-end gap-1 flex-shrink-0">
+                      <div className="flex items-center justify-end gap-0.5 sm:gap-1 opacity-90 sm:opacity-80 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
                         <button
                           type="button"
                           onClick={(e) => handleRemoveTrack(e, track)}
-                          className="p-1.5 rounded-lg text-outline hover:text-red-400 hover:bg-white/10 transition-colors"
+                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-outline hover:text-red-400 hover:bg-white/10 transition-colors"
                           title="Remove offline download from this device"
                         >
-                          <span className="material-symbols-outlined text-[18px]">
+                          <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                             delete
                           </span>
                         </button>
-                        <SongOptionsMenu track={track} />
+                        <SongOptionsMenu track={track} iconClassName="text-[16px] sm:text-[18px]" buttonClassName="w-7 h-7 sm:w-8 sm:h-8 p-0 flex items-center justify-center" />
                       </div>
                     </div>
                   );

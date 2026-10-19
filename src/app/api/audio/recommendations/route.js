@@ -11,6 +11,13 @@ import {
 } from "../../../../data/curatedDiscovery";
 import { generateRecommendedQueue, classifySongMood, extractLanguage } from "../../../../utils/recommendationEngine";
 import { classifySongDetailed } from "../../../../utils/songClassifier";
+import {
+  normalizeTrackId,
+  getTrackCompositeKey,
+  createTrackDeduplicator,
+  areTracksEqual,
+} from "../../../../utils/trackIdentity.js";
+import { buildAdaptiveQueue } from "../../../../utils/adaptiveRecommendationLayer.js";
 
 // In-memory cache for recommendation queries
 const recoCache = new Map();
@@ -327,46 +334,48 @@ export async function GET(request) {
     }
 
     const rawCandidateMap = new Map();
+    const candidateDeduplicator = createTrackDeduplicator();
+    excludeIdSet.forEach((id) => candidateDeduplicator.add({ id }));
+    if (songId) candidateDeduplicator.add({ id: songId });
+    if (cleanSongId) candidateDeduplicator.add({ id: cleanSongId });
 
     // Helper to add candidate track with strict language and content-type validation
     const addCandidate = (item, extraMeta = {}) => {
       if (!item || !item.id) return;
-      const sId = String(item.id);
-      if (sId === String(songId) || sId === cleanSongId || excludeIdSet.has(sId)) return;
-      if (rawCandidateMap.has(sId)) return;
-
       const formatted = formatSongItem({
         ...item,
         ...extraMeta,
       });
-      if (formatted && formatted.title) {
-        // Discard obscure tracks with fewer than 25,000 streams when play_count is known (unless from official chart)
-        if (!formatted.chartRank && formatted.play_count > 0 && formatted.play_count < 25000) return;
+      if (!formatted || !formatted.title) return;
 
-        // Discard unverified tracks with 0 plays from open search if pool already has sufficient verified tracks
-        if (!formatted.chartRank && !formatted.badge && formatted.source !== "curated" && formatted.play_count === 0 && rawCandidateMap.size >= 30) return;
+      const sId = String(formatted.id);
+      const cleanId = normalizeTrackId(sId);
 
-        // Strict Language Filter: Never allow cross-language tracks into candidate pool
-        const candProfile = classifySongDetailed(formatted);
-        const candLang = candProfile.language || extractLanguage(formatted) || (formatted.language || "").toLowerCase().trim();
-        if (seedLang && candLang && candLang !== seedLang) {
-          return; // Strictly reject cross-language songs
-        }
+      if (candidateDeduplicator.has(formatted)) return;
+      if (rawCandidateMap.has(sId) || rawCandidateMap.has(cleanId)) return;
 
-        // Strict Content-Type Filter: Vocal songs must follow vocal songs; BGM follows BGM
-        if (seedProfile.isBgm !== candProfile.isBgm) {
-          return; // Strictly reject cross-type songs
-        }
-
-        if (!formatted.language && seedLang) {
-          formatted.language = seedLang;
-        }
-        rawCandidateMap.set(sId, formatted);
+      // Strict Language Filter: Never allow cross-language tracks into candidate pool
+      const candProfile = classifySongDetailed(formatted);
+      const candLang = candProfile.language || extractLanguage(formatted) || (formatted.language || "").toLowerCase().trim();
+      if (seedLang && candLang && candLang !== seedLang) {
+        return; // Strictly reject cross-language songs
       }
+
+      // Strict Content-Type Filter: Vocal songs must follow vocal songs; BGM follows BGM
+      if (seedProfile.isBgm !== candProfile.isBgm) {
+        return; // Strictly reject cross-type songs
+      }
+
+      if (!formatted.language && seedLang) {
+        formatted.language = seedLang;
+      }
+
+      candidateDeduplicator.add(formatted);
+      rawCandidateMap.set(sId, formatted);
     };
 
     // -------------------------------------------------------------
-    // 1. Fetch Official Regional Top Charts for seedLang (Stage A)
+    // 1. Fetch Candidates (Algorithmic, Station, and Regional Charts)
     // -------------------------------------------------------------
     const chartIdsToFetch = [];
     if (REGIONAL_CHART_PLAYLISTS[seedLang]) {
@@ -418,18 +427,7 @@ export async function GET(request) {
         : Promise.resolve(null),
     ]);
 
-    // Ingest official regional top chart songs
-    if (chartResults.status === "fulfilled" && Array.isArray(chartResults.value)) {
-      for (const songList of chartResults.value) {
-        if (Array.isArray(songList)) {
-          songList.forEach((item, idx) => {
-            addCandidate(item, { chartRank: idx + 1, isTrending: true, source: "regional_chart" });
-          });
-        }
-      }
-    }
-
-    // Ingest algorithmic recommendations (reco.getreco)
+    // Priority 1: Ingest algorithmic recommendations directly tailored to seed song (reco.getreco)
     if (recoRes.status === "fulfilled" && recoRes.value?.ok) {
       try {
         const recoData = await recoRes.value.json();
@@ -442,7 +440,7 @@ export async function GET(request) {
       } catch (_) { }
     }
 
-    // Ingest WebRadio entity station songs
+    // Priority 2: Ingest WebRadio entity station songs
     if (stationRes.status === "fulfilled" && stationRes.value?.ok) {
       try {
         const stationData = await stationRes.value.json();
@@ -462,6 +460,7 @@ export async function GET(request) {
         }
       } catch (_) { }
     }
+
 
     // -------------------------------------------------------------
     // 2. Targeted Anchor-Specific Contextual Queries
@@ -535,7 +534,20 @@ export async function GET(request) {
     }
 
     // -------------------------------------------------------------
-    // 3. Merge Compatible Curated Catalog Candidates
+    // 3. Ingest Balanced Regional Top Chart Discovery (Top 15 items)
+    // -------------------------------------------------------------
+    if (chartResults.status === "fulfilled" && Array.isArray(chartResults.value)) {
+      for (const songList of chartResults.value) {
+        if (Array.isArray(songList)) {
+          songList.slice(0, 15).forEach((item, idx) => {
+            addCandidate(item, { chartRank: idx + 1, isTrending: true, source: "regional_chart" });
+          });
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 4. Merge Compatible Curated Catalog Candidates
     // (Strictly filtered by matching language AND mood/energy compatibility)
     // -------------------------------------------------------------
     let langCurated = [];
@@ -561,8 +573,29 @@ export async function GET(request) {
       return false;
     });
 
-    const shuffledCurated = [...compatibleCurated].sort(() => Math.random() - 0.5);
-    for (const track of shuffledCurated) {
+    // Anti-repetition: parse recently queued tracks in this session
+    const recentQueueSet = new Set(
+      recentQueueIdsParam
+        ? recentQueueIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
+        : []
+    );
+
+    const isCuratedRecent = (t) => {
+      const tid = String(t.id || "");
+      const cid = normalizeTrackId(tid);
+      const title = (t.title || t.song || "").toLowerCase().trim();
+      return (
+        recentQueueSet.has(tid) ||
+        recentQueueSet.has(cid) ||
+        (title && (recentQueueSet.has(title) || recentQueueSet.has(`title:${title}`)))
+      );
+    };
+
+    const freshCurated = compatibleCurated.filter((t) => !isCuratedRecent(t)).sort(() => Math.random() - 0.5);
+    const usedCurated = compatibleCurated.filter((t) => isCuratedRecent(t)).sort(() => Math.random() - 0.5);
+    const prioritizedCurated = [...freshCurated, ...usedCurated];
+
+    for (const track of prioritizedCurated) {
       if (track && track.id && String(track.id) !== String(songId) && String(track.id) !== cleanSongId && !excludeIdSet.has(String(track.id))) {
         const tid = String(track.id);
         if (!rawCandidateMap.has(tid)) {
@@ -581,7 +614,9 @@ export async function GET(request) {
         const candProfile = classifySongDetailed(track);
         return seedProfile.isBgm === candProfile.isBgm;
       });
-      for (const track of relaxedCurated) {
+      const freshRelaxed = relaxedCurated.filter((t) => !isCuratedRecent(t)).sort(() => Math.random() - 0.5);
+      const usedRelaxed = relaxedCurated.filter((t) => isCuratedRecent(t)).sort(() => Math.random() - 0.5);
+      for (const track of [...freshRelaxed, ...usedRelaxed]) {
         if (track && track.id && String(track.id) !== String(songId) && String(track.id) !== cleanSongId && !excludeIdSet.has(String(track.id))) {
           const tid = String(track.id);
           if (!rawCandidateMap.has(tid)) {
@@ -598,16 +633,11 @@ export async function GET(request) {
 
     const candidatePool = Array.from(rawCandidateMap.values());
 
-    // Apply transparent 100-Point Queue Algorithm & Sequencing Layer
-    const recentQueueSet = new Set(
-      recentQueueIdsParam
-        ? recentQueueIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
-        : []
-    );
-
-    const rankedQueue = generateRecommendedQueue(seedDetails, candidatePool, {
+    // Apply transparent 100-Point Queue Algorithm & Sequencing Layer via Adaptive Layer
+    const rankedQueue = buildAdaptiveQueue(seedDetails, candidatePool, {
       excludeIds: excludeIdSet,
       recentQueueTrackIds: recentQueueSet,
+      recentlyRecommendedIds: recentQueueSet,
       maxResults: 20,
     });
 
@@ -627,7 +657,12 @@ export async function GET(request) {
   } catch (err) {
     console.error("[Recommendations] GET handler error:", err);
     // Graceful fallback response: return matching regional catalog instead of 500
-    const fallbackList = MALAYALAM_HITS.slice(0, 20);
+    let fallbackList = MALAYALAM_HITS.slice(0, 20);
+    if (seedDetails?.language === "tamil") fallbackList = TAMIL_HITS.slice(0, 20);
+    else if (seedDetails?.language === "hindi") fallbackList = HINDI_BESTS_TRACKS.slice(0, 20);
+    else if (seedDetails?.language === "english") fallbackList = ENGLISH_VIBES_TRACKS.slice(0, 20);
+    else if (seedDetails?.language === "phonk") fallbackList = BEAST_PHONKS_TRACKS.slice(0, 20);
+
     return NextResponse.json({
       success: true,
       source: "fallback_curated",

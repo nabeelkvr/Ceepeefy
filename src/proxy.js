@@ -11,7 +11,9 @@ export function proxy(request) {
   // 1. Allow public static assets and files
   if (
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/api/audio") || // Public audio proxy if any
+    pathname.startsWith("/api/audio") || // Public audio proxy
+    pathname.startsWith("/api/social") || // Public social downloader proxy
+    pathname.startsWith("/media/") || // Public media assets
     pathname === "/favicon.ico" ||
     pathname === "/favicon.svg" ||
     pathname === "/favicon.png" ||
@@ -25,7 +27,9 @@ export function proxy(request) {
     pathname.endsWith(".jpeg") ||
     pathname.endsWith(".svg") ||
     pathname.endsWith(".webp") ||
-    pathname.endsWith(".ico")
+    pathname.endsWith(".ico") ||
+    pathname.endsWith(".mp4") ||
+    pathname.endsWith(".mp3")
   ) {
     return NextResponse.next();
   }

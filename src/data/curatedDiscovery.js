@@ -3,7 +3,7 @@
  * High-fidelity playlists, Malayalam hits, Hindi Bests, Tamil Hits, and English Vibes.
  */
 
-import { NOCTURNE_TRACKS, NOCTURNE_PLAYLISTS } from "./nocturneData";
+import { NOCTURNE_TRACKS, NOCTURNE_PLAYLISTS } from "./nocturneData.js";
 
 // 1. Curated Malayalam Hits (Extensive library for daily rotation)
 export const MALAYALAM_HITS = [
@@ -20,7 +20,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/202/Aavesham-Original-Motion-Picture-Soundtrack-Malayalam-2024-20250910150630-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/202/ba6006006a2f40e6b20b5ced32cc2885_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-JkEtsMPN",
@@ -35,7 +35,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/202/Aavesham-Original-Motion-Picture-Soundtrack-Malayalam-2024-20250910150630-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/202/b488cef5bfd15a995dcc4fcc455b71ec_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-ptYUdzEG",
@@ -50,7 +50,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/202/Aavesham-Original-Motion-Picture-Soundtrack-Malayalam-2024-20250910150630-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/202/2e8ce109866b92c79404e8f8961fd149_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-zDRb_KY2",
@@ -65,7 +65,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/060/Khalifa-Malayalam-2026-20260918134359-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/060/1480a90c55de485489a9c6be58e8c6e8_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-rrEdJO1O",
@@ -80,7 +80,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/374/Scene-Mone-From-RDX-Malayalam-2023-20250130073139-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/374/42ab42c788c088c59424e7ab54207cc2_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-JE0kzqt5",
@@ -95,7 +95,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/374/RDX-Malayalam-2023-20250130073126-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/374/d7c80807d00007894f3c0d6ee28f6aa4_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-alrMYnDu",
@@ -110,7 +110,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/850/Halaballoo-From-RDX-Malayalam-2023-20250130063141-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/850/945cebd02000ec2cc545622d138642ca_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-DUjOqjSk",
@@ -125,7 +125,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/934/Manjummel-Boys-Original-Motion-Picture-Soundtrack-Malayalam-2024-20250905071140-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/934/a907bd3ca1d14ac2b04b7ab10a0ddcd1_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-x3tstLGN",
@@ -140,7 +140,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/868/Ek-Tha-Tiger-Hindi-2012-20190329150659-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/868/36962e19d37088008f2fbdb900d450ab_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-EIpO9VvY",
@@ -155,7 +155,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/427/Mini-Maharani-From-Premalu-Malayalam-2024-20260204163310-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/427/eb593e63997e93a88e3292404f7a26af_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-twusMohy",
@@ -170,7 +170,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/869/Hridayam-Side-A-Original-Motion-Picture-Soundtrack-Malayalam-2022-20250910150631-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/869/0d5201180e693068e5ccf686a2db0689_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-AvcD5U-D",
@@ -185,7 +185,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/162/Kalyana-Kacheri-Malayalam-2022-20231130070837-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/162/2bb062168c2da7c7824a3e2b50e77b7b_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-lmo3DLav",
@@ -200,7 +200,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/366/Parudeesa-From-Bheeshma-Parvam-Malayalam-2023-20230330100936-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/366/b79a284955acb4b56fecee851cfd5aad_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-Km35Buat",
@@ -215,7 +215,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/196/Rathipushpam-From-Bheeshma-Parvam-Malayalam-2023-20230330094008-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/196/01bd85b36cf1d0069e1a2d00875a7344_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-4tpEcBbk",
@@ -230,7 +230,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/453/Romancham-Malayalam-2023-20230216173246-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/453/9b96c77723afa9b9595f0e9c6d93cd65_sar_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-lNaqc1g6",
@@ -245,7 +245,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/425/Manjal-Veyil-Maalaiyilae-Tamil-2023-20230503221700-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/425/073b64635584273c85ce7ec9a30c2311_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-ACjx0hSt",
@@ -260,7 +260,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/358/Pavizha-Mazha-Athiran-Malayalam-English-2019-20200303041659-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/358/08d26dcfdb8c470dfe7f3d701ec4b2eb_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-VnFY0FM_",
@@ -275,7 +275,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/620/Madhura-Manohara-Moham-Malayalam-2023-20230627172105-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/620/af937a5c5f66f6ae1724e3443bf9cb24_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-uMQVhMWW",
@@ -290,7 +290,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/222/Varane-Avashyamund-Malayalam-2020-20231004221031-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/222/74f1fdfdb3939e54149297c479cb4826_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-NXAOgpEw",
@@ -305,7 +305,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/017/Thallumaala-Malayalam-2022-20230110143259-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/017/66022c8154d1242d501efdf98bb394f3_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-jpsPFVxI",
@@ -320,7 +320,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/614/Love-Action-Drama-Malayalam-2019-20191122065339-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/614/07a3844d9680dfbdcae8785054135e90_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-fT4JZqBO",
@@ -335,7 +335,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/993/Kumbalangi-Nights-Malayalam-2019-20260210193755-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/993/84d3c0a7f13ef6091b16a9c31c5540b2_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-5SboKYdp",
@@ -350,7 +350,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/140/Minnal-Murali-Malayalam-2021-20220118112804-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/140/3720e673743a94aae0b4d5cf9d04e1a7_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-JWg0ED0Q",
@@ -365,7 +365,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/665/Premam-Malayalam-2015-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/665/64fe9e59b56dfb5f644e9e461923979b_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-CQQZMi4d",
@@ -380,7 +380,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/253/Vinnathaandi-Varuvaayaa-Tamil-2010-20190731134123-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/253/82c2c39505a7c90500d883a3c9f49415_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-6WdICbcs",
@@ -395,7 +395,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/348/Anuraga-Karikkin-Vellam-Malayalam-2016-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/348/e9b34ddc315123788ce4ed358997a925_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-7uHqS8QR",
@@ -410,7 +410,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/800/ARM-Original-Motion-Picture-Soundtrack-Malayalam-2024-20250910144027-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/800/5d1d6c76f2a7c88bc27b54927e0b9dac_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-OSVscFyH",
@@ -425,7 +425,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/827/Member-Rameshan-9aam-Ward-Malayalam-2021-20220224161937-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/827/6c2486cdf4b7bf4ae271e130f627a5a6_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-JLUcRqF1",
@@ -440,7 +440,7 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/017/Thallumaala-Malayalam-2022-20230110143259-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/017/463b8f7f8ed25b11f24757f5e7f0bf76_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
   },
   {
     "id": "track-yV6Ezm7o",
@@ -455,11 +455,161 @@ export const MALAYALAM_HITS = [
     "coverUrl": "https://c.saavncdn.com/017/Thallumaala-Malayalam-2022-20230110143259-500x500.jpg",
     "audioUrl": "https://aac.saavncdn.com/017/19451f6bde7e61ee8753387543e4633b_320.mp4",
     "genre": "Popular",
-    "language": ""
+    "language": "malayalam"
+  },
+  {
+    "id": "track-aluva-puzha-premam",
+    "title": "Aluva Puzha",
+    "artist": "Vineeth Sreenivasan, Rajesh Murugesan",
+    "album": "Premam",
+    "movieName": "Premam",
+    "duration": 210,
+    "durationFormatted": "3:30",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/665/Premam-Malayalam-2015-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/665/1cb0efec80e462d47055726e6443c683_320.mp4",
+    "genre": "Soundtrack",
+    "language": "malayalam"
+  },
+  {
+    "id": "track-vathikkalu-vellaripravu",
+    "title": "Vathikkalu Vellaripravu",
+    "artist": "Arjun Chandy, Nithya Mammen, M Jayachandran",
+    "album": "Sufiyum Sujatayum",
+    "movieName": "Sufiyum Sujatayum",
+    "duration": 220,
+    "durationFormatted": "3:40",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/978/Sufiyum-Sujatayum-Malayalam-2020-20200703120155-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/978/84313f821e25e9e0499e9009f470a1a0_320.mp4",
+    "genre": "Melody",
+    "language": "malayalam"
+  },
+  {
+    "id": "track-jeevamshamayi-theevandi",
+    "title": "Jeevamshamayi",
+    "artist": "K.S. Harisankar, Shreya Ghoshal, Kailas Menon",
+    "album": "Theevandi",
+    "movieName": "Theevandi",
+    "duration": 235,
+    "durationFormatted": "3:55",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/839/Theevandi-Malayalam-2018-20180706-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/839/72e811c7590d96d91f21132204bb8bf4_320.mp4",
+    "genre": "Romantic",
+    "language": "malayalam"
+  },
+  {
+    "id": "track-kanneer-poovinte",
+    "title": "Kanneer Poovinte",
+    "artist": "M.G. Sreekumar, Johnson",
+    "album": "Kireedam",
+    "movieName": "Kireedam",
+    "duration": 240,
+    "durationFormatted": "4:00",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/358/Pavizha-Mazha-Athiran-Malayalam-English-2019-20200303041659-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/358/eefba1dfd1668c2cf9245598ba5cb19e_320.mp4",
+    "genre": "Classic",
+    "language": "malayalam"
+  },
+  {
+    "id": "track-aalolam-lad",
+    "title": "Aalolam",
+    "artist": "K.S. Harisankar, Gowry Lekshmi, Shaan Rahman",
+    "album": "Love Action Drama",
+    "movieName": "Love Action Drama",
+    "duration": 215,
+    "durationFormatted": "3:35",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/614/Love-Action-Drama-Malayalam-2019-20191122065339-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/614/c101a4e1ca15b5b4859a7f3ef4e52516_320.mp4",
+    "genre": "Romantic",
+    "language": "malayalam"
+  },
+  {
+    "id": "track-thumbi-vaa-olangal",
+    "title": "Thumbi Vaa",
+    "artist": "S. Janaki, Ilaiyaraaja",
+    "album": "Olangal",
+    "movieName": "Olangal",
+    "duration": 250,
+    "durationFormatted": "4:10",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/665/Premam-Malayalam-2015-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/665/1cb0efec80e462d47055726e6443c683_320.mp4",
+    "genre": "Classic",
+    "language": "malayalam"
+  },
+  {
+    "id": "track-sreeragamo-pavithram",
+    "title": "Sreeragamo",
+    "artist": "K.J. Yesudas, Sharreth",
+    "album": "Pavithram",
+    "movieName": "Pavithram",
+    "duration": 260,
+    "durationFormatted": "4:20",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/348/Anuraga-Karikkin-Vellam-Malayalam-2016-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/348/5ae88a6d8591f4f46a2a4b8eb2266838_320.mp4",
+    "genre": "Classical",
+    "language": "malayalam"
+  },
+  {
+    "id": "track-akale-charlie",
+    "title": "Akale",
+    "artist": "Malgudi Subha, Gopi Sundar",
+    "album": "Charlie",
+    "movieName": "Charlie",
+    "duration": 210,
+    "durationFormatted": "3:30",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/620/Madhura-Manohara-Moham-Malayalam-2023-20230627172105-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/620/bd98991d8e578c777e48cf213e4b7724_320.mp4",
+    "genre": "Soulful",
+    "language": "malayalam"
+  },
+  {
+    "id": "track-sanjith-hegde-malayalam",
+    "title": "Sanjaramaayi",
+    "artist": "Sanjith Hegde, Gopi Sundar",
+    "album": "Ente Ummante Peru",
+    "movieName": "Ente Ummante Peru",
+    "duration": 210,
+    "durationFormatted": "3:30",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/222/Varane-Avashyamund-Malayalam-2020-20231004221031-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/222/a9bf19d854da0a7ba60ca4666f7f02fc_320.mp4",
+    "genre": "Melody",
+    "language": "malayalam"
+  },
+  {
+    "id": "track-kanne-kanne-ayisha",
+    "title": "Kanne Kanne",
+    "artist": "M. Jayachandran, Ahi Ajayan",
+    "album": "Ayisha",
+    "movieName": "Ayisha",
+    "duration": 205,
+    "durationFormatted": "3:25",
+    "badge": "Master",
+    "badgeType": "tertiary",
+    "coverUrl": "https://c.saavncdn.com/453/Romancham-Malayalam-2023-20230216173246-500x500.jpg",
+    "audioUrl": "https://aac.saavncdn.com/453/43b7beab320f7ef824eb9f303fe20f26_320.mp4",
+    "genre": "Melody",
+    "language": "malayalam"
   }
+
 ];
 
-// 2. Hindi Bests (Top Trending Hindi Songs with Verified Artwork)
 export const HINDI_BESTS_TRACKS = [
   {
     "id": "track-no4U0SP0",

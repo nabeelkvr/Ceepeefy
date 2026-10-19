@@ -53,14 +53,14 @@ export default function PlaylistSkeleton() {
       </div>
 
       {/* Tracklist Table Skeleton */}
-      <div className="px-4 sm:px-6 md:px-8 pt-6 flex flex-col gap-3">
+      <div className="px-2 sm:px-6 md:px-8 pt-6 flex flex-col gap-3">
         {/* Table Header */}
-        <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-4 px-3 sm:px-4 py-2 border-b border-white/10">
-          <div className="h-3 w-4 rounded bg-white/10 skeleton-shimmer mx-auto" />
+        <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-4 px-1.5 sm:px-4 py-2 border-b border-white/10">
+          <div className="h-3 w-3 sm:w-4 rounded bg-white/10 skeleton-shimmer mx-auto" />
           <div className="h-3 w-16 rounded bg-white/10 skeleton-shimmer" />
           <div className="h-3 w-14 rounded bg-white/10 skeleton-shimmer hidden md:block" />
-          <div className="h-3 w-12 rounded bg-white/10 skeleton-shimmer hidden md:block ml-auto" />
-          <div className="h-3 w-6 rounded bg-white/10 skeleton-shimmer ml-auto" />
+          <div className="h-3 w-8 sm:w-12 rounded bg-white/10 skeleton-shimmer ml-auto" />
+          <div className="h-3 w-6 rounded bg-white/10 skeleton-shimmer hidden md:block ml-auto" />
         </div>
 
         {/* 8 Track Rows */}
@@ -68,14 +68,14 @@ export default function PlaylistSkeleton() {
           {[1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
             <div
               key={idx}
-              className="grid grid-cols-[2rem_minmax(0,1fr)_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-2 sm:gap-4 px-3 sm:px-4 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.03]"
+              className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-4 px-1.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.03]"
             >
               {/* # Index */}
-              <div className="h-3 w-4 rounded bg-white/10 skeleton-shimmer mx-auto" />
+              <div className="h-3 w-3 sm:w-4 rounded bg-white/10 skeleton-shimmer mx-auto" />
 
               {/* Title & Artist & Thumbnail */}
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-[3px] bg-white/10 skeleton-shimmer shrink-0" />
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-[3px] bg-white/10 skeleton-shimmer shrink-0" />
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <div
                     className="h-3.5 rounded-full bg-white/15 skeleton-shimmer"
@@ -97,13 +97,13 @@ export default function PlaylistSkeleton() {
               </div>
 
               {/* Duration */}
-              <div className="hidden md:flex justify-end">
-                <div className="h-3 w-10 rounded-full bg-white/10 skeleton-shimmer" />
+              <div className="flex justify-end">
+                <div className="h-3 w-8 sm:w-10 rounded-full bg-white/10 skeleton-shimmer" />
               </div>
 
               {/* Action / Menu button */}
-              <div className="flex justify-end">
-                <div className="w-7 h-7 rounded-full bg-white/10 skeleton-shimmer" />
+              <div className="flex justify-end items-center gap-1">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 skeleton-shimmer" />
               </div>
             </div>
           ))}

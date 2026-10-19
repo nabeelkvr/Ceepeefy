@@ -21,8 +21,13 @@ export default function Header({ onToggleMobileMenu }) {
   const [localQuery, setLocalQuery] = useState(searchQuery || "");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const inputRef = useRef(null);
   const notificationsRef = useRef(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Close notifications on outside click
   useEffect(() => {
@@ -281,20 +286,21 @@ export default function Header({ onToggleMobileMenu }) {
               setIsNotificationsOpen(false);
               setIsProfileOpen((prev) => !prev);
             }}
-            className={`w-8 h-8 md:w-9 md:h-9 2xl:w-10 2xl:h-10 rounded-full p-0.5 cursor-pointer transition-all ${user
+            className={`w-8 h-8 md:w-9 md:h-9 2xl:w-10 2xl:h-10 rounded-full p-0.5 cursor-pointer transition-all ${(isMounted && user)
               ? "bg-gradient-to-tr from-primary via-cyan-300 to-secondary shadow-[0_0_14px_rgba(76,215,246,0.45)] hover:scale-105"
               : "bg-gradient-to-tr from-primary to-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.4)] hover:scale-105"
               }`}
-            title={user ? `Profile (${user.name})` : "Profile (New to Ceepeefy)"}
+            title={(isMounted && user) ? `Profile (${user.name})` : "Profile (New to Ceepeefy)"}
+            suppressHydrationWarning
           >
-            <div className="w-full h-full rounded-full bg-surface-container-lowest flex items-center justify-center text-primary font-bold text-xs">
-              {user?.avatar ? (
+            <div className="w-full h-full rounded-full bg-surface-container-lowest flex items-center justify-center text-primary font-bold text-xs" suppressHydrationWarning>
+              {(isMounted && user?.avatar) ? (
                 <img
                   src={user.avatar}
                   alt={user.name}
                   className="w-full h-full rounded-full object-cover"
                 />
-              ) : user?.name ? (
+              ) : (isMounted && user?.name) ? (
                 user.name[0].toUpperCase()
               ) : (
                 <span className="material-symbols-outlined text-[19px]">person</span>
