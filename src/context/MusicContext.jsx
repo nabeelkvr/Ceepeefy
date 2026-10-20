@@ -308,6 +308,18 @@ export const MusicProvider = ({ children }) => {
         }
       } catch {}
 
+      // Restore category assignments from cloud account snapshot
+      if (cloudAccountData?.playlistCategories && typeof cloudAccountData.playlistCategories === "object") {
+        try {
+          const currentStored = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+          const mergedCategories = {
+            ...cloudAccountData.playlistCategories,
+            ...currentStored,
+          };
+          localStorage.setItem("ceepeefy_playlist_categories", JSON.stringify(mergedCategories));
+        } catch {}
+      }
+
       // 3. Apply state updates non-destructively: NEVER overwrite playlists with tracks by empty playlists
       if (cloudPlaylists !== null || cloudAccountData?.customPlaylists) {
         setCustomPlaylists((prev) => {
@@ -332,6 +344,11 @@ export const MusicProvider = ({ children }) => {
             ...localList.map((p) => String(p.id)),
           ]);
 
+          let activeStoredCategories = {};
+          try {
+            activeStoredCategories = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+          } catch {}
+
           const merged = [];
           for (const id of allIds) {
             const cl = cloudMap.get(id);
@@ -353,7 +370,10 @@ export const MusicProvider = ({ children }) => {
               savePlaylistToCloud({ ...base, tracks }, userId).catch(() => {});
             }
 
+            const explicitStoredCat = activeStoredCategories[String(id)] || null;
+
             const resolvedCategory =
+              explicitStoredCat ||
               base.category ||
               ac?.category ||
               lc?.category ||
@@ -571,6 +591,13 @@ export const MusicProvider = ({ children }) => {
           setLikedSongsMap(accountData.likedSongsMap);
         }
         if (Array.isArray(accountData.customPlaylists)) setCustomPlaylists(accountData.customPlaylists);
+        if (accountData.playlistCategories && typeof accountData.playlistCategories === "object") {
+          try {
+            const currentStored = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+            const merged = { ...accountData.playlistCategories, ...currentStored };
+            localStorage.setItem("ceepeefy_playlist_categories", JSON.stringify(merged));
+          } catch {}
+        }
         if (Array.isArray(accountData.recentlyPlayedTracks)) {
           const valid = accountData.recentlyPlayedTracks
             .map(normalizeTrack)
@@ -969,6 +996,13 @@ export const MusicProvider = ({ children }) => {
         } catch { }
       }
 
+      let storedCategories = overrides.playlistCategories;
+      if (!storedCategories) {
+        try {
+          storedCategories = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+        } catch {}
+      }
+
       const accountData = {
         ...currentStored,
         likedSongIds: nextLikedIds,
@@ -977,6 +1011,7 @@ export const MusicProvider = ({ children }) => {
         recentlyPlayedTracks: nextRecents,
         recentlyPlayed: nextRecents.map((t) => t.id),
         selfMixes: nextMixes,
+        playlistCategories: storedCategories || {},
         lastUpdated: new Date().toISOString(),
       };
 
@@ -1353,8 +1388,9 @@ export const MusicProvider = ({ children }) => {
     const idStr = String(id);
 
     // Save override to localStorage
+    let storedCategories = {};
     try {
-      const storedCategories = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+      storedCategories = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
       storedCategories[idStr] = cleanCategory;
       localStorage.setItem("ceepeefy_playlist_categories", JSON.stringify(storedCategories));
     } catch { }
@@ -1370,11 +1406,18 @@ export const MusicProvider = ({ children }) => {
         updatedCustomPlaylist = {
           ...current,
           category: cleanCategory,
+          sourceMeta: {
+            ...(current.sourceMeta || {}),
+            category: cleanCategory,
+          },
         };
         const next = [...prev];
         next[idx] = updatedCustomPlaylist;
         try {
-          persistAccountData({ customPlaylists: next });
+          persistAccountData({
+            customPlaylists: next,
+            playlistCategories: storedCategories,
+          });
         } catch { }
         return next;
       }
@@ -1389,9 +1432,16 @@ export const MusicProvider = ({ children }) => {
     }
 
     // 2. Check addedPlaylists
-    setAddedPlaylists((prev) =>
-      prev.map((p) => (String(p.id) === idStr ? { ...p, category: cleanCategory } : p))
-    );
+    setAddedPlaylists((prev) => {
+      const next = prev.map((p) => (String(p.id) === idStr ? { ...p, category: cleanCategory } : p));
+      try {
+        persistAccountData({
+          addedPlaylists: next,
+          playlistCategories: storedCategories,
+        });
+      } catch {}
+      return next;
+    });
 
     return true;
   };
@@ -1600,11 +1650,41 @@ export const MusicProvider = ({ children }) => {
       return { success: false, message: "Update operation is already in progress for this playlist." };
     }
 
-    const playlist = customPlaylists.find((p) => String(p.id) === String(playlistId));
+    const currentUserId = getAccountUserId(user);
+
+    // 1. Resolve playlist from memory or fallback to cloud database
+    let playlist =
+      customPlaylists.find((p) => String(p.id) === String(playlistId)) ||
+      addedPlaylists.find((p) => String(p.id) === String(playlistId));
+
+    if (!playlist && isSupabaseConfigured()) {
+      try {
+        const cloudPlaylists = await fetchUserPlaylistsFromCloud(currentUserId);
+        if (Array.isArray(cloudPlaylists)) {
+          playlist = cloudPlaylists.find((p) => String(p.id) === String(playlistId));
+        }
+      } catch (e) {
+        console.warn("[MusicContext] Cloud fallback lookup notice:", e);
+      }
+    }
+
     if (!playlist) {
       return { success: false, message: "Playlist not found in your custom playlists." };
     }
 
+    // 2. Resolve existing tracks - fetch from cloud if memory tracks are empty
+    let existingTracks = Array.isArray(playlist.tracks) ? [...playlist.tracks] : [];
+    if (existingTracks.length === 0 && isSupabaseConfigured()) {
+      try {
+        const cloudTracks = await fetchPlaylistTracksFromCloud(playlistId);
+        if (Array.isArray(cloudTracks) && cloudTracks.length > 0) {
+          existingTracks = cloudTracks;
+          playlist = { ...playlist, tracks: existingTracks };
+        }
+      } catch {}
+    }
+
+    // 3. Resolve Spotify playlist ID
     const spotifyId =
       playlist.sourceMeta?.spotifyId ||
       playlist.source_meta?.spotifyId ||
@@ -1614,7 +1694,8 @@ export const MusicProvider = ({ children }) => {
         playlist.sourceMeta?.spotifyLink ||
         playlist.spotifyUrl ||
         playlist.source_meta?.spotifyUrl ||
-        playlist.description
+        playlist.description ||
+        playlistId
       );
 
     if (!spotifyId) {
@@ -1627,7 +1708,7 @@ export const MusicProvider = ({ children }) => {
       const baselineSnapshot =
         Array.isArray(playlist.sourceMeta?.syncedSnapshot) && playlist.sourceMeta.syncedSnapshot.length > 0
           ? playlist.sourceMeta.syncedSnapshot
-          : buildSnapshotFromExistingPlaylist(playlist);
+          : buildSnapshotFromExistingPlaylist({ tracks: existingTracks });
 
       const res = await fetch("/api/spotify/sync", {
         method: "POST",
@@ -1636,17 +1717,29 @@ export const MusicProvider = ({ children }) => {
           playlistId,
           spotifyId,
           currentSnapshot: baselineSnapshot,
-          existingTracks: playlist.tracks || [],
+          existingTracks,
         }),
       });
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
+        if (res.status === 401 || errorData?.code === "SPOTIFY_AUTH_EXPIRED" || errorData?.code === "UNAUTHORIZED") {
+          return {
+            success: false,
+            message: "Spotify authorization expired. Please reauthorize your Spotify connection.",
+          };
+        }
         throw new Error(errorData.error || `HTTP ${res.status}: Failed to reach Spotify sync service.`);
       }
 
       const syncData = await res.json();
       if (!syncData.success) {
+        if (syncData.code === "SPOTIFY_AUTH_EXPIRED" || syncData.code === "UNAUTHORIZED") {
+          return {
+            success: false,
+            message: "Spotify authorization expired. Please reauthorize your Spotify connection.",
+          };
+        }
         return {
           success: false,
           message: syncData.error || "Failed to retrieve playlist updates from Spotify.",
@@ -1659,11 +1752,11 @@ export const MusicProvider = ({ children }) => {
           success: true,
           count: 0,
           message: "Playlist is already up to date.",
+          updatedPlaylist: playlist,
         };
       }
 
       // Deduplicate additions against existing tracks using canonical track identity
-      const existingTracks = playlist.tracks || [];
       const deduplicator = createTrackDeduplicator(existingTracks);
       const newTracks = [];
       const newSnapshotEntries = [];
@@ -1708,16 +1801,29 @@ export const MusicProvider = ({ children }) => {
           success: true,
           count: 0,
           message: "Playlist is already up to date.",
+          updatedPlaylist: playlist,
         };
+      }
+
+      // Preserve manually assigned category - never reset to Mixed or default
+      let preservedCategory = playlist.category;
+      try {
+        const storedCats = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
+        if (storedCats[String(playlistId)]) {
+          preservedCategory = storedCats[String(playlistId)];
+        }
+      } catch {}
+      if (!preservedCategory) {
+        preservedCategory = playlist.sourceMeta?.category || "Mixed";
       }
 
       // Additive update: append new tracks preserving existing tracks & ordering
       const updatedTracks = [...existingTracks, ...newTracks];
       const formattedDuration = formatPlaylistDuration(updatedTracks);
-      const currentUserId = getAccountUserId(user);
 
       const updatedSourceMeta = {
         ...(playlist.sourceMeta || {}),
+        category: preservedCategory,
         spotifyId: syncData.spotifyMetadata?.id || spotifyId,
         spotifyUrl: playlist.sourceMeta?.spotifyUrl || `https://open.spotify.com/playlist/${spotifyId}`,
         lastSyncedAt: Date.now(),
@@ -1731,6 +1837,7 @@ export const MusicProvider = ({ children }) => {
 
       const updatedPlaylist = {
         ...playlist,
+        category: preservedCategory,
         tracks: updatedTracks,
         songsCount: updatedTracks.length,
         duration: formattedDuration,
@@ -1741,9 +1848,10 @@ export const MusicProvider = ({ children }) => {
 
       // Persist to local state & account storage
       setCustomPlaylists((prev) => {
-        const next = prev.map((p) =>
-          String(p.id) === String(playlistId) ? updatedPlaylist : p
-        );
+        const exists = prev.some((p) => String(p.id) === String(playlistId));
+        const next = exists
+          ? prev.map((p) => (String(p.id) === String(playlistId) ? updatedPlaylist : p))
+          : [updatedPlaylist, ...prev];
         try {
           localStorage.setItem(
             getAccountStorageKey("ceepeefy_custom_playlists", currentUserId),
@@ -1765,6 +1873,7 @@ export const MusicProvider = ({ children }) => {
         success: true,
         count: newTracks.length,
         message: `Successfully added ${newTracks.length} new track${newTracks.length > 1 ? "s" : ""} from Spotify.`,
+        updatedPlaylist,
       };
     } catch (err) {
       console.error("[MusicContext] updateSpotifyPlaylist error:", err);

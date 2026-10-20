@@ -48,7 +48,9 @@ export default function PlaylistsPage() {
   const [activeCategory, setActiveCategory] = useState(() => {
     if (typeof window !== "undefined") {
       try {
-        const saved = sessionStorage.getItem("ceepeefy_playlist_active_category");
+        const saved =
+          sessionStorage.getItem("ceepeefy_playlist_active_category") ||
+          localStorage.getItem("ceepeefy_playlist_active_category");
         if (saved && (saved === "All" || PLAYLIST_CATEGORIES.includes(saved))) {
           return saved;
         }
@@ -62,6 +64,7 @@ export default function PlaylistsPage() {
     if (typeof window !== "undefined") {
       try {
         sessionStorage.setItem("ceepeefy_playlist_active_category", cat);
+        localStorage.setItem("ceepeefy_playlist_active_category", cat);
       } catch {}
     }
   };

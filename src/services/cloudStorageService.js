@@ -136,8 +136,10 @@ export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
         isCustom: true,
         isSelfMix: isSelfMix,
         category: pl.category || pl.source_meta?.category || null,
-        source: pl.source || (pl.badge === "SPOTIFY" ? "spotify_import" : "custom"),
+        source: pl.source || (pl.badge === "SPOTIFY" || pl.source_meta?.spotifyId ? "spotify_import" : "custom"),
         sourceMeta: pl.source_meta || pl.sourceMeta || null,
+        spotifyId: pl.source_meta?.spotifyId || pl.spotifyId || null,
+        spotifyUrl: pl.source_meta?.spotifyUrl || pl.spotifyUrl || null,
       };
     });
 
@@ -242,10 +244,11 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
         playlist.coverUrl ||
         playlist.cover_url ||
         "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
+      category: playlist.category || playlist.sourceMeta?.category || "Mixed",
       curator: playlist.curator || "You",
       curator_avatar: playlist.curatorAvatar || playlist.curator_avatar || "",
-      badge: playlist.badge || (playlist.isSelfMix ? "SELF MIX" : "CUSTOM"),
-      badge_variant: playlist.badgeVariant || playlist.badge_variant || (playlist.isSelfMix ? "cyan" : "purple"),
+      badge: playlist.badge || (playlist.isSelfMix ? "SELF MIX" : (playlist.source === "spotify_import" || playlist.spotifyId || playlist.sourceMeta?.spotifyId ? "SPOTIFY" : "CUSTOM")),
+      badge_variant: playlist.badgeVariant || playlist.badge_variant || (playlist.badge === "SPOTIFY" || playlist.source === "spotify_import" || playlist.spotifyId || playlist.sourceMeta?.spotifyId ? "emerald" : (playlist.isSelfMix ? "cyan" : "purple")),
       fidelity:
         playlist.fidelity ||
         (playlist.isSelfMix ? "Self Mix • Hi-Res Lossless" : "Personal Playlist • Hi-Res Lossless"),
@@ -253,17 +256,25 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
       updated_at: new Date().toISOString(),
     };
 
+    const resolvedCategory = playlist.category || playlist.sourceMeta?.category || "Mixed";
+    const resolvedSpotifyId = playlist.spotifyId || playlist.sourceMeta?.spotifyId || null;
+    const resolvedSpotifyUrl = playlist.spotifyUrl || playlist.sourceMeta?.spotifyUrl || null;
+
     const resolvedSourceMeta = {
       ...(playlist.sourceMeta || {}),
-      category: playlist.category || playlist.sourceMeta?.category || null,
-      spotifyId: playlist.spotifyId || playlist.sourceMeta?.spotifyId || null,
-      spotifyUrl: playlist.spotifyUrl || playlist.sourceMeta?.spotifyUrl || null,
+      category: resolvedCategory,
+      spotifyId: resolvedSpotifyId,
+      spotifyUrl: resolvedSpotifyUrl,
+      syncedSnapshot: playlist.sourceMeta?.syncedSnapshot || [],
+      lastSyncedAt: playlist.sourceMeta?.lastSyncedAt || null,
+      lastSyncStatus: playlist.sourceMeta?.lastSyncStatus || null,
     };
 
     const fullRecord = {
       ...record,
+      category: resolvedCategory,
       tracks: rawTracks,
-      source: playlist.source || (playlist.badge === "SPOTIFY" ? "spotify_import" : "custom"),
+      source: playlist.source || (playlist.badge === "SPOTIFY" || resolvedSpotifyId ? "spotify_import" : "custom"),
       source_meta: resolvedSourceMeta,
     };
 

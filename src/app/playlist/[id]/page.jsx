@@ -87,6 +87,7 @@ export default function PlaylistPage() {
     updatePlaylistCategory,
     bumpPlaylistToTop,
     syncingPlaylistIds,
+    updateSpotifyPlaylist,
     fetchSpotifySyncPlan,
     commitSpotifySync,
     fetchPlaylistTracksFromCloud,
@@ -258,10 +259,16 @@ export default function PlaylistPage() {
       playlist?.sourceMeta?.spotifyLink ||
       playlist?.spotifyUrl ||
       playlist?.source_meta?.spotifyUrl ||
-      playlist?.description
+      playlist?.description ||
+      playlist?.id
     );
 
-  const isSpotifyLinked = Boolean(spotifySourceId);
+  const isSpotifyLinked = Boolean(spotifySourceId) || Boolean(
+    playlist?.badge === "SPOTIFY" ||
+    playlist?.source === "spotify_import" ||
+    playlist?.sourceMeta?.spotifyUrl ||
+    (Array.isArray(playlist?.tracks) && playlist.tracks.some((t) => t.isSpotifyTrack || t.spotifyId))
+  );
 
   const isSyncing = Boolean(syncingPlaylistIds?.has(playlist?.id) || isFetchingSync);
 
@@ -274,6 +281,45 @@ export default function PlaylistPage() {
       return () => clearTimeout(timer);
     }
   }, [syncNotice]);
+
+  const handleUpdateSpotifyPlaylist = async (e) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+
+    if (isSyncing || !playlist?.id) return;
+    setIsFetchingSync(true);
+    setSyncNotice(null);
+
+    try {
+      const result = await updateSpotifyPlaylist(playlist.id);
+      if (result.success) {
+        setSyncNotice({
+          type: result.count > 0 ? "success" : "info",
+          message:
+            result.message ||
+            (result.count > 0
+              ? `Added ${result.count} new tracks to "${playlist.title}"!`
+              : "Playlist is already up to date."),
+        });
+        if (result.updatedPlaylist) {
+          setRemotePlaylist(result.updatedPlaylist);
+        }
+      } else {
+        setSyncNotice({
+          type: "error",
+          message: result.message || "Failed to update playlist from Spotify.",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to update Spotify playlist:", err);
+      setSyncNotice({
+        type: "error",
+        message: err.message || "Network error occurred while syncing with Spotify.",
+      });
+    } finally {
+      setIsFetchingSync(false);
+    }
+  };
 
   const handleStartSync = async () => {
     if (isSyncing || !playlist?.id) return;
@@ -900,16 +946,16 @@ export default function PlaylistPage() {
                 {isSpotifyLinked && (
                   <button
                     type="button"
-                    onClick={handleStartSync}
+                    onClick={handleUpdateSpotifyPlaylist}
                     disabled={isSyncing}
                     className={`p-1.5 rounded-lg border transition-all cursor-pointer flex-shrink-0 flex items-center justify-center ${isSyncing
-                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse"
-                        : "text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 hover:border-emerald-500/50 shadow-sm"
+                        ? "bg-[#1DB954] text-black border-[#1DB954] animate-pulse"
+                        : "text-[#1DB954] hover:text-[#1DB954] bg-[#1DB954]/10 hover:bg-[#1DB954]/20 border-[#1DB954]/30 hover:border-[#1DB954]/50 shadow-sm"
                       }`}
-                    title="Sync with Spotify"
-                    aria-label="Sync with Spotify"
+                    title={isSyncing ? "Updating playlist from Spotify..." : "Update playlist from Spotify"}
+                    aria-label="Update playlist from Spotify"
                   >
-                    <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${isSyncing ? "animate-spin" : ""}`}>
+                    <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${isSyncing ? "animate-spin text-black" : "text-[#1DB954]"}`}>
                       sync
                     </span>
                   </button>
@@ -1091,20 +1137,20 @@ export default function PlaylistPage() {
             </div>
           )}
 
-          {/* Spotify Sync Button (Only for Spotify-imported playlists) */}
+          {/* Spotify Update Button (Permanent inside every imported Spotify playlist) */}
           {isSpotifyLinked && (
             <button
               type="button"
-              onClick={handleStartSync}
+              onClick={handleUpdateSpotifyPlaylist}
               disabled={isSyncing}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed ${isSyncing
-                  ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/50 shadow-[0_0_18px_rgba(16,185,129,0.4)] animate-pulse"
-                  : "bg-surface-container-high/60 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border-white/10 hover:border-emerald-500/40 shadow-sm hover:shadow-[0_0_15px_rgba(16,185,129,0.25)]"
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 active:scale-90 disabled:opacity-70 ${isSyncing
+                  ? "bg-[#1DB954] text-black border-[#1DB954] shadow-[0_0_18px_rgba(29,185,84,0.4)] animate-pulse"
+                  : "bg-surface-container-high/60 text-[#1DB954] hover:text-[#1DB954] hover:bg-[#1DB954]/15 border-white/10 hover:border-[#1DB954]/50 shadow-sm hover:shadow-[0_0_15px_rgba(29,185,84,0.25)]"
                 }`}
-              title="Sync with Spotify"
-              aria-label="Sync with Spotify"
+              title={isSyncing ? "Updating playlist from Spotify..." : "Update playlist from Spotify"}
+              aria-label="Update playlist from Spotify"
             >
-              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isSyncing ? "animate-spin" : ""}`}>
+              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isSyncing ? "animate-spin text-black" : "text-[#1DB954]"}`}>
                 sync
               </span>
             </button>

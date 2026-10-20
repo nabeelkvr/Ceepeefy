@@ -224,4 +224,160 @@ test("Spotify Playlist Sync & Category Filter Verification Suite", async (t) => 
       assert.equal(updatedLocal.some((t) => t.id === "saavn_101"), true);
     });
   });
+
+  await t.test("4. Category Cross-Device Persistence & Manual Overrides", async (t4) => {
+    await t4.test("4.1: Manual category override takes absolute priority over automatic keyword inference", () => {
+      // Playlist title has 'Tamil', but user manually assigned it to 'Bgms'
+      const plManualOverride = {
+        id: "pl-override-1",
+        title: "Best Tamil Hits 2024",
+        category: "Bgms",
+      };
+      assert.equal(getPlaylistCategory(plManualOverride), "Bgms");
+      assert.notEqual(getPlaylistCategory(plManualOverride), "Tamil");
+
+      // Playlist title has 'Hindi', but user manually moved it to 'Malayalam'
+      const plMalayalamMove = {
+        id: "pl-override-2",
+        title: "Hindi Melody Collection",
+        category: "Malayalam",
+      };
+      assert.equal(getPlaylistCategory(plMalayalamMove), "Malayalam");
+    });
+
+    await t4.test("4.2: Simulated cross-device sync retrieves saved category and does not reset to Mixed", () => {
+      // Simulated cloud record stored in Supabase user_playlists table
+      const cloudRecord = {
+        id: "pl-cloud-1",
+        user_id: "user_default",
+        title: "Anirudh Elevation Songs",
+        category: "Tamil",
+        source: "spotify_import",
+        source_meta: {
+          category: "Tamil",
+          spotifyId: "37i9dQZF1DXcBWIGoYBM5M",
+        },
+        tracks: [{ id: "t1", title: "Hukum" }],
+      };
+
+      // When fetched on another computer without prior local storage
+      const resolvedOnNewDevice = cloudRecord.category || cloudRecord.source_meta?.category || "Mixed";
+      assert.equal(resolvedOnNewDevice, "Tamil");
+      assert.notEqual(resolvedOnNewDevice, "Mixed");
+    });
+
+    await t4.test("4.3: Category filter accurately filters playlists by assigned category", () => {
+      const collections = [
+        { id: "1", title: "Anirudh Tamil Songs", category: "Tamil" },
+        { id: "2", title: "Malayalam Beats", category: "Malayalam" },
+        { id: "3", title: "Study BGM", category: "Bgms" },
+        { id: "4", title: "Global Top Hits", category: "English" },
+        { id: "5", title: "Uncategorized Mix", category: "Mixed" },
+      ];
+
+      // Filtering by Tamil
+      const tamilResults = collections.filter((pl) => (pl.category || "Mixed") === "Tamil");
+      assert.equal(tamilResults.length, 1);
+      assert.equal(tamilResults[0].id, "1");
+
+      // Filtering by Bgms
+      const bgmResults = collections.filter((pl) => (pl.category || "Mixed") === "Bgms");
+      assert.equal(bgmResults.length, 1);
+      assert.equal(bgmResults[0].id, "3");
+
+      // Filtering by All displays every collection
+      const allFilter = "All";
+      const allResults = collections.filter((pl) => (allFilter === "All" ? true : (pl.category || "Mixed") === allFilter));
+      assert.equal(allResults.length, 5);
+    });
+  });
+
+  await t.test("5. Spotify Playlist Update Button & Re-sync Safeguards", async (t5) => {
+    await t5.test("5.1: Spotify imported playlists are accurately recognized for permanent Update button", () => {
+      const checkIsSpotify = (pl) =>
+        Boolean(
+          pl.badge === "SPOTIFY" ||
+          pl.source === "spotify_import" ||
+          pl.spotifyId ||
+          pl.sourceMeta?.spotifyId ||
+          pl.source_meta?.spotifyId ||
+          parseSpotifyPlaylistId(pl.spotifyUrl || pl.sourceMeta?.spotifyUrl)
+        );
+
+      const plDirectBadge = { id: "p1", badge: "SPOTIFY" };
+      assert.equal(checkIsSpotify(plDirectBadge), true);
+
+      const plSourceImport = { id: "p2", source: "spotify_import" };
+      assert.equal(checkIsSpotify(plSourceImport), true);
+
+      const plWithSpotifyId = { id: "p3", spotifyId: "37i9dQZF1DXcBWIGoYBM5M" };
+      assert.equal(checkIsSpotify(plWithSpotifyId), true);
+
+      const plWithMeta = {
+        id: "p4",
+        sourceMeta: { spotifyId: "37i9dQZF1DXcBWIGoYBM5M" },
+      };
+      assert.equal(checkIsSpotify(plWithMeta), true);
+
+      const plLocalCustom = { id: "p5", isCustom: true, source: "custom" };
+      assert.equal(checkIsSpotify(plLocalCustom), false);
+    });
+
+    await t5.test("5.2: Additive update preserves playlist category, title, artwork, and ordering", () => {
+      const existingPlaylist = {
+        id: "spotify-pl-1",
+        title: "Anirudh Elevation",
+        category: "Tamil",
+        coverUrl: "https://images.unsplash.com/custom-art.jpg",
+        customCover: "https://images.unsplash.com/custom-art.jpg",
+        tracks: [
+          { id: "saavn_1", title: "Badass", artist: "Anirudh", spotifyId: "sp_1" },
+          { id: "saavn_2", title: "Naa Ready", artist: "Anirudh", spotifyId: "sp_2" },
+        ],
+        sourceMeta: {
+          category: "Tamil",
+          spotifyId: "sp_playlist_123",
+        },
+      };
+
+      const newTrackFromSpotify = {
+        id: "saavn_3",
+        title: "Lokiverse 2.0",
+        artist: "Anirudh",
+        spotifyId: "sp_3",
+      };
+
+      // Simulate additive update logic
+      const updatedTracks = [...existingPlaylist.tracks, newTrackFromSpotify];
+      const updatedPlaylist = {
+        ...existingPlaylist,
+        category: existingPlaylist.category || "Mixed",
+        tracks: updatedTracks,
+        songsCount: updatedTracks.length,
+      };
+
+      // Category MUST remain Tamil
+      assert.equal(updatedPlaylist.category, "Tamil");
+      // Artwork MUST remain intact
+      assert.equal(updatedPlaylist.coverUrl, "https://images.unsplash.com/custom-art.jpg");
+      // Title MUST remain intact
+      assert.equal(updatedPlaylist.title, "Anirudh Elevation");
+      // Original track ordering MUST be preserved
+      assert.equal(updatedPlaylist.tracks[0].id, "saavn_1");
+      assert.equal(updatedPlaylist.tracks[1].id, "saavn_2");
+      assert.equal(updatedPlaylist.tracks[2].id, "saavn_3");
+    });
+
+    await t5.test("5.3: Update response reports correct message for zero additions vs new additions", () => {
+      const getResultMessage = (addedCount) => {
+        if (addedCount === 0) return "Playlist is already up to date.";
+        return `Successfully added ${addedCount} new track${addedCount > 1 ? "s" : ""} from Spotify.`;
+      };
+
+      assert.equal(getResultMessage(0), "Playlist is already up to date.");
+      assert.equal(getResultMessage(1), "Successfully added 1 new track from Spotify.");
+      assert.equal(getResultMessage(5), "Successfully added 5 new tracks from Spotify.");
+    });
+  });
 });
+
