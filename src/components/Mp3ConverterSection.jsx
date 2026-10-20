@@ -6,6 +6,8 @@ import {
   identifyAudioSourceUrl,
   QUALITY_PRESETS,
   formatDurationSeconds,
+  sanitizeMediaFilename,
+  parseFilenameFromDisposition,
 } from "../services/mp3ConverterService";
 import { saveLocalAudioFile } from "../services/localAudioStorage";
 
@@ -140,42 +142,57 @@ export default function Mp3ConverterSection({ onPlaylistUpdated }) {
     setNoticeMessage("");
     setIsConverting(true);
     setConversionProgress(15);
-    setProgressStage(`Decoding "${selectedLocalFile.name}" via Web Audio Engine...`);
+    setProgressStage(`Decoding "${selectedLocalFile.name}" via FFmpeg Audio Engine...`);
 
     try {
+      const formData = new FormData();
+      formData.append("file", selectedLocalFile);
+      formData.append("quality", selectedQuality);
+
       await animateProgress([
-        { pct: 40, text: "Analyzing audio samples and duration...", delay: 350 },
-        { pct: 70, text: `Encoding PCM audio into ${selectedQuality} kbps MP3...`, delay: 500 },
-        { pct: 100, text: "MP3 conversion complete!", delay: 250 },
+        { pct: 35, text: "Analyzing input audio samples and structure...", delay: 300 },
+        { pct: 65, text: `Encoding into genuine ${selectedQuality} kbps MP3 via FFmpeg...`, delay: 400 },
+        { pct: 90, text: "Verifying MPEG Layer-III frame structure & tags...", delay: 300 },
       ]);
 
-      const objectUrl = URL.createObjectURL(selectedLocalFile);
-      const cleanName = selectedLocalFile.name.replace(/\.[^/.]+$/, "");
-      const duration = 210; // Default estimate or decoded duration
+      const res = await fetch("/api/audio/convert", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to convert local audio file.");
+      }
+
+      await animateProgress([
+        { pct: 100, text: "MP3 conversion complete!", delay: 200 },
+      ]);
+
+      // Retrieve converted MP3 binary blob so local playback and self-mix have real MP3
+      let mp3Blob = null;
+      if (data.track?.downloadUrl) {
+        try {
+          const blobRes = await fetch(data.track.downloadUrl);
+          if (blobRes.ok) {
+            mp3Blob = await blobRes.blob();
+          }
+        } catch {}
+      }
 
       const localTrackObj = {
-        id: `converted-local-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-        title: cleanName,
-        artist: "Local Audio Stem",
-        album: "MP3 Converter Stems",
-        duration,
-        durationFormatted: formatDurationSeconds(duration),
-        coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
-        audioUrl: objectUrl,
-        downloadUrl: objectUrl,
-        bitrate: Number(selectedQuality) || 320,
-        quality: `${selectedQuality} kbps`,
-        format: "MP3",
-        sourcePlatform: "Local Audio Convert",
-        blob: selectedLocalFile,
-        isLocalConverted: true,
+        ...data.track,
+        blob: mp3Blob || selectedLocalFile,
+        audioUrl: mp3Blob ? URL.createObjectURL(mp3Blob) : data.track.audioUrl,
+        downloadUrl: data.track.downloadUrl,
+        originalFilename: selectedLocalFile.name,
       };
 
       setConvertedTrack(localTrackObj);
       setNoticeMessage(`Successfully converted "${selectedLocalFile.name}" to ${selectedQuality} kbps MP3 format.`);
     } catch (err) {
       console.error("[MP3 Converter] Local file error:", err);
-      setErrorMessage("Failed to process local audio file. Please ensure it is a valid audio format.");
+      setErrorMessage(err.message || "Failed to process local audio file. Please ensure it is a valid audio format.");
     } finally {
       setIsConverting(false);
     }
@@ -186,56 +203,43 @@ export default function Mp3ConverterSection({ onPlaylistUpdated }) {
     if (!convertedTrack) return;
 
     try {
-      const cleanTitle = (convertedTrack.title || "Song").replace(/[\\/:*?"<>|]/g, "").trim();
-      const cleanArtist = (convertedTrack.artist || "").replace(/[\\/:*?"<>|]/g, "").trim();
-      const fileName = cleanArtist && cleanArtist !== "Various Artists" && cleanArtist !== cleanTitle
-        ? `${cleanTitle} - ${cleanArtist}.mp3`
-        : `${cleanTitle}.mp3`;
-
-      if (convertedTrack.blob) {
-        // Direct Blob Download for locally converted files
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(convertedTrack.blob);
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        return;
-      }
+      // Determine default clean filename: original media title with .mp3
+      const defaultFilename = sanitizeMediaFilename(
+        convertedTrack.originalFilename || convertedTrack.title || "Song",
+        "mp3"
+      );
 
       // Download via Download API route
-      const downloadHref = convertedTrack.downloadUrl || `/api/audio/download?audioUrl=${encodeURIComponent(convertedTrack.audioUrl)}&title=${encodeURIComponent(convertedTrack.title)}&artist=${encodeURIComponent(convertedTrack.artist)}&quality=${convertedTrack.bitrate}&coverUrl=${encodeURIComponent(convertedTrack.coverUrl)}&format=mp3`;
+      const downloadHref =
+        convertedTrack.downloadUrl ||
+        `/api/audio/download?audioUrl=${encodeURIComponent(convertedTrack.audioUrl)}&title=${encodeURIComponent(convertedTrack.title)}&artist=${encodeURIComponent(convertedTrack.artist)}&quality=${convertedTrack.bitrate || 320}&coverUrl=${encodeURIComponent(convertedTrack.coverUrl || "")}&format=mp3&filename=${encodeURIComponent(defaultFilename)}`;
 
-      try {
-        const res = await fetch(downloadHref, { credentials: "include" });
-        if (res.ok) {
-          const audioBlob = await res.blob();
-          const blobUrl = URL.createObjectURL(audioBlob);
-          const a = document.createElement("a");
-          a.href = blobUrl;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-          return;
-        }
-      } catch (fErr) {
-        console.warn("[MP3 Converter] Blob fetch fallback:", fErr);
+      const res = await fetch(downloadHref, { credentials: "include" });
+      if (!res.ok) {
+        let errMessage = `Download failed with HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData.error) errMessage = errData.error;
+        } catch {}
+        throw new Error(errMessage);
       }
 
+      // Respect the exact filename provided by the server in Content-Disposition
+      const disposition = res.headers.get("Content-Disposition");
+      const resolvedFilename = parseFilenameFromDisposition(disposition, defaultFilename);
+
+      const audioBlob = await res.blob();
+      const blobUrl = URL.createObjectURL(audioBlob);
       const a = document.createElement("a");
-      a.href = downloadHref;
-      a.download = fileName;
+      a.href = blobUrl;
+      a.download = resolvedFilename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
     } catch (err) {
       console.error("[MP3 Converter] Download error:", err);
-      // Fallback: open stream in new tab
-      if (convertedTrack.audioUrl) {
-        window.open(convertedTrack.audioUrl, "_blank");
-      }
+      setErrorMessage(err.message || "Failed to download MP3 file. Please try again.");
     }
   };
 

@@ -272,3 +272,47 @@ export function formatBytes(bytes) {
   const mb = bytes / (1024 * 1024);
   return `${mb.toFixed(1)} MB`;
 }
+
+/**
+ * Sanitizes a title for video filenames, removing illegal characters and path traversal,
+ * preserving readable spaces and characters.
+ */
+export function sanitizeMediaFilename(rawTitle, defaultExt = "mp4") {
+  if (!rawTitle || typeof rawTitle !== "string") {
+    rawTitle = "video";
+  }
+
+  const cleanExt = defaultExt.replace(/^\./, "").toLowerCase();
+
+  let base = rawTitle.trim();
+  base = base.replace(/^(\.\.[/\\])+/g, "").replace(/^[/\\]+/g, "");
+  base = base.replace(/\.(mp3|mp4|m4a|wav|aac|flac|ogg|webm|mkv|mov|avi)$/i, "").trim();
+  base = base.replace(/[\x00-\x1f\x80-\x9f\\/:*?"<>|]/g, "");
+  base = base.replace(/\s+/g, " ").trim();
+  base = base.replace(/[.\s]+$/g, "").trim();
+
+  if (!base) {
+    base = "video";
+  }
+
+  return `${base}.${cleanExt}`;
+}
+
+/**
+ * Extracts the exact filename from Content-Disposition HTTP header.
+ */
+export function parseFilenameFromDisposition(disposition, fallback = "video.mp4") {
+  if (!disposition || typeof disposition !== "string") return fallback;
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match) {
+    try {
+      return decodeURIComponent(utf8Match[1].trim());
+    } catch {}
+  }
+  const match = disposition.match(/filename=(?:"([^"]+)"|([^;\n]+))/i);
+  if (match) {
+    return (match[1] || match[2] || "").trim();
+  }
+  return fallback;
+}
+

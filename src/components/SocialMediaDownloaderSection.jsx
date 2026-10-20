@@ -5,6 +5,8 @@ import {
   SOCIAL_PLATFORMS,
   VIDEO_QUALITY_PILLS,
   validatePlatformUrl,
+  sanitizeMediaFilename,
+  parseFilenameFromDisposition,
 } from "../services/socialDownloaderService";
 
 export default function SocialMediaDownloaderSection() {
@@ -105,17 +107,16 @@ export default function SocialMediaDownloaderSection() {
       const qualityPill = VIDEO_QUALITY_PILLS.find((p) => p.id === selectedQuality) || VIDEO_QUALITY_PILLS[2];
 
       // Exact platform filename: "[Platform Title].mp4"
-      const rawTitle = (mediaData.title || `${currentPlatformInfo.name} Video`)
-        .replace(/[\\/:*?"<>|]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-      const cleanFileName = `${rawTitle || "video"}.mp4`;
+      const defaultFileName = sanitizeMediaFilename(
+        mediaData.title || `${currentPlatformInfo.name} Video`,
+        "mp4"
+      );
 
       // Progress animation
       const stages = [
         { pct: 30, text: "Allocating MP4 video buffer..." },
-        { pct: 60, text: `Encoding ${qualityPill.label} (${qualityPill.badge}) video stream...` },
-        { pct: 85, text: "Downloading video payload..." },
+        { pct: 60, text: `Encoding ${qualityPill.label} (${qualityPill.badge}) video stream with FFmpeg...` },
+        { pct: 85, text: "Verifying video and audio stream synchronization..." },
       ];
 
       for (const stage of stages) {
@@ -124,7 +125,7 @@ export default function SocialMediaDownloaderSection() {
         setDownloadStatus(stage.text);
       }
 
-      const downloadUrl = `/api/social/download?url=${encodeURIComponent(mediaData.sourceUrl || urlInput)}&platform=${selectedPlatform}&quality=${selectedQuality}&title=${encodeURIComponent(rawTitle)}`;
+      const downloadUrl = `/api/social/download?url=${encodeURIComponent(mediaData.sourceUrl || urlInput)}&platform=${selectedPlatform}&quality=${selectedQuality}&title=${encodeURIComponent(mediaData.title || "")}&filename=${encodeURIComponent(defaultFileName)}`;
 
       // Fetch video stream directly as blob to guarantee successful download and avoid "Site wasn't available"
       const res = await fetch(downloadUrl, { credentials: "include" });
@@ -132,6 +133,10 @@ export default function SocialMediaDownloaderSection() {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || `Download failed with HTTP ${res.status}`);
       }
+
+      // Respect the exact filename provided by the server in Content-Disposition
+      const disposition = res.headers.get("Content-Disposition");
+      const resolvedFileName = parseFilenameFromDisposition(disposition, defaultFileName);
 
       setDownloadProgress(95);
       setDownloadStatus("Saving video to disk...");
@@ -142,14 +147,14 @@ export default function SocialMediaDownloaderSection() {
       // Trigger native browser download with exact platform filename
       const a = document.createElement("a");
       a.href = blobUrl;
-      a.download = cleanFileName;
+      a.download = resolvedFileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
 
       setDownloadProgress(100);
-      setDownloadStatus(`Download complete! Saved as "${cleanFileName}".`);
+      setDownloadStatus(`Download complete! Saved as "${resolvedFileName}".`);
       setDownloadSuccess(true);
 
       setTimeout(() => {

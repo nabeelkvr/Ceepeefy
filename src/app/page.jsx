@@ -387,9 +387,10 @@ export default function HomePage() {
   };
 
   return (
-    <div className="relative w-full overflow-hidden px-3 sm:px-6 md:px-8 2xl:px-12 3xl:px-16 flex flex-col gap-6 md:gap-10 2xl:gap-12 pt-3 md:pt-6">
-      {/* Section 1: Recently played songs - Single-row header */}
-      <section className="flex flex-col gap-3.5 md:gap-4.5">
+    <div className="relative w-full flex flex-col pt-3 md:pt-6">
+      <div className="w-full px-3 sm:px-6 md:px-8 2xl:px-12 3xl:px-16 flex flex-col gap-6 md:gap-10 2xl:gap-12">
+        {/* Section 1: Recently played songs - Single-row header */}
+        <section className="flex flex-col gap-3.5 md:gap-4.5">
         <div className="flex items-center justify-between">
           <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
             Recently played songs
@@ -979,8 +980,9 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+      </div>
 
-      {/* Modern Footer matching Image 2 */}
+      {/* Full-Width Modern Footer */}
       <Footer />
     </div>
   );

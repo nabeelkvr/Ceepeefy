@@ -1,29 +1,125 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import {
   identifyAudioSourceUrl,
   cleanYouTubeTitle,
   formatDurationSeconds,
+  sanitizeMediaFilename,
 } from "../../../../services/mp3ConverterService.js";
 import { searchJioSaavnSongs, decryptMediaUrl } from "../../../../services/jiosaavnSearchService.js";
+import {
+  convertToMp3,
+  CONVERTED_MEDIA_CACHE,
+  probeMediaStreams,
+} from "../../../../server/mediaConverter.js";
 
-// Curated reliable audio fallbacks when network/catalog is inaccessible
+// Reliable fallback audio stream
 const CURATED_AUDIO_FALLBACKS = [
   {
-    audioUrl: "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3",
+    audioUrl: "/media/audio_sample.mp3",
     duration: 210,
-  },
-  {
-    audioUrl: "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=electronic-future-beats-117997.mp3",
-    duration: 185,
-  },
-  {
-    audioUrl: "https://cdn.pixabay.com/download/audio/2021/09/06/audio_82c2ff8d92.mp3?filename=chill-abstract-intention-12099.mp3",
-    duration: 160,
   },
 ];
 
 export async function POST(request) {
   try {
+    const contentType = request.headers.get("content-type") || "";
+
+    // =========================================================================
+    // 1. Handle Local Audio File Upload (multipart/form-data)
+    // =========================================================================
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      const file = formData.get("file");
+      const quality = formData.get("quality") || "320";
+
+      if (!file || typeof file === "string") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No audio file provided. Please choose an audio file from your device.",
+            code: "MISSING_FILE",
+          },
+          { status: 400 }
+        );
+      }
+
+      const originalName = file.name || "audio_stem";
+      const cleanTitle = originalName.replace(/\.[^/.]+$/, "").trim() || "Converted Audio";
+      const targetBitrateNum = [128, 192, 320].includes(Number(quality)) ? Number(quality) : 320;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const inputBuffer = Buffer.from(arrayBuffer);
+
+      if (inputBuffer.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "The uploaded file is empty. Please choose a valid audio file.",
+            code: "EMPTY_FILE",
+          },
+          { status: 400 }
+        );
+      }
+
+      // Convert local audio file to genuine MP3 using FFmpeg
+      const mp3Buffer = await convertToMp3(inputBuffer, {
+        bitrate: targetBitrateNum,
+        title: cleanTitle,
+        artist: "Local Audio Stem",
+        album: "MP3 Converter Stems",
+      });
+
+      const cleanFilename = sanitizeMediaFilename(originalName, "mp3");
+      const cleanId = `converted-local-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+      // Cache converted MP3 in memory for direct download
+      CONVERTED_MEDIA_CACHE.set(cleanId, {
+        buffer: mp3Buffer,
+        filename: cleanFilename,
+        mimeType: "audio/mpeg",
+        createdAt: Date.now(),
+      });
+
+      const downloadUrl = `/api/audio/download?fileId=${cleanId}&filename=${encodeURIComponent(cleanFilename)}&format=mp3`;
+
+      // Determine duration if probe succeeds
+      let duration = 210;
+      try {
+        const probe = await probeMediaStreams(inputBuffer);
+        if (probe.duration && probe.duration > 0) {
+          duration = Math.round(probe.duration);
+        }
+      } catch {}
+
+      return NextResponse.json({
+        success: true,
+        source: "local",
+        note: `Successfully encoded "${originalName}" to ${targetBitrateNum} kbps MP3 format.`,
+        track: {
+          id: cleanId,
+          title: cleanTitle,
+          artist: "Local Audio Stem",
+          album: "MP3 Converter Stems",
+          duration,
+          durationFormatted: formatDurationSeconds(duration),
+          coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+          audioUrl: downloadUrl,
+          downloadUrl,
+          bitrate: targetBitrateNum,
+          quality: `${targetBitrateNum} kbps`,
+          format: "MP3",
+          sourcePlatform: "Local Audio Convert",
+          isLocalConverted: true,
+          originalFilename: originalName,
+          fileSize: mp3Buffer.length,
+          createdAt: new Date().toISOString(),
+        },
+      });
+    }
+
+    // =========================================================================
+    // 2. Handle URL Audio Conversion (application/json)
+    // =========================================================================
     const body = await request.json().catch(() => ({}));
     const { url, quality = "320" } = body;
 
@@ -78,7 +174,6 @@ export async function POST(request) {
         console.warn("[Convert API] Spotify oEmbed lookup skipped/timed out:", err.message);
       }
 
-      // If title is in format "Song Title by Artist", extract cleanly
       if (parsedTitle.includes(" by ")) {
         const parts = parsedTitle.split(" by ");
         parsedTitle = parts[0].trim();
@@ -113,7 +208,7 @@ export async function POST(request) {
       }
     }
 
-    // 3. Resolve high-fidelity audio stream from authorized catalog
+    // 3. Resolve high-fidelity audio stream from catalog
     let resolvedAudioUrl = null;
     let resolvedDuration = duration;
 
@@ -121,16 +216,20 @@ export async function POST(request) {
       const searchRes = await searchJioSaavnSongs(`${parsedTitle} ${parsedArtist}`, 1, 3);
       if (Array.isArray(searchRes) && searchRes.length > 0) {
         const bestMatch = searchRes[0];
-        const encrypted = bestMatch.more_info?.encrypted_media_url || bestMatch.encrypted_media_url;
-        if (encrypted) {
-          const decrypted = decryptMediaUrl(encrypted);
-          if (decrypted && decrypted.startsWith("http")) {
-            // Adjust bitrate based on selected quality
-            const targetBitrate = quality === "128" ? "96" : quality === "192" ? "160" : "320";
-            resolvedAudioUrl = decrypted.replace(/_\d+\.mp4/, `_${targetBitrate}.mp4`);
-            if (bestMatch.more_info?.duration) {
-              resolvedDuration = Number(bestMatch.more_info.duration) || duration;
-            }
+        // Note: searchJioSaavnSongs already decrypts and places stream in bestMatch.audioUrl
+        let streamUrl = bestMatch.audioUrl;
+        if (!streamUrl) {
+          const encrypted = bestMatch.more_info?.encrypted_media_url || bestMatch.encrypted_media_url;
+          if (encrypted) {
+            streamUrl = decryptMediaUrl(encrypted);
+          }
+        }
+
+        if (streamUrl && streamUrl.startsWith("http")) {
+          const targetBitrate = quality === "128" ? "96" : quality === "192" ? "160" : "320";
+          resolvedAudioUrl = streamUrl.replace(/_\d+\.mp4/, `_${targetBitrate}.mp4`);
+          if (bestMatch.duration) {
+            resolvedDuration = Number(bestMatch.duration) || duration;
           }
         }
       }

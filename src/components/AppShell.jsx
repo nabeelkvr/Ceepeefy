@@ -110,6 +110,15 @@ export default function AppShell({ children }) {
     }
   };
 
+  // Full-width standalone view for login/signup (matches Image 2)
+  if (pathname === "/login") {
+    return (
+      <div className="min-h-screen w-screen bg-[#050811] text-on-surface font-sans overflow-x-hidden selection:bg-primary selection:text-black">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div
       onClickCapture={handleGlobalClickCapture}
