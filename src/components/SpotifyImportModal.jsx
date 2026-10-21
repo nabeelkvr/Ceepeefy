@@ -13,19 +13,24 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
 
   // Mode: "url" or "manual_text"
   const [importMode, setImportMode] = useState("url");
-  const [playlistUrl, setPlaylistUrl] = useState("");
+  // URLs for up to 5 playlists
+  const [playlistUrls, setPlaylistUrls] = useState(["", "", "", "", ""]);
+  // Queue of playlists to process sequentially
+  const [importQueue, setImportQueue] = useState([]);
+  const [currentQueueIndex, setCurrentQueueIndex] = useState(0);
+
   const [manualText, setManualText] = useState("");
   const [manualTitle, setManualTitle] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Mixed");
   const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false);
 
-  // Workflow states: "input" | "fetching" | "matching" | "preview" | "complete"
+  // Workflow states: "input" | "fetching" | "matching" | "preview" | "item_success" | "item_error" | "complete"
   const [stage, setStage] = useState("input");
   const [errorMessage, setErrorMessage] = useState("");
   const [clipboardNotice, setClipboardNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Fetched playlist data & matched results
+  // Fetched playlist data & matched results for current item in sequence
   const [sourcePlaylist, setSourcePlaylist] = useState(null);
   const [matchedItems, setMatchedItems] = useState([]);
   const [matchingProgress, setMatchingProgress] = useState({ current: 0, total: 0 });
@@ -60,7 +65,9 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
   useEffect(() => {
     if (isOpen) {
       setStage("input");
-      setPlaylistUrl("");
+      setPlaylistUrls(["", "", "", "", ""]);
+      setImportQueue([]);
+      setCurrentQueueIndex(0);
       setManualText("");
       setManualTitle("");
       setSelectedCategory(defaultCategory || "Mixed");
@@ -79,18 +86,29 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && isOpen && stage !== "matching") {
+      if (e.key === "Escape" && isOpen && stage !== "matching" && stage !== "fetching" && !isSaving) {
         onClose();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, stage, onClose]);
+  }, [isOpen, stage, isSaving, onClose]);
 
   if (!isOpen) return null;
 
-  // Handle Clipboard Paste
-  const handlePasteClipboard = async () => {
+  // Handle URL change for field index (0 to 4)
+  const handleUrlChange = (index, value) => {
+    setPlaylistUrls((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+    setErrorMessage("");
+    setClipboardNotice("");
+  };
+
+  // Handle Clipboard Paste to specific field
+  const handlePasteToField = async (index) => {
     setClipboardNotice("");
     setErrorMessage("");
     try {
@@ -100,7 +118,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
       }
       const text = await navigator.clipboard.readText();
       if (text) {
-        setPlaylistUrl(text.trim());
+        handleUrlChange(index, text.trim());
       } else {
         setClipboardNotice("Clipboard is empty.");
       }
@@ -110,52 +128,75 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
     }
   };
 
-  // Step 1: Fetch Spotify playlist metadata
-  const handleFetchPlaylist = async (e) => {
+  const handleClearAllUrls = () => {
+    setPlaylistUrls(["", "", "", "", ""]);
+    setErrorMessage("");
+    setClipboardNotice("");
+  };
+
+  // Step 1: Read valid playlist URLs and begin sequential queue
+  const handleStartSequentialImport = async (e) => {
     e?.preventDefault();
     setErrorMessage("");
     setClipboardNotice("");
 
     if (importMode === "url") {
-      if (!playlistUrl.trim()) {
-        setErrorMessage("Please enter a Spotify playlist link or URI.");
+      const activeEntries = [];
+      for (let i = 0; i < playlistUrls.length; i++) {
+        const raw = (playlistUrls[i] || "").trim();
+        if (raw) {
+          const playlistId = parseSpotifyPlaylistId(raw);
+          if (!playlistId) {
+            setErrorMessage(
+              `Playlist ${i + 1} URL is invalid. Please enter a valid Spotify playlist link (e.g. https://open.spotify.com/playlist/...).`
+            );
+            return;
+          }
+          activeEntries.push({
+            fieldIndex: i,
+            url: raw,
+            playlistId,
+            status: "pending",
+            sourcePlaylist: null,
+            matchedItems: [],
+            importedPlaylist: null,
+            importReport: null,
+            error: null,
+          });
+        }
+      }
+
+      if (activeEntries.length === 0) {
+        setErrorMessage("Please enter at least one Spotify playlist link.");
         return;
       }
 
-      setStage("fetching");
-      try {
-        const res = await fetch(`/api/spotify/playlist?url=${encodeURIComponent(playlistUrl.trim())}`);
-        const data = await res.json();
-
-        if (!res.ok || !data.success) {
-          setErrorMessage(
-            data.error ||
-              "Could not access Spotify playlist. Please ensure the link is public, or try importing via text."
-          );
-          setStage("input");
-          return;
-        }
-
-        const playlist = data.playlist;
-        if (!playlist || !Array.isArray(playlist.tracks) || playlist.tracks.length === 0) {
-          setErrorMessage("The Spotify playlist has no playable tracks.");
-          setStage("input");
-          return;
-        }
-
-        setSourcePlaylist(playlist);
-        await startMatchingTracks(playlist.tracks);
-      } catch (err) {
-        console.error("Fetch playlist error:", err);
-        setErrorMessage("Network error connecting to Spotify service. Please check your connection or try again.");
-        setStage("input");
-      }
+      setImportQueue(activeEntries);
+      setCurrentQueueIndex(0);
+      await processQueueItem(activeEntries, 0);
     } else {
       // Manual text fallback
       if (!manualText.trim()) {
         setErrorMessage("Please enter at least one song name.");
         return;
       }
+
+      const singleQueue = [
+        {
+          fieldIndex: 0,
+          url: null,
+          playlistId: null,
+          isManual: true,
+          status: "pending",
+          sourcePlaylist: null,
+          matchedItems: [],
+          importedPlaylist: null,
+          importReport: null,
+          error: null,
+        },
+      ];
+      setImportQueue(singleQueue);
+      setCurrentQueueIndex(0);
 
       setStage("fetching");
       try {
@@ -176,7 +217,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
         }
 
         setSourcePlaylist(data.playlist);
-        await startMatchingTracks(data.playlist.tracks);
+        await startMatchingTracks(data.playlist.tracks, singleQueue, 0, data.playlist);
       } catch (err) {
         console.error("Manual text error:", err);
         setErrorMessage("Failed to process tracklist.");
@@ -185,13 +226,69 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
     }
   };
 
-  // Step 2: Intelligent Matching against JioSaavn
-  const startMatchingTracks = async (tracks) => {
+  // Process a single playlist in the queue sequentially
+  const processQueueItem = async (queue, itemIdx) => {
+    const item = queue[itemIdx];
+    if (!item) return;
+
+    setCurrentQueueIndex(itemIdx);
+    setStage("fetching");
+    setErrorMessage("");
+    setSourcePlaylist(null);
+    setMatchedItems([]);
+    setEditingItemIndex(null);
+
+    try {
+      const res = await fetch(`/api/spotify/playlist?url=${encodeURIComponent(item.url)}`);
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        const errMsg =
+          data.error ||
+          `Could not access Spotify playlist for link #${item.fieldIndex + 1}. Please ensure the link is public.`;
+        setErrorMessage(errMsg);
+        const updated = [...queue];
+        updated[itemIdx] = { ...item, status: "failed", error: errMsg };
+        setImportQueue(updated);
+        setStage("item_error");
+        return;
+      }
+
+      const playlist = data.playlist;
+      if (!playlist || !Array.isArray(playlist.tracks) || playlist.tracks.length === 0) {
+        const errMsg = `Playlist "${playlist?.name || item.playlistId}" has no playable tracks.`;
+        setErrorMessage(errMsg);
+        const updated = [...queue];
+        updated[itemIdx] = { ...item, status: "failed", error: errMsg, sourcePlaylist: playlist };
+        setImportQueue(updated);
+        setStage("item_error");
+        return;
+      }
+
+      setSourcePlaylist(playlist);
+      const updated = [...queue];
+      updated[itemIdx] = { ...item, sourcePlaylist: playlist, status: "matching" };
+      setImportQueue(updated);
+
+      // Step 2: Intelligent Matching against JioSaavn using exact same algorithm
+      await startMatchingTracks(playlist.tracks, updated, itemIdx, playlist);
+    } catch (err) {
+      console.error("Fetch playlist error:", err);
+      const errMsg = "Network error connecting to Spotify service. Please check your connection or try again.";
+      setErrorMessage(errMsg);
+      const updated = [...queue];
+      updated[itemIdx] = { ...item, status: "failed", error: errMsg };
+      setImportQueue(updated);
+      setStage("item_error");
+    }
+  };
+
+  // Step 2: Intelligent Matching against JioSaavn (Batch size 8, exact unchanged algorithm)
+  const startMatchingTracks = async (tracks, queue = importQueue, itemIdx = currentQueueIndex, playlist = sourcePlaylist) => {
     setStage("matching");
     setMatchingProgress({ current: 0, total: tracks.length });
 
     try {
-      // Process matching in batches with live UI progress tracking
       const batchSize = 8;
       const allResults = [];
 
@@ -226,7 +323,6 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
         if (batchMatches) {
           allResults.push(...batchMatches);
         } else {
-          // If a batch fails after retries, retain every track as unmatched with proper original data
           for (const t of batch) {
             allResults.push({
               spotifyTrack: t,
@@ -247,6 +343,16 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
       }
 
       setMatchedItems(allResults);
+      const updated = [...queue];
+      if (updated[itemIdx]) {
+        updated[itemIdx] = {
+          ...updated[itemIdx],
+          matchedItems: allResults,
+          sourcePlaylist: playlist || updated[itemIdx].sourcePlaylist,
+          status: "preview",
+        };
+        setImportQueue(updated);
+      }
       setStage("preview");
     } catch (err) {
       console.error("Matching error:", err);
@@ -471,8 +577,9 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
       return;
     }
 
+    const activeItem = importQueue[currentQueueIndex];
     const spotifyLink =
-      (typeof playlistUrl === "string" && playlistUrl.trim()) ||
+      (typeof activeItem?.url === "string" && activeItem.url.trim()) ||
       (sourcePlaylist?.id ? `https://open.spotify.com/playlist/${sourcePlaylist.id}` : null);
 
     setIsSaving(true);
@@ -487,7 +594,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
         spotifyUrl: spotifyLink,
         category: selectedCategory,
         sourceMeta: {
-          spotifyId: sourcePlaylist?.id || (playlistUrl ? parseSpotifyPlaylistId(playlistUrl) : null) || null,
+          spotifyId: sourcePlaylist?.id || activeItem?.playlistId || (activeItem?.url ? parseSpotifyPlaylistId(activeItem.url) : null) || null,
           spotifyUrl: spotifyLink,
           spotifyLink: spotifyLink,
           snapshotId: sourcePlaylist?.snapshotId || null,
@@ -515,8 +622,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
         },
       });
 
-      setImportedPlaylist(created);
-      setImportReport({
+      const currentReport = {
         total: sourcePlaylist?.totalTracks || matchedItems.length,
         retrieved: matchedItems.length,
         imported: importedCount,
@@ -525,12 +631,32 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
         substituted: substitutedCount,
         isPartial: Boolean(sourcePlaylist?.isPartial),
         partialError: sourcePlaylist?.partialError || null,
-      });
-      setStage("complete");
+      };
+
+      setImportedPlaylist(created);
+      setImportReport(currentReport);
+
+      const updated = [...importQueue];
+      if (updated[currentQueueIndex]) {
+        updated[currentQueueIndex] = {
+          ...updated[currentQueueIndex],
+          status: "imported",
+          importedPlaylist: created,
+          importReport: currentReport,
+          category: selectedCategory,
+        };
+        setImportQueue(updated);
+      }
+
+      if (currentQueueIndex < updated.length - 1) {
+        setStage("item_success");
+      } else {
+        setStage("complete");
+      }
     } catch (saveErr) {
       console.error("Failed to complete Spotify playlist import to cloud:", saveErr);
       setErrorMessage(
-        "Could not save the complete playlist to Supabase cloud. " +
+        "Could not save the complete playlist to cloud database. " +
           (saveErr?.message || "Please check your network and retry.")
       );
     } finally {
@@ -552,6 +678,7 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
     (m) => m.status === "unmatched" && !m.userSelectedTrack && !m.skipped
   ).length;
   const skippedTotal = matchedItems.filter((m) => m.skipped).length;
+  const filledCount = playlistUrls.filter((u) => typeof u === "string" && u.trim().length > 0).length;
 
   const filteredItems = matchedItems.filter((item) => {
     if (activeFilter === "review") return item.status === "review" && !item.userSelectedTrack && !item.skipped;
@@ -693,38 +820,68 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
               </div>
 
               {importMode === "url" ? (
-                <form onSubmit={handleFetchPlaylist} className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-on-surface-variant flex items-center justify-between">
-                      <span>Spotify Playlist Link or URI</span>
-                      <span className="text-[11px] text-outline font-mono">Public or Shared Link</span>
-                    </label>
+                <form onSubmit={handleStartSequentialImport} className="space-y-4">
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">Import Spotify Playlists</h3>
+                      <p className="text-xs text-outline mt-0.5">Add up to 5 playlists at once. Paste a Spotify playlist link into each field.</p>
+                    </div>
 
-                    <div className="relative flex items-center">
-                      <input
-                        ref={inputRef}
-                        type="text"
-                        value={playlistUrl}
-                        onChange={(e) => {
-                          setPlaylistUrl(e.target.value);
-                          setErrorMessage("");
-                          setClipboardNotice("");
-                        }}
-                        placeholder="https://open.spotify.com/playlist/... or spotify:playlist:..."
-                        className="w-full pl-3.5 pr-24 py-3 rounded-xl bg-surface-container border border-outline-variant/30 text-white placeholder:text-outline/60 text-xs sm:text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-inner"
-                      />
-                      <button
-                        type="button"
-                        onClick={handlePasteClipboard}
-                        className="absolute right-2 px-3 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-container-highest/80 text-primary hover:text-white text-xs font-medium flex items-center gap-1 transition-all active:scale-95 cursor-pointer border border-outline-variant/20"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">content_paste</span>
-                        <span>Paste</span>
-                      </button>
+                    <div className="space-y-2.5">
+                      {playlistUrls.map((url, idx) => (
+                        <div key={idx} className="flex items-center gap-3">
+                          <span className="w-5 text-center font-bold text-white text-sm flex-shrink-0">
+                            {idx + 1}
+                          </span>
+                          <div className="relative flex-1 flex items-center">
+                            <input
+                              ref={idx === 0 ? inputRef : undefined}
+                              type="text"
+                              value={url}
+                              onChange={(e) => handleUrlChange(idx, e.target.value)}
+                              placeholder="Paste Spotify playlist URL"
+                              className="w-full pl-4 pr-20 py-2.5 rounded-full bg-surface-container border border-outline-variant/30 text-white placeholder:text-outline/60 text-xs sm:text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-inner"
+                            />
+                            {url ? (
+                              <button
+                                type="button"
+                                onClick={() => handleUrlChange(idx, "")}
+                                className="absolute right-3 text-outline hover:text-white transition-colors cursor-pointer"
+                                title="Clear"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">close</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handlePasteToField(idx)}
+                                className="absolute right-2 px-2.5 py-1 rounded-full bg-surface-container-highest hover:bg-surface-container-highest/80 text-primary hover:text-white text-[11px] font-medium flex items-center gap-1 transition-all active:scale-95 cursor-pointer border border-outline-variant/20"
+                                title="Paste from clipboard"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">content_paste</span>
+                                <span>Paste</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-outline font-medium px-1">
+                      <span>{filledCount} of 5 playlist links added</span>
+                      {filledCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleClearAllUrls}
+                          className="text-[11px] text-outline hover:text-white underline cursor-pointer"
+                        >
+                          Clear all
+                        </button>
+                      )}
                     </div>
 
                     {clipboardNotice && (
-                      <p className="text-[11px] text-amber-400/90 font-sans">{clipboardNotice}</p>
+                      <p className="text-[11px] text-amber-400/90 font-sans px-1">{clipboardNotice}</p>
                     )}
                   </div>
 
@@ -755,16 +912,16 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
                     </button>
                     <button
                       type="submit"
-                      disabled={!playlistUrl.trim()}
+                      disabled={filledCount === 0}
                       className="px-6 py-2.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_15px_rgba(76,215,246,0.3)] hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
                     >
-                      <span>Find Playlist</span>
+                      <span>Next</span>
                       <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                     </button>
                   </div>
                 </form>
               ) : (
-                <form onSubmit={handleFetchPlaylist} className="space-y-4">
+                <form onSubmit={handleStartSequentialImport} className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-on-surface-variant">Playlist Title</label>
                     <input
@@ -830,10 +987,17 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
               </div>
 
               <div className="space-y-1.5">
-                <h3 className="text-base font-bold text-white">
-                  {stage === "fetching"
-                    ? "Retrieving Spotify Playlist Metadata..."
-                    : `Matching Songs to JioSaavn Audio...`}
+                <h3 className="text-base font-bold text-white flex items-center justify-center gap-2 flex-wrap">
+                  {importQueue.length > 1 && (
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 font-mono font-bold">
+                      Playlist {currentQueueIndex + 1} of {importQueue.length}
+                    </span>
+                  )}
+                  <span>
+                    {stage === "fetching"
+                      ? "Retrieving Spotify Playlist Metadata..."
+                      : `Matching Songs to JioSaavn Audio...`}
+                  </span>
                 </h3>
                 <p className="text-xs text-outline max-w-md">
                   {stage === "fetching"
@@ -864,6 +1028,18 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
           {/* STAGE 3: PLAYLIST PREVIEW & REVIEW TABLE */}
           {stage === "preview" && sourcePlaylist && (
             <div className="space-y-5 animate-fade-in">
+              {/* Sequential Sequence Indicator */}
+              {importQueue.length > 1 && (
+                <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-primary/10 border border-primary/25 text-xs text-primary font-mono">
+                  <span className="font-bold">
+                    Playlist {currentQueueIndex + 1} of {importQueue.length} in Sequence
+                  </span>
+                  <span className="text-outline text-[11px]">
+                    Confirm import below to advance to Playlist {currentQueueIndex + 2}
+                  </span>
+                </div>
+              )}
+
               {/* Playlist Summary Banner */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-surface-container border border-outline-variant/20">
                 <div className="flex items-center gap-3.5">
@@ -1194,8 +1370,249 @@ export default function SpotifyImportModal({ isOpen, onClose, defaultCategory = 
             </div>
           )}
 
-          {/* STAGE 4: COMPLETE / SUCCESS REPORT */}
-          {stage === "complete" && importedPlaylist && (
+          {/* STAGE: ITEM SUCCESS (TRANSITION TO NEXT PLAYLIST IN SEQUENCE) */}
+          {stage === "item_success" && (
+            <div className="py-8 text-center space-y-6 max-w-lg mx-auto animate-fade-in">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 mx-auto flex items-center justify-center shadow-[0_0_25px_rgba(16,185,129,0.3)]">
+                <span className="material-symbols-outlined text-[32px]">check_circle</span>
+              </div>
+
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-medium">
+                  <span>Playlist {currentQueueIndex + 1} of {importQueue.length} Imported</span>
+                </div>
+                <h3 className="text-lg font-bold text-white">
+                  "{importedPlaylist?.title || "Playlist"}" Saved!
+                </h3>
+                <p className="text-xs text-outline">
+                  {importReport?.imported || importedPlaylist?.tracks?.length || 0} songs matched and saved in "{selectedCategory}".
+                </p>
+              </div>
+
+              {/* Import Stats */}
+              {importReport && (
+                <div className="grid grid-cols-4 gap-2 p-3.5 rounded-xl bg-surface-container border border-outline-variant/20 text-center font-mono">
+                  <div className="p-2 rounded-lg bg-surface-container-highest/40">
+                    <p className="text-[10px] text-outline">Total</p>
+                    <p className="text-base font-bold text-white">{importReport.total}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-emerald-500/10">
+                    <p className="text-[10px] text-emerald-400">Imported</p>
+                    <p className="text-base font-bold text-emerald-400">{importReport.imported}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-amber-500/10">
+                    <p className="text-[10px] text-amber-400">Unresolved</p>
+                    <p className="text-base font-bold text-amber-400">{importReport.unresolved}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-surface-container-highest/40">
+                    <p className="text-[10px] text-outline">Skipped</p>
+                    <p className="text-base font-bold text-outline">{importReport.skipped}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Next Step Banner */}
+              <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/25 text-left flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-white">Next: Playlist {currentQueueIndex + 2} of {importQueue.length}</p>
+                  <p className="text-[11px] text-outline truncate max-w-xs">
+                    {importQueue[currentQueueIndex + 1]?.url || "Next Spotify link"}
+                  </p>
+                </div>
+                <span className="material-symbols-outlined text-primary text-[24px]">queue_music</span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setStage("complete")}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-surface-container-highest hover:bg-surface-container-highest/80 text-white font-semibold text-xs border border-outline-variant/30 transition-all cursor-pointer"
+                >
+                  Finish Session Early
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextIdx = currentQueueIndex + 1;
+                    processQueueItem(importQueue, nextIdx);
+                  }}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_15px_rgba(76,215,246,0.4)] hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>Next: Import Playlist {currentQueueIndex + 2}</span>
+                  <span className="material-symbols-outlined text-[17px]">arrow_forward</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STAGE: ITEM ERROR (RETRY OR SKIP) */}
+          {stage === "item_error" && (
+            <div className="py-8 text-center space-y-6 max-w-lg mx-auto animate-fade-in">
+              <div className="w-16 h-16 rounded-full bg-red-500/20 border border-red-500/40 text-red-400 mx-auto flex items-center justify-center shadow-[0_0_25px_rgba(239,68,68,0.3)]">
+                <span className="material-symbols-outlined text-[32px]">error</span>
+              </div>
+
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-mono font-medium">
+                  <span>Playlist {currentQueueIndex + 1} of {importQueue.length} Failed</span>
+                </div>
+                <h3 className="text-lg font-bold text-white">Could Not Load Playlist</h3>
+                <p className="text-xs text-red-300 bg-red-950/20 border border-red-500/20 p-3 rounded-xl max-w-md mx-auto">
+                  {errorMessage || "Unable to retrieve tracks from Spotify."}
+                </p>
+              </div>
+
+              {/* Controls */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => processQueueItem(importQueue, currentQueueIndex)}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-surface-container-highest hover:bg-surface-container-highest/80 text-white font-semibold text-xs border border-outline-variant/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">refresh</span>
+                  <span>Retry Playlist {currentQueueIndex + 1}</span>
+                </button>
+
+                {currentQueueIndex < importQueue.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextIdx = currentQueueIndex + 1;
+                      processQueueItem(importQueue, nextIdx);
+                    }}
+                    className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_15px_rgba(76,215,246,0.3)] hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>Skip to Playlist {currentQueueIndex + 2}</span>
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setStage("complete")}
+                    className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_15px_rgba(76,215,246,0.3)] hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                  >
+                    View Summary
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* STAGE 4A: SEQUENTIAL MULTI-PLAYLIST COMPLETE SUMMARY */}
+          {stage === "complete" && importQueue.length > 1 && (
+            <div className="py-6 space-y-5 max-w-xl mx-auto animate-fade-in">
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 mx-auto flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                  <span className="material-symbols-outlined text-[28px]">done_all</span>
+                </div>
+                <h3 className="text-lg font-bold text-white">Sequential Import Complete</h3>
+                <p className="text-xs text-outline">
+                  {importQueue.filter((i) => i.status === "imported").length} of {importQueue.length} playlists imported to your Ceepeefy library.
+                </p>
+              </div>
+
+              {/* List of playlists in session */}
+              <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                {importQueue.map((item, qIdx) => {
+                  const isSuccess = item.status === "imported";
+                  const pl = item.importedPlaylist;
+                  const title = pl?.title || item.sourcePlaylist?.name || `Playlist ${qIdx + 1}`;
+                  const trackCount = item.importReport?.imported ?? pl?.tracks?.length ?? 0;
+                  const cover = pl?.coverUrl || item.sourcePlaylist?.coverUrl;
+
+                  return (
+                    <div
+                      key={qIdx}
+                      className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                        isSuccess
+                          ? "bg-surface-container/60 border-outline-variant/20"
+                          : "bg-red-950/20 border-red-500/30"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="w-5 text-center font-mono font-bold text-outline text-xs flex-shrink-0">
+                          {qIdx + 1}
+                        </span>
+                        <div className="w-11 h-11 rounded-lg bg-surface-container-highest border border-outline-variant/20 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                          {cover ? (
+                            <img src={cover} alt={title} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="material-symbols-outlined text-[20px] text-outline">playlist_play</span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-white truncate">{title}</p>
+                          <div className="text-[11px] text-outline truncate flex items-center gap-2">
+                            {isSuccess ? (
+                              <>
+                                <span className="text-emerald-400 font-mono font-medium">
+                                  {trackCount} tracks imported
+                                </span>
+                                <span>•</span>
+                                <span className="text-primary font-mono">{item.category || selectedCategory}</span>
+                              </>
+                            ) : (
+                              <span className="text-red-400 truncate">{item.error || "Import failed"}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {isSuccess && pl?.id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              router.push(`/playlist/${pl.id}`);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-container-highest/80 text-white font-semibold text-xs border border-outline-variant/30 cursor-pointer"
+                          >
+                            View
+                          </button>
+                        )}
+                        {!isSuccess && (
+                          <button
+                            type="button"
+                            onClick={() => processQueueItem(importQueue, qIdx)}
+                            className="px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold text-xs border border-red-500/40 cursor-pointer flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">refresh</span>
+                            <span>Retry</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom Actions */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3 border-t border-outline-variant/20">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    router.push("/playlists");
+                  }}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-surface-container-highest hover:bg-surface-container-highest/80 text-white font-semibold text-xs border border-outline-variant/30 transition-all cursor-pointer"
+                >
+                  View All Playlists
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-primary text-surface-container-lowest font-bold text-xs shadow-[0_0_15px_rgba(76,215,246,0.4)] hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STAGE 4B: SINGLE PLAYLIST COMPLETE / SUCCESS REPORT */}
+          {stage === "complete" && importQueue.length <= 1 && importedPlaylist && (
             <div className="py-8 text-center space-y-6 max-w-lg mx-auto animate-fade-in">
               <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 mx-auto flex items-center justify-center shadow-[0_0_25px_rgba(16,185,129,0.3)]">
                 <span className="material-symbols-outlined text-[32px]">check_circle</span>

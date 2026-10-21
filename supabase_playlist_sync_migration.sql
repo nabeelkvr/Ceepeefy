@@ -198,3 +198,49 @@ BEGIN
             WITH CHECK (bucket_id = 'self-mixes');
     END IF;
 END $$;
+
+-- 6. User Account Data (Full central account snapshot for playlists, mixes & categories)
+CREATE TABLE IF NOT EXISTS public.user_account_data (
+    user_id TEXT PRIMARY KEY,
+    account_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.user_account_data ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'user_account_data' AND policyname = 'Allow public select on user_account_data'
+    ) THEN
+        CREATE POLICY "Allow public select on user_account_data"
+            ON public.user_account_data FOR SELECT
+            USING (true);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'user_account_data' AND policyname = 'Allow public insert on user_account_data'
+    ) THEN
+        CREATE POLICY "Allow public insert on user_account_data"
+            ON public.user_account_data FOR INSERT
+            WITH CHECK (true);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'user_account_data' AND policyname = 'Allow public update on user_account_data'
+    ) THEN
+        CREATE POLICY "Allow public update on user_account_data"
+            ON public.user_account_data FOR UPDATE
+            USING (true)
+            WITH CHECK (true);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'user_account_data' AND policyname = 'Allow public delete on user_account_data'
+    ) THEN
+        CREATE POLICY "Allow public delete on user_account_data"
+            ON public.user_account_data FOR DELETE
+            USING (true);
+    END IF;
+END $$;
+

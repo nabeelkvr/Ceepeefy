@@ -278,24 +278,22 @@ export const MusicProvider = ({ children }) => {
 
   const isSyncingCloudRef = useRef(false);
 
-  // Cloud sync helper to refresh playlists, liked songs, and recently played from Supabase
-  const syncAccountDataWithCloud = async (userId = DEFAULT_USER_ID) => {
-    if (!isSupabaseConfigured()) {
-      return;
-    }
+  // Cloud sync helper to refresh playlists, liked songs, and recently played from backend & Supabase
+  const syncAccountDataWithCloud = async (targetUserId = null) => {
+    const currentUserId = targetUserId || getAccountUserId(user);
     if (isSyncingCloudRef.current) return;
     isSyncingCloudRef.current = true;
     try {
       // 1. Run one-time migration if not yet completed
-      await migrateLocalDataToSupabase(userId);
+      await migrateLocalDataToSupabase(currentUserId);
 
-      // 2. Query fresh cloud data from Supabase (individual tables + central account snapshot)
+      // 2. Query fresh cloud data from shared backend / Supabase (individual tables + central account snapshot)
       const [cloudPlaylists, cloudLiked, cloudRecents, cloudSelfMixes, cloudAccountData] = await Promise.all([
-        fetchUserPlaylistsFromCloud(userId),
-        fetchLikedSongsFromCloud(userId),
-        fetchRecentlyPlayedFromCloud(userId),
-        fetchSelfMixesFromCloud(userId).catch(() => []),
-        fetchAccountDataFromCloud(userId).catch(() => null),
+        fetchUserPlaylistsFromCloud(currentUserId),
+        fetchLikedSongsFromCloud(currentUserId).catch(() => null),
+        fetchRecentlyPlayedFromCloud(currentUserId).catch(() => null),
+        fetchSelfMixesFromCloud(currentUserId).catch(() => []),
+        fetchAccountDataFromCloud(currentUserId).catch(() => null),
       ]);
 
       // Collect all deleted playlist IDs to prevent resurrection
@@ -354,20 +352,55 @@ export const MusicProvider = ({ children }) => {
             const cl = cloudMap.get(id);
             const ac = acctMap.get(id);
             const lc = localMap.get(id);
-            const base = cl || ac || lc;
 
-            // Prioritize non-empty tracks from any available source
-            let tracks = (cl?.tracks && cl.tracks.length > 0)
-              ? cl.tracks
-              : (ac?.tracks && ac.tracks.length > 0)
-                ? ac.tracks
-                : (lc?.tracks && lc.tracks.length > 0)
-                  ? lc.tracks
-                  : [];
+            // Compare timestamps to not overwrite newer backend data with stale local data
+            const clTime = new Date(cl?.updated_at || cl?.updatedAt || 0).getTime();
+            const lcTime = new Date(lc?.updated_at || lc?.updatedAt || 0).getTime();
+            const backendIsNewer = cl && (!lc || clTime >= lcTime);
+            const base = backendIsNewer ? (cl || ac || lc) : (lc || cl || ac);
 
-            // If local or account snapshot had tracks, but cloud row didn't, heal Supabase in background!
-            if (tracks.length > 0 && (!cl?.tracks || cl.tracks.length === 0)) {
-              savePlaylistToCloud({ ...base, tracks }, userId).catch(() => {});
+            // Prioritize tracks: NEVER let a device with partial tracks overwrite a complete backend collection
+            const clTracksCount = Array.isArray(cl?.tracks) ? cl.tracks.length : 0;
+            const lcTracksCount = Array.isArray(lc?.tracks) ? lc.tracks.length : 0;
+            const acTracksCount = Array.isArray(ac?.tracks) ? ac.tracks.length : 0;
+
+            let rawTracks = [];
+            if (clTracksCount >= lcTracksCount && clTracksCount > 0) {
+              rawTracks = cl.tracks;
+            } else if (lcTracksCount > clTracksCount && (!backendIsNewer || clTracksCount === 0)) {
+              rawTracks = lc.tracks;
+            } else if (clTracksCount > 0) {
+              rawTracks = cl.tracks;
+            } else if (acTracksCount > 0) {
+              rawTracks = ac.tracks;
+            } else if (lcTracksCount > 0) {
+              rawTracks = lc.tracks;
+            }
+
+            // Deduplicate tracks by id to prevent duplicate keys while preserving every song in order
+            const seenTrackIds = new Set();
+            const tracks = [];
+            for (let i = 0; i < rawTracks.length; i++) {
+              const trk = rawTracks[i];
+              if (!trk) continue;
+              const baseTrkId = String(
+                (trk.id !== undefined && trk.id !== null && trk.id !== "")
+                  ? trk.id
+                  : (trk.track_id !== undefined && trk.track_id !== null && trk.track_id !== "")
+                    ? trk.track_id
+                    : `pos_${i}`
+              );
+              let safeTrkId = baseTrkId;
+              if (seenTrackIds.has(safeTrkId)) {
+                safeTrkId = `${baseTrkId}__pos_${i}`;
+              }
+              seenTrackIds.add(safeTrkId);
+              tracks.push({ ...trk, id: safeTrkId });
+            }
+
+            // Heal backend only if backend had no tracks or if local is strictly newer AND has at least as many tracks
+            if (tracks.length > 0 && (!cl?.tracks || cl.tracks.length === 0 || (lcTime > clTime && lcTracksCount >= clTracksCount))) {
+              savePlaylistToCloud({ ...base, tracks }, currentUserId).catch(() => {});
             }
 
             const explicitStoredCat = activeStoredCategories[String(id)] || null;
@@ -380,7 +413,7 @@ export const MusicProvider = ({ children }) => {
               base.sourceMeta?.category ||
               ac?.sourceMeta?.category ||
               lc?.sourceMeta?.category ||
-              null;
+              "Mixed";
             const resolvedSpotifyId =
               base.spotifyId ||
               ac?.spotifyId ||
@@ -421,7 +454,7 @@ export const MusicProvider = ({ children }) => {
           }
 
           try {
-            const accountStorageKey = getAccountStorageKey("userData", userId);
+            const accountStorageKey = getAccountStorageKey("userData", currentUserId);
             const stored = JSON.parse(localStorage.getItem(accountStorageKey) || "{}");
             localStorage.setItem(accountStorageKey, JSON.stringify({ ...stored, customPlaylists: merged }));
           } catch {}
@@ -466,7 +499,7 @@ export const MusicProvider = ({ children }) => {
                 : [];
 
           if (tracks.length > 0 && (!cl?.tracks || cl.tracks.length === 0)) {
-            savePlaylistToCloud({ ...base, tracks, isSelfMix: true }, userId).catch(() => {});
+            savePlaylistToCloud({ ...base, tracks, isSelfMix: true }, currentUserId).catch(() => {});
           }
 
           mergedMixes.push({
@@ -499,7 +532,7 @@ export const MusicProvider = ({ children }) => {
               tracks: orphanCloudTracks.map((cm) => ({
                 id: cm.id,
                 title: cm.title,
-                artist: `@${cm.owner || userId}`,
+                artist: `@${cm.owner || currentUserId}`,
                 album: "Cloud Audio",
                 audioUrl: cm.audio_url,
                 duration: cm.duration || 180,
@@ -560,29 +593,30 @@ export const MusicProvider = ({ children }) => {
   };
 
   const refreshCloudPlaylists = useCallback(() => {
-    if (!isSupabaseConfigured()) return;
-    return syncAccountDataWithCloud(DEFAULT_USER_ID);
-  }, []);
+    const currentUserId = getAccountUserId(user);
+    return syncAccountDataWithCloud(currentUserId);
+  }, [user]);
 
   const login = (userData) => {
+    const resolvedUserId = getAccountUserId(userData);
     const userObj = {
-      username: DEFAULT_USER_ID,
-      name: userData?.name || DEFAULT_USER_ID,
-      email: userData?.email || `${DEFAULT_USER_ID}@ceepeefy.audio`,
-      plan: "Owner / Studio Master",
+      username: resolvedUserId,
+      name: userData?.name || resolvedUserId,
+      email: userData?.email || `${resolvedUserId}@ceepeefy.audio`,
+      plan: userData?.plan || (resolvedUserId === DEFAULT_USER_ID ? "Owner / Studio Master" : "Free"),
       isLoggedIn: true,
-      activeUser: DEFAULT_USER_ID,
+      activeUser: resolvedUserId,
       joinedAt: userData?.joinedAt || "2024-01-15",
     };
     setUser(userObj);
 
     try {
       localStorage.setItem("isLoggedIn", "true");
-      localStorage.setItem("activeUser", DEFAULT_USER_ID);
+      localStorage.setItem("activeUser", resolvedUserId);
       localStorage.setItem("ceepeefy_user", JSON.stringify(userObj));
 
       // Restore or initialize account-bound storage
-      const accountStorageKey = getAccountStorageKey("userData", DEFAULT_USER_ID);
+      const accountStorageKey = getAccountStorageKey("userData", resolvedUserId);
       const accountDataStr = localStorage.getItem(accountStorageKey);
       if (accountDataStr) {
         const accountData = JSON.parse(accountDataStr);
@@ -669,8 +703,8 @@ export const MusicProvider = ({ children }) => {
         });
       }
 
-      // Sync cloud state in the background immediately on login
-      syncAccountDataWithCloud(DEFAULT_USER_ID);
+      // Sync backend state in the background immediately on login
+      syncAccountDataWithCloud(resolvedUserId);
     } catch (e) {
       console.warn("Login persistence error:", e);
     }
@@ -973,11 +1007,11 @@ export const MusicProvider = ({ children }) => {
   const persistAccountData = (overrides = {}) => {
     if (typeof window === "undefined") return;
     try {
-      const storedLoggedIn = localStorage.getItem("isLoggedIn") === "true";
-      const storedActiveUser = localStorage.getItem("activeUser") || DEFAULT_USER_ID;
-      if (!storedLoggedIn || storedActiveUser !== DEFAULT_USER_ID) return;
+      const currentUserId = getAccountUserId(user || localStorage.getItem("activeUser"));
+      const storedLoggedIn = localStorage.getItem("isLoggedIn") === "true" || Boolean(user?.isLoggedIn);
+      if (!storedLoggedIn) return;
 
-      const accountStorageKey = getAccountStorageKey("userData", DEFAULT_USER_ID);
+      const accountStorageKey = getAccountStorageKey("userData", currentUserId);
       const currentStored = JSON.parse(localStorage.getItem(accountStorageKey) || "{}");
       const nextLikedIds = overrides.likedSongIds ?? likedSongIds;
       const nextLikedMap = overrides.likedSongsMap ?? likedSongsMap;
@@ -1025,11 +1059,11 @@ export const MusicProvider = ({ children }) => {
       localStorage.setItem("nocturne_custom_playlists", JSON.stringify(nextPlaylists));
       localStorage.setItem("nocturne_recent_tracks", JSON.stringify(nextRecents));
 
-      // Debounce saving full account snapshot to Supabase for seamless cross-computer sync
+      // Debounce saving full account snapshot to backend for seamless cross-computer sync
       if (typeof window !== "undefined") {
         if (window._persistCloudTimer) clearTimeout(window._persistCloudTimer);
         window._persistCloudTimer = setTimeout(() => {
-          saveAccountDataToCloud(accountData, DEFAULT_USER_ID).catch(() => {});
+          saveAccountDataToCloud(accountData, currentUserId).catch(() => {});
         }, 1000);
       }
     } catch (e) {
@@ -1037,7 +1071,7 @@ export const MusicProvider = ({ children }) => {
     }
   };
 
-  // Safely hydrate from localStorage on client mount, then fetch authoritative data from Supabase cloud
+  // Safely hydrate from localStorage on client mount, then fetch authoritative data from backend & Supabase
   useEffect(() => {
     try {
       const storedActiveUser = localStorage.getItem("activeUser") || DEFAULT_USER_ID;
@@ -1057,6 +1091,8 @@ export const MusicProvider = ({ children }) => {
             setUser(data.user);
             localStorage.setItem("ceepeefy_user", JSON.stringify(data.user));
             localStorage.setItem("isLoggedIn", "true");
+            const sessionUserId = getAccountUserId(data.user);
+            syncAccountDataWithCloud(sessionUserId);
           } else {
             // Only clear if localStorage has no active logged-in user
             const localUser = localStorage.getItem("ceepeefy_user");
@@ -1148,17 +1184,19 @@ export const MusicProvider = ({ children }) => {
         });
       }
 
-      // Authoritative cloud state fetch from Supabase (cross-device sync)
-      syncAccountDataWithCloud(DEFAULT_USER_ID);
+      const activeInitUser = getAccountUserId(userObj || storedActiveUser);
+      // Authoritative cloud state fetch from backend & Supabase (cross-device sync)
+      syncAccountDataWithCloud(activeInitUser);
 
       // Set up Supabase Realtime subscription for cross-device playlist sync
-      const unsubscribeRealtime = subscribeToUserPlaylists(DEFAULT_USER_ID, () => {
-        syncAccountDataWithCloud(DEFAULT_USER_ID);
+      const unsubscribeRealtime = subscribeToUserPlaylists(activeInitUser, () => {
+        syncAccountDataWithCloud(activeInitUser);
       });
 
       // Refresh on window focus so switching devices/tabs immediately gets latest playlists
       const handleFocus = () => {
-        syncAccountDataWithCloud(DEFAULT_USER_ID);
+        const activeUserId = getAccountUserId(user || localStorage.getItem("activeUser"));
+        syncAccountDataWithCloud(activeUserId);
       };
       window.addEventListener("focus", handleFocus);
 
@@ -1211,14 +1249,14 @@ export const MusicProvider = ({ children }) => {
   // Automatically update persistent storage whenever state changes while logged in
   useEffect(() => {
     if (!hasLoadedStorageRef.current || typeof window === "undefined") return;
-    if (!user || user.username !== DEFAULT_USER_ID) return;
+    if (!user) return;
 
     persistAccountData();
   }, [likedSongIds, likedSongsMap, customPlaylists, recentlyPlayedTracks, selfMixes, user]);
 
   const createPlaylist = (title, category = "Mixed") => {
     const currentUserId = getAccountUserId(user);
-    if (!user || currentUserId !== DEFAULT_USER_ID) {
+    if (!user) {
       openAuthModal("login");
       return null;
     }
@@ -1285,7 +1323,21 @@ export const MusicProvider = ({ children }) => {
     const count = customPlaylists.length + 1;
     const cleanTitle = title?.trim() || `Imported Playlist #${count}`;
     const cleanCategory = category?.trim() || "Mixed";
-    const id = `playlist-custom-${Date.now()}`;
+
+    const resolvedSpotifyId =
+      sourceMeta?.spotifyId ||
+      parseSpotifyPlaylistId(spotifyUrl || sourceMeta?.spotifyUrl || sourceMeta?.spotifyLink);
+
+    // Prevent duplicate playlists during repeated imports of the same Spotify playlist
+    const existingPlaylist = resolvedSpotifyId
+      ? customPlaylists.find(
+          (p) =>
+            (p.spotifyId && String(p.spotifyId) === String(resolvedSpotifyId)) ||
+            (p.sourceMeta?.spotifyId && String(p.sourceMeta.spotifyId) === String(resolvedSpotifyId))
+        )
+      : null;
+
+    const id = existingPlaylist ? existingPlaylist.id : `playlist-custom-${Date.now()}`;
 
     const safeTracks = Array.isArray(tracks)
       ? tracks.map(normalizeTrack).filter(Boolean)
@@ -1316,10 +1368,6 @@ export const MusicProvider = ({ children }) => {
     }
 
     const formattedDuration = formatPlaylistDuration(safeTracks);
-
-    const resolvedSpotifyId =
-      sourceMeta?.spotifyId ||
-      parseSpotifyPlaylistId(spotifyUrl || sourceMeta?.spotifyUrl || sourceMeta?.spotifyLink);
 
     const completeSourceMeta = {
       ...(sourceMeta || {}),
@@ -1363,7 +1411,14 @@ export const MusicProvider = ({ children }) => {
     } catch {}
 
     setCustomPlaylists((prev) => {
-      const updated = [newPlaylist, ...prev];
+      const existingIdx = prev.findIndex((p) => String(p.id) === String(id));
+      let updated;
+      if (existingIdx !== -1) {
+        updated = [...prev];
+        updated[existingIdx] = newPlaylist;
+      } else {
+        updated = [newPlaylist, ...prev];
+      }
       try {
         localStorage.setItem(getAccountStorageKey("ceepeefy_custom_playlists", currentUserId), JSON.stringify(updated));
       } catch {}
@@ -1969,18 +2024,11 @@ export const MusicProvider = ({ children }) => {
       }
     } catch { }
 
-    // 6. Delete from Supabase cloud
-    if (isSupabaseConfigured()) {
-      try {
-        const cloudOk = await deletePlaylistFromCloud(idStr, currentUserId);
-        if (!cloudOk) {
-          console.error("[MusicContext] Database failed to delete playlist:", idStr);
-          return { success: false, error: "Database error: Could not remove playlist from cloud." };
-        }
-      } catch (err) {
-        console.error("[MusicContext] Failed to delete playlist from Supabase:", err);
-        return { success: false, error: err?.message || "Cloud deletion failed." };
-      }
+    // 6. Delete from shared backend & Supabase
+    try {
+      await deletePlaylistFromCloud(idStr, currentUserId);
+    } catch (err) {
+      console.warn("[MusicContext] Notice deleting playlist from backend:", err);
     }
 
     return { success: true };
