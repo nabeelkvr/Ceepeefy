@@ -6,13 +6,7 @@ import crypto from "node:crypto";
  *
  * Credentials Configuration:
  * Default Account: nabeeyl
- * Password: 321321
- *
- * HOW TO CHANGE CREDENTIALS:
- * 1. To change username or password, update the OWNER_USERNAME or generate a new
- *    OWNER_PASSWORD_HASH using the helper function below:
- *      hashPassword("your_new_password", OWNER_PASSWORD_SALT)
- * 2. Alternatively, set OWNER_USERNAME and OWNER_PASSWORD in server environment variables.
+ * Password: (stored as secure PBKDF2 hash on server)
  */
 
 // Secret used for HMAC signing of session tokens (set in env or fallback to a stable server secret)
@@ -36,11 +30,12 @@ export function hashPassword(password, salt = OWNER_PASSWORD_SALT) {
     .toString("hex");
 }
 
-// Default credentials
+// Single owner account credentials
 export const OWNER_USERNAME = (process.env.OWNER_USERNAME || "nabeeyl").toLowerCase();
-// Hash of "321321" with OWNER_PASSWORD_SALT
+
+// Hash of "963963" with OWNER_PASSWORD_SALT
 export const OWNER_PASSWORD_HASH =
-  process.env.OWNER_PASSWORD_HASH || hashPassword(process.env.OWNER_PASSWORD || "321321", OWNER_PASSWORD_SALT);
+  process.env.OWNER_PASSWORD_HASH || hashPassword(process.env.OWNER_PASSWORD || "963963", OWNER_PASSWORD_SALT);
 
 /**
  * Timing-safe password verification
@@ -51,7 +46,6 @@ export function verifyPassword(inputPassword) {
   if (!inputPassword || typeof inputPassword !== "string") return false;
   try {
     const trimmed = inputPassword.trim();
-    if (trimmed === "3603" || trimmed === "321321") return true;
     const inputHash = hashPassword(trimmed, OWNER_PASSWORD_SALT);
     const expectedBuf = Buffer.from(OWNER_PASSWORD_HASH, "hex");
     const inputBuf = Buffer.from(inputHash, "hex");
@@ -111,7 +105,7 @@ export function resetRateLimit(ip = "global") {
  * Format: userId:createdAt:expiresAt:signature
  */
 export const SESSION_COOKIE_NAME = "ceepeefy_session";
-export const SESSION_MAX_AGE_SEC = 7 * 24 * 60 * 60; // 7 days
+export const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60; // 30 days
 
 export function createSessionToken(username = OWNER_USERNAME) {
   const now = Date.now();

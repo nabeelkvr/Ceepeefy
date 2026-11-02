@@ -47,9 +47,9 @@ export default function ProfileDropdown({ isOpen, onClose }) {
       className="absolute top-12 right-0 w-80 sm:w-84 bg-[#181818] border border-[#282828] rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150"
     >
       {!user ? (
-        /* GUEST STATE: Highlight "New to Ceepeefy?" & "Sign Up" */
+        /* GUEST STATE: Highlight "Welcome Back" & "Log In" */
         <div className="p-4 flex flex-col gap-3">
-          {/* New to Ceepeefy Hero Banner */}
+          {/* Welcome Banner */}
           <div className="relative overflow-hidden p-4 rounded-xl bg-gradient-to-br from-primary/15 via-surface-container to-surface-container-high border border-primary/25 shadow-[0_0_20px_rgba(76,215,246,0.12)]">
             <div className="absolute -top-6 -right-6 w-20 h-20 bg-primary/20 rounded-full blur-xl pointer-events-none" />
             
@@ -58,12 +58,12 @@ export default function ProfileDropdown({ isOpen, onClose }) {
                 auto_awesome
               </span>
               <h4 className="text-sm font-bold text-white tracking-tight">
-                New to Ceepeefy?
+                Welcome to Ceepeefy
               </h4>
             </div>
 
             <p className="text-xs text-on-surface-variant leading-relaxed mb-3.5">
-              Join for free to save playlists, like tracks, and enjoy bit-perfect Hi-Res Studio sound.
+              Log in to access your personal playlists, like tracks, and enjoy bit-perfect Hi-Res Studio sound.
             </p>
 
             <div className="flex flex-col gap-2">
@@ -71,28 +71,14 @@ export default function ProfileDropdown({ isOpen, onClose }) {
                 type="button"
                 onClick={() => {
                   onClose();
-                  openAuthModal("signup");
+                  openAuthModal("login");
                 }}
                 className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-primary via-cyan-400 to-primary-container text-[#003640] font-bold text-xs tracking-wide shadow-[0_0_16px_rgba(76,215,246,0.4)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[17px]">
-                  person_add
-                </span>
-                Sign Up
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  openAuthModal("login");
-                }}
-                className="w-full py-1.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-on-surface font-medium text-xs border border-white/10 hover:border-white/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[16px] text-outline">
                   login
                 </span>
-                Already have an account? Log In
+                Log In
               </button>
             </div>
           </div>

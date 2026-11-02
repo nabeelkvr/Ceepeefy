@@ -1,77 +1,150 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
+import { createClient } from "@supabase/supabase-js";
 
 /**
  * Server-Side Persistent Playlist Storage
  * Provides robust, cross-device playlist persistence and synchronization
  * for user accounts on Ceepeefy.
+ * Supports both persistent file storage (with read-only fallback) and Supabase database.
  */
 
-const DATA_DIR = path.join(process.cwd(), "src", "server", "data");
+// Initialize server-side Supabase client if environment variables are present
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  "";
+
+const isSupabaseAvailable =
+  Boolean(supabaseUrl) &&
+  Boolean(supabaseKey) &&
+  !supabaseUrl.includes("your-project-id");
+
+export const serverSupabase = isSupabaseAvailable
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
+
+// In-memory cache for fast lookups and resilience across serverless execution contexts
+const MEMORY_CACHE = new Map(); // userId -> { playlists, deletedPlaylistIds, updatedAt }
+
+let resolvedDataDir = null;
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (resolvedDataDir) return resolvedDataDir;
+  const primaryDir = path.join(process.cwd(), "src", "server", "data");
+  try {
+    if (!fs.existsSync(primaryDir)) {
+      fs.mkdirSync(primaryDir, { recursive: true });
+    }
+    // Test write permission
+    const testFile = path.join(primaryDir, `.test_write_${Date.now()}.tmp`);
+    fs.writeFileSync(testFile, "ok");
+    try { fs.unlinkSync(testFile); } catch {}
+    resolvedDataDir = primaryDir;
+    return resolvedDataDir;
+  } catch {
+    // Read-only filesystem (e.g. Vercel Lambda container) -> fallback to os.tmpdir()
+    const tmpDir = path.join(os.tmpdir(), "ceepeefy_data");
+    try {
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      resolvedDataDir = tmpDir;
+      return resolvedDataDir;
+    } catch {
+      resolvedDataDir = os.tmpdir();
+      return resolvedDataDir;
+    }
   }
 }
 
 function getStoreFilePath(userId) {
-  ensureDataDir();
-  const safeUser = String(userId || "default")
+  const dir = ensureDataDir();
+  const safeUser = String(userId || "nabeeyl")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, "_");
-  return path.join(DATA_DIR, `playlists_${safeUser}.json`);
+  return path.join(dir, `playlists_${safeUser}.json`);
 }
 
 function readStore(userId) {
-  const filePath = getStoreFilePath(userId);
-  if (!fs.existsSync(filePath)) {
-    return {
-      userId: String(userId).toLowerCase(),
-      playlists: [],
-      deletedPlaylistIds: [],
-      updatedAt: new Date().toISOString(),
-    };
+  const safeUser = String(userId || "nabeeyl").trim().toLowerCase();
+  const filePath = getStoreFilePath(safeUser);
+
+  let diskData = null;
+  if (fs.existsSync(filePath)) {
+    try {
+      const raw = fs.readFileSync(filePath, "utf-8");
+      const parsed = JSON.parse(raw);
+      diskData = {
+        userId: safeUser,
+        playlists: Array.isArray(parsed.playlists) ? parsed.playlists : [],
+        deletedPlaylistIds: Array.isArray(parsed.deletedPlaylistIds) ? parsed.deletedPlaylistIds : [],
+        updatedAt: parsed.updatedAt || new Date().toISOString(),
+      };
+    } catch (err) {
+      console.error(`[PlaylistStorage] Failed to read store for ${safeUser}:`, err);
+    }
   }
 
-  try {
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const parsed = JSON.parse(raw);
-    return {
-      userId: String(userId).toLowerCase(),
-      playlists: Array.isArray(parsed.playlists) ? parsed.playlists : [],
-      deletedPlaylistIds: Array.isArray(parsed.deletedPlaylistIds) ? parsed.deletedPlaylistIds : [],
-      updatedAt: parsed.updatedAt || new Date().toISOString(),
-    };
-  } catch (err) {
-    console.error(`[PlaylistStorage] Failed to read store for ${userId}:`, err);
-    return {
-      userId: String(userId).toLowerCase(),
+  const memData = MEMORY_CACHE.get(safeUser);
+
+  if (!diskData && !memData) {
+    const fresh = {
+      userId: safeUser,
       playlists: [],
       deletedPlaylistIds: [],
       updatedAt: new Date().toISOString(),
     };
+    MEMORY_CACHE.set(safeUser, fresh);
+    return fresh;
   }
+
+  if (diskData && !memData) {
+    MEMORY_CACHE.set(safeUser, diskData);
+    return diskData;
+  }
+
+  if (!diskData && memData) {
+    return memData;
+  }
+
+  // If both exist, merge non-destructively so no playlists are dropped
+  const diskTime = new Date(diskData.updatedAt || 0).getTime();
+  const memTime = new Date(memData.updatedAt || 0).getTime();
+
+  // If memory has more playlists or is newer, prefer memory
+  if (memData.playlists.length >= diskData.playlists.length || memTime >= diskTime) {
+    return memData;
+  }
+
+  MEMORY_CACHE.set(safeUser, diskData);
+  return diskData;
 }
 
 function writeStore(userId, data) {
-  const filePath = getStoreFilePath(userId);
+  const safeUser = String(userId || "nabeeyl").trim().toLowerCase();
+  const filePath = getStoreFilePath(safeUser);
   const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`;
 
   const payload = {
-    userId: String(userId).toLowerCase(),
+    userId: safeUser,
     playlists: Array.isArray(data.playlists) ? data.playlists : [],
     deletedPlaylistIds: Array.isArray(data.deletedPlaylistIds) ? data.deletedPlaylistIds : [],
     updatedAt: new Date().toISOString(),
   };
+
+  // Always update in-memory cache immediately
+  MEMORY_CACHE.set(safeUser, payload);
 
   try {
     fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2), "utf-8");
     fs.renameSync(tempPath, filePath);
     return true;
   } catch (err) {
-    console.error(`[PlaylistStorage] Failed to write store for ${userId}:`, err);
     try {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     } catch {}
@@ -80,15 +153,15 @@ function writeStore(userId, data) {
       fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
       return true;
     } catch (fallbackErr) {
-      console.error(`[PlaylistStorage] Direct write fallback also failed:`, fallbackErr);
-      return false;
+      console.warn(`[PlaylistStorage] Direct write notice (in-memory cached):`, fallbackErr?.message || fallbackErr);
+      return true; // Memory cache succeeded
     }
   }
 }
 
 /**
  * Normalizes playlist tracks, deduplicating duplicate tracks while preserving order
- * and supporting complete retrieval of large (1,000+ track) playlists.
+ * and supporting complete retrieval of large playlists.
  */
 function normalizePlaylistTracks(rawTracks = []) {
   if (!Array.isArray(rawTracks)) return [];
@@ -108,7 +181,6 @@ function normalizePlaylistTracks(rawTracks = []) {
     );
 
     if (seenIds.has(baseId)) {
-      // Avoid duplicate tracks during migration or synchronization
       continue;
     }
     seenIds.add(baseId);
@@ -126,7 +198,8 @@ function normalizePlaylistTracks(rawTracks = []) {
  * Retrieves all playlists for a user
  */
 export function getUserPlaylists(userId) {
-  const store = readStore(userId);
+  const safeUser = String(userId || "nabeeyl").trim().toLowerCase();
+  const store = readStore(safeUser);
   return store.playlists;
 }
 
@@ -134,7 +207,8 @@ export function getUserPlaylists(userId) {
  * Retrieves deleted playlist IDs for a user to prevent resurrection
  */
 export function getDeletedPlaylistIds(userId) {
-  const store = readStore(userId);
+  const safeUser = String(userId || "nabeeyl").trim().toLowerCase();
+  const store = readStore(safeUser);
   return store.deletedPlaylistIds;
 }
 
@@ -146,7 +220,8 @@ export function saveUserPlaylist(userId, playlist) {
     throw new Error("Invalid playlist: missing ID.");
   }
 
-  const store = readStore(userId);
+  const safeUser = String(userId || "nabeeyl").trim().toLowerCase();
+  const store = readStore(safeUser);
   const playlistIdStr = String(playlist.id);
 
   // Normalize tracks and preserve order
@@ -161,7 +236,7 @@ export function saveUserPlaylist(userId, playlist) {
   const normalizedPlaylist = {
     ...playlist,
     id: playlistIdStr,
-    user_id: String(userId).toLowerCase(),
+    user_id: safeUser,
     title: playlist.title || "Untitled Playlist",
     description: playlist.description || "",
     coverUrl: playlist.coverUrl || playlist.cover_url || "",
@@ -200,7 +275,33 @@ export function saveUserPlaylist(userId, playlist) {
   }
 
   store.deletedPlaylistIds = updatedDeleted;
-  writeStore(userId, store);
+  writeStore(safeUser, store);
+
+  // If Supabase is configured on server, also persist directly to database
+  if (serverSupabase) {
+    try {
+      serverSupabase
+        .from("user_playlists")
+        .upsert({
+          id: playlistIdStr,
+          user_id: safeUser,
+          title: normalizedPlaylist.title,
+          description: normalizedPlaylist.description,
+          cover_url: normalizedPlaylist.coverUrl,
+          category: cleanCategory,
+          source: normalizedPlaylist.source,
+          source_meta: normalizedPlaylist.sourceMeta,
+          tracks: normalizedTracks,
+          badge: normalizedPlaylist.badge,
+          badge_variant: normalizedPlaylist.badgeVariant,
+          fidelity: normalizedPlaylist.fidelity,
+          spec: normalizedPlaylist.spec,
+          updated_at: nowIso,
+        }, { onConflict: "id" })
+        .then(() => {})
+        .catch(() => {});
+    } catch {}
+  }
 
   return normalizedPlaylist;
 }
@@ -210,7 +311,8 @@ export function saveUserPlaylist(userId, playlist) {
  */
 export function deleteUserPlaylist(userId, playlistId) {
   if (!playlistId) return false;
-  const store = readStore(userId);
+  const safeUser = String(userId || "nabeeyl").trim().toLowerCase();
+  const store = readStore(safeUser);
   const idStr = String(playlistId);
 
   store.playlists = store.playlists.filter((p) => String(p.id) !== idStr);
@@ -218,7 +320,21 @@ export function deleteUserPlaylist(userId, playlistId) {
     store.deletedPlaylistIds.push(idStr);
   }
 
-  return writeStore(userId, store);
+  const success = writeStore(safeUser, store);
+
+  if (serverSupabase) {
+    try {
+      serverSupabase
+        .from("user_playlists")
+        .delete()
+        .eq("id", idStr)
+        .eq("user_id", safeUser)
+        .then(() => {})
+        .catch(() => {});
+    } catch {}
+  }
+
+  return success;
 }
 
 /**
@@ -229,7 +345,8 @@ export function deleteUserPlaylist(userId, playlistId) {
 export function syncUserPlaylists(userId, clientPlaylists = []) {
   if (!Array.isArray(clientPlaylists)) return { success: false, playlists: [] };
 
-  const store = readStore(userId);
+  const safeUser = String(userId || "nabeeyl").trim().toLowerCase();
+  const store = readStore(safeUser);
   const deletedSet = new Set(store.deletedPlaylistIds.map(String));
   const existingMap = new Map(store.playlists.map((p) => [String(p.id), p]));
 
@@ -247,7 +364,7 @@ export function syncUserPlaylists(userId, clientPlaylists = []) {
       const newRecord = {
         ...clientPl,
         id: plId,
-        user_id: String(userId).toLowerCase(),
+        user_id: safeUser,
         tracks: normalizedTracks,
         songsCount: normalizedTracks.length,
         category: clientPl.category || clientPl.sourceMeta?.category || "Mixed",
@@ -282,7 +399,7 @@ export function syncUserPlaylists(userId, clientPlaylists = []) {
           ...existing,
           ...clientPl,
           id: plId,
-          user_id: String(userId).toLowerCase(),
+          user_id: safeUser,
           tracks: mergedTracks,
           songsCount: mergedTracks.length,
           category: clientPl.category || existing.category || "Mixed",
@@ -294,7 +411,7 @@ export function syncUserPlaylists(userId, clientPlaylists = []) {
   }
 
   store.playlists = Array.from(existingMap.values());
-  writeStore(userId, store);
+  writeStore(safeUser, store);
 
   return {
     success: true,

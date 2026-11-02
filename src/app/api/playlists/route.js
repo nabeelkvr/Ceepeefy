@@ -5,6 +5,7 @@ import {
   saveUserPlaylist,
   deleteUserPlaylist,
   syncUserPlaylists,
+  serverSupabase,
 } from "../../../server/playlistStorage.js";
 import {
   verifySessionToken,
@@ -14,6 +15,7 @@ import {
 
 /**
  * Resolves user ID from session cookie or request payload/params
+ * Defaults always to single account "nabeeyl"
  */
 function resolveUserId(request, bodyOrParamUserId = null) {
   if (bodyOrParamUserId && typeof bodyOrParamUserId === "string" && bodyOrParamUserId.trim()) {
@@ -41,8 +43,26 @@ export async function GET(request) {
     const requestedUser = searchParams.get("userId") || searchParams.get("user_id");
     const userId = resolveUserId(request, requestedUser);
 
-    const playlists = getUserPlaylists(userId);
+    let playlists = getUserPlaylists(userId);
     const deletedPlaylistIds = getDeletedPlaylistIds(userId);
+
+    // If local store is empty and Supabase is configured, restore from Supabase
+    if ((!playlists || playlists.length === 0) && serverSupabase) {
+      try {
+        const { data: supaPlaylists } = await serverSupabase
+          .from("user_playlists")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
+
+        if (Array.isArray(supaPlaylists) && supaPlaylists.length > 0) {
+          const synced = syncUserPlaylists(userId, supaPlaylists);
+          playlists = synced.playlists;
+        }
+      } catch (supaErr) {
+        console.warn("[Playlists API] Supabase query notice:", supaErr?.message || supaErr);
+      }
+    }
 
     return NextResponse.json({
       success: true,

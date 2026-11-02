@@ -249,9 +249,9 @@ export const MusicProvider = ({ children }) => {
   // Modals for Settings & Auth
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authModalTab, setAuthModalTab] = useState("signup"); // 'signup' | 'login'
+  const [authModalTab, setAuthModalTab] = useState("login"); // 'login' only
 
-  const openAuthModal = (tab = "signup") => {
+  const openAuthModal = (tab = "login") => {
     setAuthModalTab(tab);
     setIsAuthModalOpen(true);
   };
@@ -277,6 +277,8 @@ export const MusicProvider = ({ children }) => {
   }, [playbackContext]);
 
   const isSyncingCloudRef = useRef(false);
+  const hasCloudSyncedRef = useRef(false);
+  const lastTransitionTimeRef = useRef(0);
 
   // Cloud sync helper to refresh playlists, liked songs, and recently played from backend & Supabase
   const syncAccountDataWithCloud = async (targetUserId = null) => {
@@ -585,6 +587,7 @@ export const MusicProvider = ({ children }) => {
       if (Array.isArray(cloudAccountData?.pinnedPlaylistIds) && cloudAccountData.pinnedPlaylistIds.length > 0) {
         setPinnedPlaylistIds((prev) => Array.from(new Set([...(prev || []), ...cloudAccountData.pinnedPlaylistIds])));
       }
+      hasCloudSyncedRef.current = true;
     } catch (err) {
       console.error("[MusicContext] Cloud sync error:", err);
     } finally {
@@ -597,7 +600,7 @@ export const MusicProvider = ({ children }) => {
     return syncAccountDataWithCloud(currentUserId);
   }, [user]);
 
-  const login = (userData) => {
+  const login = async (userData) => {
     const resolvedUserId = getAccountUserId(userData);
     const userObj = {
       username: resolvedUserId,
@@ -704,7 +707,7 @@ export const MusicProvider = ({ children }) => {
       }
 
       // Sync backend state in the background immediately on login
-      syncAccountDataWithCloud(resolvedUserId);
+      await syncAccountDataWithCloud(resolvedUserId);
     } catch (e) {
       console.warn("Login persistence error:", e);
     }
@@ -712,6 +715,7 @@ export const MusicProvider = ({ children }) => {
   };
 
   const signUp = () => {
+    openAuthModal("login");
     return null;
   };
 
@@ -1017,6 +1021,11 @@ export const MusicProvider = ({ children }) => {
       const nextLikedMap = overrides.likedSongsMap ?? likedSongsMap;
       const nextPlaylists = overrides.customPlaylists ?? customPlaylists;
       const nextRecents = overrides.recentlyPlayedTracks ?? recentlyPlayedTracks;
+
+      // CRITICAL GUARD: Never overwrite cloud data with empty playlists before initial cloud sync completes
+      if (!hasCloudSyncedRef.current && nextPlaylists.length === 0) {
+        return;
+      }
 
       let nextMixes = overrides.selfMixes ?? selfMixes;
       if (!Array.isArray(nextMixes) || nextMixes.length === 0) {
@@ -2703,23 +2712,19 @@ export const MusicProvider = ({ children }) => {
           trackId: nextTrackId,
           audioUrl: resolvedAudioUrl,
           blobUrl: null,
-          preloader: null,
         };
 
-        // Cache eviction: keep max 3 entries in memory to prevent excessive storage/memory
-        if (prefetchCacheRef.current.size >= 3) {
+        // Cache eviction: keep max 4 entries in memory
+        if (prefetchCacheRef.current.size >= 4) {
           const oldestKey = prefetchCacheRef.current.keys().next().value;
           const oldEntry = prefetchCacheRef.current.get(oldestKey);
           if (oldEntry?.blobUrl) {
             try { URL.revokeObjectURL(oldEntry.blobUrl); } catch { }
           }
-          if (oldEntry?.preloader) {
-            try { oldEntry.preloader.src = ""; } catch { }
-          }
           prefetchCacheRef.current.delete(oldestKey);
         }
 
-        // 4. Download and cache audio in background
+        // 4. Pre-cache audio stream in background
         try {
           const resp = await fetch(resolvedAudioUrl, {
             signal: abortController.signal,
@@ -2732,16 +2737,8 @@ export const MusicProvider = ({ children }) => {
             }
           }
         } catch (fetchErr) {
-          // If fetch fails (e.g. CORS), fallback to HTML5 Audio element background preloading
-          if (!abortController.signal.aborted && typeof window !== "undefined") {
-            try {
-              const bgAudio = new Audio();
-              bgAudio.preload = "auto";
-              bgAudio.src = resolvedAudioUrl;
-              bgAudio.load();
-              cacheEntry.preloader = bgAudio;
-            } catch { }
-          }
+          // Direct CDN stream URL is already preserved in cacheEntry.audioUrl
+          // No auxiliary Audio instance is created to prevent mobile hardware decoder exhaustion
         }
 
         if (!abortController.signal.aborted) {
@@ -3557,9 +3554,15 @@ export const MusicProvider = ({ children }) => {
   };
 
   const handleEnded = () => {
-    // Prevent duplicate triggers if already transitioning
-    if (isTransitioningTrackRef.current) return;
+    const now = Date.now();
+    // Prevent duplicate triggers if already transitioning (with 4s deadlock breaker)
+    if (isTransitioningTrackRef.current) {
+      if (now - (lastTransitionTimeRef.current || 0) < 4000) {
+        return;
+      }
+    }
     isTransitioningTrackRef.current = true;
+    lastTransitionTimeRef.current = now;
 
     // 1. Single track repeat mode: Replay current track
     if (repeatModeRef.current === "one") {
@@ -3996,6 +3999,16 @@ export const MusicProvider = ({ children }) => {
           if (requestId === playRequestIdRef.current) {
             setIsBuffering(false);
             isTransitioningTrackRef.current = false;
+            // Mobile continuous playback recovery
+            setTimeout(async () => {
+              if (audioRef.current && audioRef.current.paused && isPlayingRef.current) {
+                try {
+                  await audioRef.current.play();
+                  setIsPlaying(true);
+                  updateMediaSessionMetadata(resolvedTrack);
+                } catch {}
+              }
+            }, 100);
           }
         }
       }
@@ -4784,11 +4797,14 @@ export const MusicProvider = ({ children }) => {
         </div>
       )}
 
-      {/* Standard HTML5 <audio> Element with Aggressive Preloading & Stall Recovery */}
+      {/* Standard HTML5 <audio> Element with Aggressive Preloading & Mobile Continuous Playback */}
       <audio
         ref={audioRef}
         style={{ display: "none" }}
         preload="auto"
+        playsInline
+        webkit-playsinline="true"
+        x-webkit-airplay="allow"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onDurationChange={handleDurationChange}

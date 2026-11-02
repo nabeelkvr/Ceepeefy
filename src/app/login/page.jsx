@@ -8,14 +8,9 @@ export default function LoginPage() {
   const router = useRouter();
   const { user, login } = useMusic();
 
-  // Mode: true = Signup Card (matching the image), false = Login Card
-  const [isSignUp, setIsSignUp] = useState(true);
-
   // Form states
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [loginUser, setLoginUser] = useState("");
+  const [password, setPassword] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -41,46 +36,22 @@ export default function LoginPage() {
     e.preventDefault();
     setFeedback(null);
 
-    if (isSignUp) {
-      if (!email.trim() || !password.trim()) {
-        setFeedback({
-          type: "error",
-          message: "Please enter your email and a password.",
-        });
-        return;
-      }
-      if (password.trim().length < 4) {
-        setFeedback({
-          type: "error",
-          message: "Password must be at least 4 characters long.",
-        });
-        return;
-      }
-    } else {
-      if (!loginUser.trim() || !password.trim()) {
-        setFeedback({
-          type: "error",
-          message: "Please enter your email or username and password.",
-        });
-        return;
-      }
+    if (!loginUser.trim() || !password.trim()) {
+      setFeedback({
+        type: "error",
+        message: "Please enter your email or username and password.",
+      });
+      return;
     }
 
     setIsLoading(true);
 
     try {
-      const payload = isSignUp
-        ? {
-          action: "signup",
-          email: email.trim(),
-          password: password.trim(),
-          displayName: displayName.trim() || email.split("@")[0],
-        }
-        : {
-          action: "login",
-          username: loginUser.trim(),
-          password: password.trim(),
-        };
+      const payload = {
+        action: "login",
+        username: loginUser.trim(),
+        password: password.trim(),
+      };
 
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -91,13 +62,11 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        login(data.user);
+        await login(data.user);
 
         setFeedback({
           type: "success",
-          message: isSignUp
-            ? `Account created! Welcome, ${data.user.name}!`
-            : `Welcome back, ${data.user.name}!`,
+          message: `Welcome back, ${data.user.name}!`,
         });
 
         const searchParams =
@@ -214,7 +183,7 @@ export default function LoginPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* 2. MAIN FULL-WIDTH WRAPPER: HERO TEXT + SIGNUP CARD      */}
+      {/* 2. MAIN FULL-WIDTH WRAPPER: HERO TEXT + LOGIN CARD       */}
       {/* ======================================================== */}
       <div className="relative z-10 w-full max-w-[1240px] flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-14 py-8 sm:py-12">
 
@@ -232,11 +201,11 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* RIGHT COLUMN: FLOATING GLASSMORPHIC SIGNUP/LOGIN CARD */}
+        {/* RIGHT COLUMN: FLOATING GLASSMORPHIC LOGIN CARD */}
         <div className="w-full lg:w-[430px] flex-shrink-0 z-20">
           <div className="relative w-full bg-white/[0.05] sm:bg-[#121626]/65 backdrop-blur-3xl border border-white/20 rounded-[28px] sm:rounded-[32px] p-7 sm:p-9 shadow-[0_30px_70px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.22)] transition-all duration-300">
 
-            {/* Top Brand Identity: Soundwave CP Emblem + Ceepeefy Wordmark from Image 2 */}
+            {/* Top Brand Identity: Soundwave CP Emblem + Ceepeefy Wordmark */}
             <div className="flex items-center justify-center gap-3">
               <div className="w-10 h-10 flex-shrink-0 relative">
                 <svg
@@ -280,10 +249,10 @@ export default function LoginPage() {
             {/* Card Titles */}
             <div className="flex flex-col items-center text-center mt-5 mb-6">
               <h2 className="text-2xl sm:text-[26px] font-bold text-white tracking-tight">
-                {isSignUp ? "Create your account" : "Welcome back"}
+                Welcome back
               </h2>
               <p className="text-xs sm:text-[13px] text-zinc-400 mt-1">
-                {isSignUp ? "Join the music community." : "Log in to continue listening."}
+                Log in to continue listening.
               </p>
             </div>
 
@@ -304,74 +273,31 @@ export default function LoginPage() {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
-              {isSignUp ? (
-                /* ================= SIGNUP INPUTS ================= */
-                <>
-                  <div>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="What's your email?"
-                      required
-                      autoComplete="email"
-                      className="w-full bg-white/[0.03] hover:bg-white/[0.06] focus:bg-white/[0.08] border border-white/15 focus:border-cyan-400/70 rounded-xl px-4 py-3.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/70 transition-all shadow-inner"
-                    />
-                  </div>
+              <div>
+                <input
+                  type="text"
+                  value={loginUser}
+                  onChange={(e) => setLoginUser(e.target.value)}
+                  placeholder="Email or username"
+                  required
+                  autoComplete="username"
+                  className="w-full bg-white/[0.03] hover:bg-white/[0.06] focus:bg-white/[0.08] border border-white/15 focus:border-cyan-400/70 rounded-xl px-4 py-3.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/70 transition-all shadow-inner"
+                />
+              </div>
 
-                  <div>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Create a password"
-                      required
-                      autoComplete="new-password"
-                      className="w-full bg-white/[0.03] hover:bg-white/[0.06] focus:bg-white/[0.08] border border-white/15 focus:border-cyan-400/70 rounded-xl px-4 py-3.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/70 transition-all shadow-inner"
-                    />
-                  </div>
+              <div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  required
+                  autoComplete="current-password"
+                  className="w-full bg-white/[0.03] hover:bg-white/[0.06] focus:bg-white/[0.08] border border-white/15 focus:border-cyan-400/70 rounded-xl px-4 py-3.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/70 transition-all shadow-inner"
+                />
+              </div>
 
-                  <div>
-                    <input
-                      type="text"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="What should we call you?"
-                      autoComplete="name"
-                      className="w-full bg-white/[0.03] hover:bg-white/[0.06] focus:bg-white/[0.08] border border-white/15 focus:border-cyan-400/70 rounded-xl px-4 py-3.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/70 transition-all shadow-inner"
-                    />
-                  </div>
-                </>
-              ) : (
-                /* ================= LOGIN INPUTS ================= */
-                <>
-                  <div>
-                    <input
-                      type="text"
-                      value={loginUser}
-                      onChange={(e) => setLoginUser(e.target.value)}
-                      placeholder="Email or username"
-                      required
-                      autoComplete="username"
-                      className="w-full bg-white/[0.03] hover:bg-white/[0.06] focus:bg-white/[0.08] border border-white/15 focus:border-cyan-400/70 rounded-xl px-4 py-3.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/70 transition-all shadow-inner"
-                    />
-                  </div>
-
-                  <div>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter your password"
-                      required
-                      autoComplete="current-password"
-                      className="w-full bg-white/[0.03] hover:bg-white/[0.06] focus:bg-white/[0.08] border border-white/15 focus:border-cyan-400/70 rounded-xl px-4 py-3.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/70 transition-all shadow-inner"
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Action Button: Sign Up Free / Log In */}
+              {/* Action Button: Log In */}
               <button
                 type="submit"
                 disabled={isLoading}
@@ -383,49 +309,16 @@ export default function LoginPage() {
                     <span>Please wait...</span>
                   </>
                 ) : (
-                  <span>{isSignUp ? "Sign up free" : "Log in"}</span>
+                  <span>Log in</span>
                 )}
               </button>
             </form>
-
-            {/* Toggle Between Signup and Login */}
-            <div className="mt-5 text-center text-xs text-zinc-400">
-              {isSignUp ? (
-                <span>
-                  Already have an account?{" "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSignUp(false);
-                      setFeedback(null);
-                    }}
-                    className="text-white hover:text-cyan-300 font-semibold underline underline-offset-2 transition-colors cursor-pointer"
-                  >
-                    Log in
-                  </button>
-                </span>
-              ) : (
-                <span>
-                  Don&apos;t have an account?{" "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSignUp(true);
-                      setFeedback(null);
-                    }}
-                    className="text-white hover:text-cyan-300 font-semibold underline underline-offset-2 transition-colors cursor-pointer"
-                  >
-                    Sign up free
-                  </button>
-                </span>
-              )}
-            </div>
           </div>
         </div>
       </div>
 
       {/* ======================================================== */}
-      {/* 3. SUBTLE BOTTOM-RIGHT SPARKLE (Matching Image 2)        */}
+      {/* 3. SUBTLE BOTTOM-RIGHT SPARKLE                           */}
       {/* ======================================================== */}
       <div className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 text-zinc-500/40 pointer-events-none select-none z-10">
         <svg className="w-5 h-5 sm:w-6 sm:h-6 fill-current" viewBox="0 0 24 24">
