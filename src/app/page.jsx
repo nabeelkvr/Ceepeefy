@@ -107,11 +107,13 @@ export default function HomePage() {
     formatTime,
     recentlyPlayedTracks,
     customPlaylists,
+    addedPlaylists,
     selfMixes,
     user,
     openAuthModal,
     clearRecentlyPlayed,
     bumpPlaylistToTop,
+    refreshCloudPlaylists,
   } = useMusic();
 
   const filterChips = [
@@ -142,6 +144,51 @@ export default function HomePage() {
     }, 350);
     return () => clearTimeout(timer);
   }, []);
+
+  // Proactively refresh user's database playlists when Home page mounts
+  useEffect(() => {
+    refreshCloudPlaylists?.();
+  }, [refreshCloudPlaylists]);
+
+  // Compute user playlists from Playlist page (sorted: most recently played or created first)
+  const userPlaylists = useMemo(() => {
+    const map = new Map();
+    // 1. User custom playlists (excluding self-mixes and albums)
+    (customPlaylists || [])
+      .filter((pl) => !pl.isSelfMix && !pl.isAlbum)
+      .forEach((pl) => {
+        map.set(String(pl.id), { ...pl, isCustom: true });
+      });
+
+    // 2. Added / saved playlists
+    (addedPlaylists || [])
+      .filter((pl) => !pl.isSelfMix && !pl.isAlbum)
+      .forEach((pl) => {
+        if (!map.has(String(pl.id))) {
+          map.set(String(pl.id), pl);
+        }
+      });
+
+    const list = Array.from(map.values());
+
+    return list.sort((a, b) => {
+      // Prioritize explicit lastPlayedAt
+      const playedA = a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : 0;
+      const playedB = b.lastPlayedAt ? new Date(b.lastPlayedAt).getTime() : 0;
+      if (playedA && playedB && playedA !== playedB) {
+        return playedB - playedA;
+      }
+      if (playedA && !playedB) return -1;
+      if (!playedA && playedB) return 1;
+
+      // Fallback to most recently updated or created
+      const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+
+      return 0;
+    });
+  }, [customPlaylists, addedPlaylists]);
 
   const recommendedTracks = useMemo(() => {
     return getPersonalizedRecommendations(recentlyPlayedTracks, {
@@ -583,27 +630,126 @@ export default function HomePage() {
           <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
         </div>
 
-        {/* Under the 4 Big Cards: Spotify-Style Curated Playlist Row (Excluding the 4 featured cards above) */}
+        {/* My Playlist Section (Directly above Trending Playlists) */}
         <div className="flex flex-col gap-2 pt-1 sm:pt-2">
-          <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
-            Trending Playlists
-          </h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                My Playlist
+              </h3>
+              {userPlaylists.length > 0 && (
+                <span className="text-[11px] sm:text-xs text-on-surface-variant font-medium">
+                  ({userPlaylists.length})
+                </span>
+              )}
+            </div>
+
+            <Link
+              href="/playlists"
+              className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
+            >
+              <span>Show All</span>
+              <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+                arrow_forward
+              </span>
+            </Link>
+          </div>
 
           {isPageLoading ? (
-            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4 pb-2 pt-1 -mx-2 px-2">
+            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-1.5 sm:gap-2 md:gap-2.5 pb-2 pt-1 -mx-2 px-2">
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="w-[135px] sm:w-[145px] md:w-[155px] lg:w-[165px] xl:w-[175px] 2xl:w-[185px] 3xl:w-[195px] p-1.5 sm:p-2 md:p-2.5 rounded-lg sm:rounded-xl bg-[#181818]/60 flex-shrink-0 flex flex-col gap-2 select-none"
+                >
+                  <div className="relative aspect-square w-full rounded-[10px] bg-[#222222] animate-pulse ring-1 ring-white/5" />
+                  <div className="h-3.5 w-24 bg-[#262626] rounded animate-pulse mt-1" />
+                  <div className="h-3 w-32 bg-[#202020] rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : userPlaylists.length > 0 ? (
+            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-1.5 sm:gap-2 md:gap-2.5 pb-2 pt-1 -mx-2 px-2">
+              {userPlaylists.map((pl) => (
+                <PlaylistCard key={pl.id} playlist={pl} />
+              ))}
+              <div
+                onClick={() => router.push("/playlists")}
+                className="w-[135px] sm:w-[145px] md:w-[155px] lg:w-[165px] xl:w-[175px] 2xl:w-[185px] 3xl:w-[195px] p-1.5 sm:p-2 md:p-2.5 rounded-lg sm:rounded-xl bg-[#181818]/40 hover:bg-[#282828] border border-dashed border-white/10 hover:border-primary/50 flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-300"
+              >
+                <div className="relative aspect-square w-full rounded-md overflow-hidden bg-[#141414] border border-white/5 flex flex-col items-center justify-center text-neutral-400 group-hover:text-primary transition-colors">
+                  <span className="material-symbols-outlined text-[32px] sm:text-[36px] group-hover:scale-110 transition-transform">
+                    add
+                  </span>
+                  <span className="text-[10px] sm:text-xs font-semibold mt-1">New Playlist</span>
+                </div>
+                <div className="flex flex-col min-w-0 mt-2.5 sm:mt-3">
+                  <h3 className="text-xs sm:text-sm font-semibold text-white group-hover:text-primary truncate">
+                    Create Playlist
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-[#B3B3B3] mt-1 truncate">
+                    Add new music
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-1.5 sm:gap-2 md:gap-2.5 pb-2 pt-1 -mx-2 px-2">
+              <div
+                onClick={() => router.push("/playlists")}
+                className="w-[135px] sm:w-[145px] md:w-[155px] lg:w-[165px] xl:w-[175px] 2xl:w-[185px] 3xl:w-[195px] p-1.5 sm:p-2 md:p-2.5 rounded-lg sm:rounded-xl bg-[#181818]/40 hover:bg-[#282828] border border-dashed border-white/10 hover:border-primary/50 flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-300"
+              >
+                <div className="relative aspect-square w-full rounded-md overflow-hidden bg-[#141414] border border-white/5 flex flex-col items-center justify-center text-neutral-400 group-hover:text-primary transition-colors">
+                  <span className="material-symbols-outlined text-[32px] sm:text-[36px] group-hover:scale-110 transition-transform">
+                    add
+                  </span>
+                  <span className="text-[10px] sm:text-xs font-semibold mt-1">New Playlist</span>
+                </div>
+                <div className="flex flex-col min-w-0 mt-2.5 sm:mt-3">
+                  <h3 className="text-xs sm:text-sm font-semibold text-white group-hover:text-primary truncate">
+                    Create Playlist
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-[#B3B3B3] mt-1 truncate">
+                    Start your collection
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section: Trending Playlists */}
+        <div className="flex flex-col gap-2 pt-1 sm:pt-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+              Trending Playlists
+            </h3>
+            <Link
+              href="/playlists"
+              className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider group"
+            >
+              <span>Show All</span>
+              <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+                arrow_forward
+              </span>
+            </Link>
+          </div>
+
+          {isPageLoading ? (
+            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-1.5 sm:gap-2 md:gap-2.5 pb-2 pt-1 -mx-2 px-2">
               {Array.from({ length: 6 }).map((_, idx) => (
                 <div
                   key={idx}
-                  className="w-[135px] sm:w-[150px] md:w-[165px] lg:w-[175px] xl:w-[195px] 2xl:w-[215px] 3xl:w-[240px] p-2 rounded-xl flex-shrink-0 flex flex-col gap-2 select-none"
+                  className="w-[135px] sm:w-[145px] md:w-[155px] lg:w-[165px] xl:w-[175px] 2xl:w-[185px] 3xl:w-[195px] p-1.5 sm:p-2 md:p-2.5 rounded-lg sm:rounded-xl bg-[#181818]/60 flex-shrink-0 flex flex-col gap-2 select-none"
                 >
-                  <div className="relative aspect-square w-full rounded-[10px] bg-[#1a1a1a] animate-pulse ring-1 ring-white/5" />
-                  <div className="h-4 w-24 bg-[#222222] rounded animate-pulse mt-0.5" />
-                  <div className="h-3 w-32 bg-[#1f1f1f] rounded animate-pulse" />
+                  <div className="relative aspect-square w-full rounded-[10px] bg-[#222222] animate-pulse ring-1 ring-white/5" />
+                  <div className="h-3.5 w-24 bg-[#262626] rounded animate-pulse mt-1" />
+                  <div className="h-3 w-32 bg-[#202020] rounded animate-pulse" />
                 </div>
               ))}
             </div>
           ) : (
-            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-3 md:gap-4 pb-2 pt-1 -mx-2 px-2">
+            <div className="flex flex-row flex-nowrap overflow-x-auto no-scrollbar scroll-smooth gap-1.5 sm:gap-2 md:gap-2.5 pb-2 pt-1 -mx-2 px-2">
               {SPOTIFY_STYLE_PLAYLISTS.filter(
                 (pl) =>
                   !FEATURED_PLAYLIST_COLLECTION.some(

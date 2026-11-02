@@ -25,9 +25,9 @@ const NEGATIVE_CACHE_TTL = 5 * 60 * 1000;       // 5 minutes
 class LyricsService {
   constructor() {
     this.providers = [
-      new JioSaavnProvider(),
-      new LrclibProvider(),
       new MusixmatchProvider(),
+      new LrclibProvider(),
+      new JioSaavnProvider(),
       new MockProvider(),
     ];
 
@@ -103,73 +103,27 @@ class LyricsService {
     let attemptedProviders = [];
 
     // Filter providers: allow custom list or standard sequence
+    // Strict priority: 1. Musixmatch -> 2. LRCLIB -> 3. JioSaavn -> 4. Mock
     const providersToTry = this.providers.filter((p) => {
       if (options.provider && p.name !== options.provider) return false;
       return true;
     });
 
-    // 1. Fast Parallel Execution for primary providers (JioSaavn + LRCLIB)
-    if (!options.provider && providersToTry.length >= 2) {
-      const primaryProviders = providersToTry.slice(0, 2);
-      attemptedProviders.push(...primaryProviders.map((p) => p.name));
-
-      const parallelResults = await Promise.allSettled(
-        primaryProviders.map((p) =>
-          p.fetchLyrics(trackSeed, { timeoutMs: options.timeoutMs || 2500 })
-        )
-      );
-
-      const successfulResults = [];
-      parallelResults.forEach((res, idx) => {
-        if (
-          res.status === "fulfilled" &&
-          res.value &&
-          res.value.found &&
-          Array.isArray(res.value.lines) &&
-          res.value.lines.length > 0
-        ) {
-          successfulResults.push(res.value);
-        } else if (res.status === "rejected") {
-          console.warn(
-            `[LyricsService] Fast primary provider ${primaryProviders[idx].name} error:`,
-            res.reason?.message
-          );
-        }
-      });
-
-      // Prefer synced lyrics with highest confidence
-      if (successfulResults.length > 0) {
-        successfulResults.sort((a, b) => {
-          if (a.synced && !b.synced) return -1;
-          if (!a.synced && b.synced) return 1;
-          return (b.matchConfidence || 0) - (a.matchConfidence || 0);
-        });
-        acceptedResult = successfulResults[0];
+    for (const provider of providersToTry) {
+      if (!attemptedProviders.includes(provider.name)) {
+        attemptedProviders.push(provider.name);
       }
-    }
+      try {
+        const result = await provider.fetchLyrics(trackSeed, {
+          timeoutMs: options.timeoutMs || 2500,
+        });
 
-    // 2. Sequential fallback execution for remaining providers if needed
-    if (!acceptedResult) {
-      const remainingProviders = options.provider
-        ? providersToTry
-        : providersToTry.slice(2);
-
-      for (const provider of remainingProviders) {
-        if (!attemptedProviders.includes(provider.name)) {
-          attemptedProviders.push(provider.name);
+        if (result && result.found && Array.isArray(result.lines) && result.lines.length > 0) {
+          acceptedResult = result;
+          break;
         }
-        try {
-          const result = await provider.fetchLyrics(trackSeed, {
-            timeoutMs: options.timeoutMs || 2500,
-          });
-
-          if (result && result.found && Array.isArray(result.lines) && result.lines.length > 0) {
-            acceptedResult = result;
-            break;
-          }
-        } catch (err) {
-          console.warn(`[LyricsService] Provider ${provider.name} error:`, err.message);
-        }
+      } catch (err) {
+        console.warn(`[LyricsService] Provider ${provider.name} error:`, err.message);
       }
     }
 

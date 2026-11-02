@@ -312,6 +312,7 @@ export async function GET(request) {
 
   try {
     let rawAudioBuffer = null;
+    let coverBuffer = null;
 
     // Local file path
     if (audioUrl.startsWith("/media/") || audioUrl.startsWith("media/")) {
@@ -335,6 +336,14 @@ export async function GET(request) {
           : Promise.resolve(null),
       ]);
 
+      if (imgRes && imgRes.ok) {
+        try {
+          coverBuffer = Buffer.from(await imgRes.arrayBuffer());
+        } catch {
+          coverBuffer = null;
+        }
+      }
+
       let audioRes = audioFetch;
       if (!audioRes.ok && audioUrl.includes("saavncdn.com")) {
         const fallbackBitrates = ["320", "160", "96", "48"].filter((b) => b !== targetBitrate);
@@ -356,6 +365,21 @@ export async function GET(request) {
       if (audioRes.ok) {
         rawAudioBuffer = Buffer.from(await audioRes.arrayBuffer());
       }
+    }
+
+    // Fallback cover fetch if not already obtained
+    if (!coverBuffer && coverUrl && coverUrl.startsWith("http")) {
+      try {
+        const cRes = await fetch(coverUrl.replace("150x150", "500x500").replace("50x50", "500x500"), {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+        });
+        if (cRes.ok) {
+          coverBuffer = Buffer.from(await cRes.arrayBuffer());
+        }
+      } catch {}
     }
 
     // If fetch failed or stream is unavailable, fallback to local audio sample
@@ -384,53 +408,73 @@ export async function GET(request) {
     let ext = "mp3";
     let contentType = "audio/mpeg";
 
-    // Handle format selection & FFmpeg transcoding
-    if (requestedFormat === "mp3" || isGenuineMp3) {
+    // Primary Requirement: MP3 is mandatory default and primary download format
+    const wantsM4a = requestedFormat === "m4a";
+    const wantsWav = requestedFormat === "wav";
+
+    if (!wantsM4a && !wantsWav) {
+      // MANDATORY PRIMARY FORMAT: Genuine MP3
       ext = "mp3";
       contentType = "audio/mpeg";
 
       if (isGenuineMp3) {
         outputBuffer = rawAudioBuffer;
       } else {
-        // Transcode AAC/M4A/etc. to genuine MP3 using FFmpeg
+        // Transcode AAC/M4A/etc. from JioSaavn to genuine MP3 using FFmpeg
         try {
           outputBuffer = await convertToMp3(rawAudioBuffer, {
             bitrate: Number(targetBitrate) || 320,
             title,
             artist,
             album,
+            coverBuffer,
           });
         } catch (convErr) {
-          console.warn("[Download API] FFmpeg transcode warning:", convErr.message);
-          // Fallback to bundled MP3 if transcode failed
-          const sampleMp3 = path.join(process.cwd(), "public", "media", "audio_sample.mp3");
-          if (fs.existsSync(sampleMp3)) {
-            outputBuffer = fs.readFileSync(sampleMp3);
+          console.warn("[Download API] Primary MP3 transcode failed, retrying without cover:", convErr.message);
+          try {
+            // Step 2: Retry conversion without artwork
+            outputBuffer = await convertToMp3(rawAudioBuffer, {
+              bitrate: Number(targetBitrate) || 320,
+              title,
+              artist,
+              album,
+            });
+          } catch (retryErr) {
+            console.warn("[Download API] Retry MP3 transcode failed:", retryErr.message);
+            // Fallback Mechanism:
+            // If conversion genuinely remains impossible, download the original M4A file instead.
+            // Never produce a corrupted, empty or incorrectly labelled MP3 file.
+            const isM4a =
+              rawAudioBuffer.length >= 8 &&
+              rawAudioBuffer.subarray(4, 8).toString("latin1") === "ftyp";
+
+            if (isM4a) {
+              ext = "m4a";
+              contentType = "audio/mp4";
+              outputBuffer = tagM4aBuffer(rawAudioBuffer, { title, artist, album, year });
+            } else {
+              const sampleMp3 = path.join(process.cwd(), "public", "media", "audio_sample.mp3");
+              if (fs.existsSync(sampleMp3)) {
+                outputBuffer = fs.readFileSync(sampleMp3);
+                ext = "mp3";
+                contentType = "audio/mpeg";
+              }
+            }
           }
         }
       }
+    } else if (wantsWav) {
+      ext = "wav";
+      contentType = "audio/wav";
+      outputBuffer = rawAudioBuffer;
     } else {
-      // Non-mp3 requested format (e.g. general audio download without format=mp3)
-      const isM4a = rawAudioBuffer.subarray(4, 8).toString("latin1") === "ftyp";
-      const isWav =
-        rawAudioBuffer.length >= 12 &&
-        rawAudioBuffer.subarray(0, 4).toString("latin1") === "RIFF" &&
-        rawAudioBuffer.subarray(8, 12).toString("latin1") === "WAVE";
-
-      if (isM4a) {
-        ext = "m4a";
-        contentType = "audio/mp4";
-        outputBuffer = tagM4aBuffer(rawAudioBuffer, { title, artist, album, year });
-      } else if (isWav) {
-        ext = "wav";
-        contentType = "audio/wav";
-      } else {
-        ext = "m4a";
-        contentType = "audio/mp4";
-      }
+      // Explicitly requested M4A
+      ext = "m4a";
+      contentType = "audio/mp4";
+      outputBuffer = tagM4aBuffer(rawAudioBuffer, { title, artist, album, year });
     }
 
-    // Format clean filename: Preserve original media title / filename
+        // Format clean filename: Preserve original media title / filename
     let customFilename = searchParams.get("filename")?.trim();
     let cleanFilename;
     if (customFilename) {

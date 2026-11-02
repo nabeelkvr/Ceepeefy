@@ -732,20 +732,10 @@ function SearchContent() {
     }
   };
 
-  // Table Header matching Playlist (Image 1)
-  const renderSongTableHeader = () => (
-    <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-3 md:gap-4 px-2 sm:px-4 py-2 border-b border-white/10 text-[10.5px] sm:text-[11px] font-semibold uppercase tracking-wider text-outline select-none">
-      <span className="text-center">#</span>
-      <span>Title</span>
-      <span className="hidden md:block">Artist</span>
-      <span className="text-right flex items-center justify-end pr-0.5 sm:pr-1">
-        <span className="material-symbols-outlined text-[14px] sm:text-[15px]">schedule</span>
-      </span>
-      <span className="text-right pr-1 sm:pr-2">Actions</span>
-    </div>
-  );
+  // Table Header - Disabled for clean Spotify-style horizontal cards
+  const renderSongTableHeader = () => null;
 
-  // Reusable Tracklist Row Component matching Playlist Cards (Image 1)
+  // Spotify-Style Spacious Horizontal Song Row (Image 2 Reference)
   const renderSongRow = (track, idx, customTrackList = null) => {
     const isCurrent = currentTrack?.id === track.id;
     const isCurrentPlaying = isCurrent && isPlaying;
@@ -768,106 +758,59 @@ function SearchContent() {
       <div
         key={rowKey}
         onClick={handleRowClick}
-        className={`group grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto_auto] md:grid-cols-[2.5rem_minmax(180px,3fr)_minmax(120px,2fr)_5rem_auto] items-center gap-1.5 sm:gap-3 md:gap-4 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all duration-200 cursor-pointer select-none ${
+        className={`group flex items-center justify-between gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl transition-all duration-200 cursor-pointer select-none ${
           isCurrent
-            ? "bg-primary/10 border border-primary/40 shadow-[0_0_20px_rgba(76,215,246,0.15)]"
-            : "bg-surface-container/30 hover:bg-surface-container-high/80 hover:border-white/10 border border-transparent hover:shadow-md"
+            ? "bg-primary/10 border border-primary/30 shadow-[0_0_16px_rgba(76,215,246,0.15)]"
+            : "hover:bg-white/10 active:bg-white/15 border border-transparent"
         }`}
       >
-        {/* Index / Play status */}
-        <div className="flex items-center justify-center w-full">
-          {isCurrentPlaying ? (
-            <span className="text-primary flex items-center justify-center">
-              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" fill="currentColor" viewBox="0 0 24 24">
-                <rect height="10" rx="1.5" width="3" x="3" y="10">
-                  <animate
-                    attributeName="height"
-                    dur="0.8s"
-                    repeatCount="indefinite"
-                    values="10;4;14;10"
-                  />
-                  <animate
-                    attributeName="y"
-                    dur="0.8s"
-                    repeatCount="indefinite"
-                    values="10;16;6;10"
-                  />
-                </rect>
-                <rect height="15" rx="1.5" width="3" x="8.5" y="5">
-                  <animate
-                    attributeName="height"
-                    dur="0.6s"
-                    repeatCount="indefinite"
-                    values="15;8;18;15"
-                  />
-                  <animate
-                    attributeName="y"
-                    dur="0.6s"
-                    repeatCount="indefinite"
-                    values="5;12;2;5"
-                  />
-                </rect>
-                <rect height="12" rx="1.5" width="3" x="14" y="8">
-                  <animate
-                    attributeName="height"
-                    dur="0.7s"
-                    repeatCount="indefinite"
-                    values="12;16;6;12"
-                  />
-                  <animate
-                    attributeName="y"
-                    dur="0.7s"
-                    repeatCount="indefinite"
-                    values="8;4;14;8"
-                  />
-                </rect>
-                <rect height="8" rx="1.5" width="3" x="19.5" y="12">
-                  <animate
-                    attributeName="height"
-                    dur="0.9s"
-                    repeatCount="indefinite"
-                    values="8;14;5;8"
-                  />
-                  <animate
-                    attributeName="y"
-                    dur="0.9s"
-                    repeatCount="indefinite"
-                    values="12;6;15;12"
-                  />
-                </rect>
-              </svg>
-            </span>
-          ) : (
-            <>
-              <span className="group-hover:hidden text-[11px] sm:text-xs font-mono text-outline">
-                {idx + 1}
-              </span>
-              <span className="hidden group-hover:block text-white">
-                <span className="material-symbols-outlined text-[17px] sm:text-[20px]">play_arrow</span>
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* Cover & Title */}
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-1 sm:pr-2">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high shadow relative">
+        {/* Left & Middle section */}
+        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+          {/* Left: Square Thumbnail with slightly rounded corners */}
+          <div className="w-12 h-12 sm:w-[52px] sm:h-[52px] rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high relative shadow-sm">
             <img
               src={coverUrl}
               alt={track.title}
               className="w-full h-full object-cover"
               loading="lazy"
             />
-            {isCurrent && isBuffering && (
+            {isCurrentPlaying ? (
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-[0.5px] flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                  <rect height="10" rx="1.5" width="3" x="3" y="10">
+                    <animate attributeName="height" dur="0.8s" repeatCount="indefinite" values="10;4;14;10" />
+                    <animate attributeName="y" dur="0.8s" repeatCount="indefinite" values="10;16;6;10" />
+                  </rect>
+                  <rect height="15" rx="1.5" width="3" x="8.5" y="5">
+                    <animate attributeName="height" dur="0.6s" repeatCount="indefinite" values="15;8;18;15" />
+                    <animate attributeName="y" dur="0.6s" repeatCount="indefinite" values="5;12;2;5" />
+                  </rect>
+                  <rect height="12" rx="1.5" width="3" x="14" y="8">
+                    <animate attributeName="height" dur="0.7s" repeatCount="indefinite" values="12;16;6;12" />
+                    <animate attributeName="y" dur="0.7s" repeatCount="indefinite" values="8;4;14;8" />
+                  </rect>
+                  <rect height="8" rx="1.5" width="3" x="19.5" y="12">
+                    <animate attributeName="height" dur="0.9s" repeatCount="indefinite" values="8;14;5;8" />
+                    <animate attributeName="y" dur="0.9s" repeatCount="indefinite" values="12;6;15;12" />
+                  </rect>
+                </svg>
+              </div>
+            ) : isCurrent && isBuffering ? (
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                 <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
+            ) : (
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                <span className="material-symbols-outlined text-white text-[24px]">play_arrow</span>
+              </div>
             )}
           </div>
-          <div className="flex flex-col min-w-0 flex-1 justify-center">
-            <div className="flex items-center gap-1 min-w-0">
+
+          {/* Middle: Title on Line 1, Artist on Line 2 */}
+          <div className="flex flex-col min-w-0 flex-1 justify-center gap-0.5">
+            <div className="flex items-center gap-1.5 min-w-0">
               <span
-                className={`text-xs sm:text-sm font-semibold line-clamp-2 md:truncate break-words leading-tight transition-colors ${
+                className={`text-[14px] sm:text-[15px] font-semibold truncate leading-snug transition-colors ${
                   isCurrent ? "text-primary" : "text-white group-hover:text-primary"
                 }`}
                 title={track.title}
@@ -876,7 +819,7 @@ function SearchContent() {
               </span>
               {offlineTrackIds?.has(String(track.id)) && (
                 <span
-                  className="material-symbols-outlined text-primary text-[13px] sm:text-[14px] flex-shrink-0"
+                  className="material-symbols-outlined text-primary text-[14px] flex-shrink-0"
                   title="Available offline on this device"
                 >
                   download_done
@@ -884,54 +827,31 @@ function SearchContent() {
               )}
             </div>
             <span
-              className="text-[10.5px] sm:text-xs text-on-surface-variant md:hidden truncate mt-0.5 leading-normal"
+              className="text-xs sm:text-[13px] text-neutral-400 group-hover:text-neutral-300 truncate leading-tight"
               title={track.artist}
             >
-              {track.artist}
+              {track.artist || "Unknown Artist"}
             </span>
           </div>
         </div>
 
-        {/* Artist */}
-        <div className="hidden md:block truncate text-xs text-on-surface-variant hover:text-white" title={track.artist}>
-          {track.artist}
-        </div>
-
-        {/* Duration with clean tabular font and dedicated space */}
-        <div className="text-right text-[11px] sm:text-xs font-mono text-outline tabular-nums whitespace-nowrap px-0.5 sm:px-2">
-          {track.durationFormatted || formatTime(track.duration || 210)}
-        </div>
-
-        {/* Actions: Download, Like, & 3-dot options */}
-        <div className="flex items-center justify-end gap-0.5 sm:gap-1.5 flex-shrink-0">
-          {!track.isLocal && (
-            <DownloadButton
-              track={track}
-              buttonSize="w-7 h-7 sm:w-8 sm:h-8"
-              iconSize="text-[16px] sm:text-[18px]"
-              className="hover:scale-110 active:scale-95"
-              onDownloadStart={() => {
-                if (searchQuery.trim()) {
-                  addRecentSearch(searchQuery.trim(), "search");
-                }
-              }}
-            />
-          )}
+        {/* Right section: Heart/favourite & Three-dot menu */}
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 ml-2">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               toggleLike(track);
             }}
-            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer hover:bg-white/10 active:scale-95 ${
               isLiked(track.id)
-                ? "text-primary shadow-[0_0_12px_rgba(76,215,246,0.3)]"
-                : "text-outline hover:text-white"
+                ? "text-primary"
+                : "text-neutral-400 hover:text-white"
             }`}
             title={isLiked(track.id) ? "Remove from favorites" : "Add to favorites"}
           >
             <span
-              className="material-symbols-outlined text-[16px] sm:text-[18px]"
+              className="material-symbols-outlined text-[20px] sm:text-[22px]"
               style={{ fontVariationSettings: isLiked(track.id) ? "'FILL' 1" : "'FILL' 0" }}
             >
               {isLiked(track.id) ? "favorite" : "favorite_border"}
@@ -939,14 +859,14 @@ function SearchContent() {
           </button>
           <SongOptionsMenu
             track={track}
-            buttonClassName="w-7 h-7 sm:w-8 sm:h-8"
-            iconClassName="text-[17px] sm:text-[20px]"
+            iconName="more_horiz"
+            buttonClassName="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            iconClassName="text-[20px] sm:text-[22px]"
           />
         </div>
       </div>
     );
   };
-
   // Reusable Album Card Component (Exact Image 2 Structure)
   const renderAlbumCard = (album, isCarousel = false) => {
     const isThisAlbumPlaying =

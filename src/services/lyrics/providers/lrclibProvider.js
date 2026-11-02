@@ -11,7 +11,7 @@
 import { BaseLyricsProvider } from "./baseProvider.js";
 import { PROVIDER_NAMES, REJECTION_REASONS } from "../types.js";
 import { cleanLyricsString } from "../textProcessor.js";
-import { evaluateCandidateMatch, normalizeSongTitle, parseDurationSec, extractArtistNames } from "../songMatcher.js";
+import { evaluateCandidateMatch, normalizeSongTitle, cleanSearchTitle, parseDurationSec, extractArtistNames } from "../songMatcher.js";
 
 function parseLrcFormat(lrcContent) {
   if (!lrcContent || typeof lrcContent !== "string") return [];
@@ -62,8 +62,18 @@ export class LrclibProvider extends BaseLyricsProvider {
 
   async fetchLyrics(seedTrack, options = {}) {
     const cleanTitle = normalizeSongTitle(seedTrack.title || "");
-    const primaryArtist = (seedTrack.artist || "").split(/[,&/]|feat\.?|ft\.?/i)[0].trim();
-    const durationSec = parseDurationSec(seedTrack.duration);
+    const cleanedSearchTitle = cleanSearchTitle(seedTrack.title || "") || seedTrack.title || "";
+    const candidateArtists = [];
+    if (seedTrack.artist) {
+      const parts = seedTrack.artist
+        .split(/[,&/|;]|\s+feat\.?\s+|\s+ft\.?\s+|\s+with\s+/i)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const p of parts) {
+        if (!candidateArtists.includes(p)) candidateArtists.push(p);
+      }
+    }
+    const primaryArtist = candidateArtists[0] || (seedTrack.artist || "").trim();    const durationSec = parseDurationSec(seedTrack.duration);
 
     if (!cleanTitle) {
       return { found: false, rejectionReason: REJECTION_REASONS.TITLE_MISMATCH };
@@ -101,70 +111,83 @@ export class LrclibProvider extends BaseLyricsProvider {
       return null;
     };
 
-    // 1. Direct Exact Lookup
-    try {
-      const getParams = new URLSearchParams({
-        track_name: seedTrack.title || "",
-        artist_name: primaryArtist,
-      });
-      if (seedTrack.album) getParams.set("album_name", seedTrack.album);
-      if (durationSec > 0) getParams.set("duration", Math.round(durationSec).toString());
+    // Helper for direct exact lookup
+    const tryExactGet = async (titleParam, artistParam) => {
+      try {
+        const getParams = new URLSearchParams({
+          track_name: titleParam || "",
+          artist_name: artistParam || "",
+        });
+        if (seedTrack.album) getParams.set("album_name", seedTrack.album);
+        if (durationSec > 0) getParams.set("duration", Math.round(durationSec).toString());
 
-      const res = await safeFetch(`https://lrclib.net/api/get?${getParams.toString()}`);
+        const res = await safeFetch(`https://lrclib.net/api/get?${getParams.toString()}`);
+        if (res && res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data) {
+            const evalResult = evaluateCandidateMatch(seedTrack, {
+              title: data.trackName,
+              artist: data.artistName,
+              album: data.albumName,
+              duration: data.duration,
+              isInstrumental: data.instrumental,
+            });
 
-      if (res && res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data) {
-          const evalResult = evaluateCandidateMatch(seedTrack, {
-            title: data.trackName,
-            artist: data.artistName,
-            album: data.albumName,
-            duration: data.duration,
-            isInstrumental: data.instrumental,
-          });
-
-          if (evalResult.isValid) {
-            if (data.syncedLyrics) {
-              const lines = parseLrcFormat(data.syncedLyrics);
-              if (lines.length > 0) {
-                return {
-                  found: true,
-                  provider: this.name,
-                  providerTrackId: String(data.id || ""),
-                  synced: true,
-                  lines,
-                  rawLyrics: data.syncedLyrics,
-                  attribution: "Synchronized lyrics powered by LRCLIB",
-                  matchConfidence: evalResult.confidence,
-                };
-              }
-            } else if (data.plainLyrics) {
-              const lines = distributePlainLyrics(data.plainLyrics, durationSec || 210);
-              if (lines.length > 0) {
-                return {
-                  found: true,
-                  provider: this.name,
-                  providerTrackId: String(data.id || ""),
-                  synced: false,
-                  lines,
-                  rawLyrics: data.plainLyrics,
-                  attribution: "Lyrics powered by LRCLIB",
-                  matchConfidence: evalResult.confidence,
-                };
+            if (evalResult.isValid) {
+              if (data.syncedLyrics) {
+                const lines = parseLrcFormat(data.syncedLyrics);
+                if (lines.length > 0) {
+                  return {
+                    found: true,
+                    provider: this.name,
+                    providerTrackId: String(data.id || ""),
+                    synced: true,
+                    lines,
+                    rawLyrics: data.syncedLyrics,
+                    attribution: "Synchronized lyrics powered by LRCLIB",
+                    matchConfidence: evalResult.confidence,
+                  };
+                }
+              } else if (data.plainLyrics) {
+                const lines = distributePlainLyrics(data.plainLyrics, durationSec || 210);
+                if (lines.length > 0) {
+                  return {
+                    found: true,
+                    provider: this.name,
+                    providerTrackId: String(data.id || ""),
+                    synced: false,
+                    lines,
+                    rawLyrics: data.plainLyrics,
+                    attribution: "Lyrics powered by LRCLIB",
+                    matchConfidence: evalResult.confidence,
+                  };
+                }
               }
             }
           }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+      return null;
+    };
 
-    // 2. Search Lookup (Title + Artist, and fallback to Title alone, and Title + Album)
+    // 1. Direct Exact Lookup with original and cleaned title
+    let exactMatch = await tryExactGet(seedTrack.title || "", primaryArtist);
+    if (!exactMatch && cleanedSearchTitle && cleanedSearchTitle !== seedTrack.title) {
+      exactMatch = await tryExactGet(cleanedSearchTitle, primaryArtist);
+    }
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    // 2. Search Lookup (Title + Artist, Clean Title + Artist candidates, Title alone)
     const searchQueries = [
       `${seedTrack.title || ""} ${primaryArtist}`.trim(),
-      seedTrack.album ? `${seedTrack.title || ""} ${seedTrack.album}`.trim() : null,
+      `${cleanedSearchTitle} ${primaryArtist}`.trim(),
+      ...candidateArtists.slice(1, 4).map((a) => `${cleanedSearchTitle} ${a}`.trim()),
+      seedTrack.album ? `${cleanedSearchTitle} ${seedTrack.album}`.trim() : null,
+      cleanedSearchTitle.trim(),
       (seedTrack.title || "").trim(),
     ].filter((q, idx, arr) => q && q.length > 0 && arr.indexOf(q) === idx);
-
     for (const query of searchQueries) {
       try {
         const searchRes = await safeFetch(

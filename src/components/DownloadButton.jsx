@@ -228,6 +228,7 @@ export default function DownloadButton({
         year: track.year ? String(track.year) : "",
         coverUrl: track.coverUrl || track.thumbnail || track.image || "",
         quality: qualityOpt.id,
+        format: "mp3",
       });
 
       const res = await fetch(`/api/audio/download?${params.toString()}`);

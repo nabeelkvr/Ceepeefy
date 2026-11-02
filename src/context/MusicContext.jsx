@@ -2893,7 +2893,7 @@ export const MusicProvider = ({ children }) => {
       return;
     }
     fetchLyricsForTrack(currentTrack);
-  }, [currentTrack?.id, fetchLyricsForTrack]);
+  }, [currentTrack?.id, currentTrack?.title, currentTrack?.artist, fetchLyricsForTrack]);
 
   // Stall & Network Recovery Tracking
   const retryCountRef = useRef(0);

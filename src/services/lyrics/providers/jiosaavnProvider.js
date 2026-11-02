@@ -12,7 +12,7 @@
 import { BaseLyricsProvider } from "./baseProvider.js";
 import { PROVIDER_NAMES, REJECTION_REASONS } from "../types.js";
 import { cleanLyricsString } from "../textProcessor.js";
-import { evaluateCandidateMatch, normalizeSongTitle, parseDurationSec } from "../songMatcher.js";
+import { evaluateCandidateMatch, normalizeSongTitle, cleanSearchTitle, parseDurationSec } from "../songMatcher.js";
 
 function parseLrcFormat(lrcContent) {
   if (!lrcContent || typeof lrcContent !== "string") return [];
@@ -58,7 +58,7 @@ function distributePlainLyrics(rawText, durationSec = 210) {
 
 export class JioSaavnProvider extends BaseLyricsProvider {
   constructor() {
-    super(PROVIDER_NAMES.JIOSAAVN, 1); // Highest priority (Primary)
+    super(PROVIDER_NAMES.JIOSAAVN, 3); // Tertiary fallback
   }
 
   async fetchLyrics(seedTrack, options = {}) {
@@ -126,11 +126,13 @@ export class JioSaavnProvider extends BaseLyricsProvider {
 
     // 3. Search-assisted fallback for tracks from playlists / external IDs
     if (!saavnData && cleanTitle) {
+      const cleanedSearchTitle = cleanSearchTitle(seedTrack.title || "") || seedTrack.title || "";
       const searchQueries = [
         `${seedTrack.title || ""} ${seedTrack.artist || ""}`.trim(),
+        `${cleanedSearchTitle} ${seedTrack.artist || ""}`.trim(),
+        cleanedSearchTitle.trim(),
         (seedTrack.title || "").trim(),
       ].filter((q, idx, arr) => q.length > 0 && arr.indexOf(q) === idx);
-
       for (const query of searchQueries) {
         try {
           const controller = new AbortController();

@@ -6,15 +6,16 @@ import { useMusic } from "../context/MusicContext";
 import PlaylistCover from "./PlaylistCover";
 
 /**
- * Modern Ceepeefy PlaylistCard (Matching Image 2)
+ * Spotify-Style PlaylistCard (Matching Image 3 & Proportions of Image 2)
  * 
  * Features:
- * - Square artwork (aspect-square) with 100% sharp full edges (rounded-none)
- * - Shorter height and more compact width than SongCard
- * - Clean frameless design without column edges / container borders / blending boxes
- * - Floating play button appearing over artwork on hover
- * - Title in bold white text
- * - 2-line truncated description in muted text
+ * - Slightly reduced, comfortable Spotify proportions
+ * - Card container with subtle dark background (bg-[#181818]/60 hover:bg-[#282828])
+ * - Comfortable inner padding (p-2.5 sm:p-3)
+ * - Square artwork with rounded-md and shadow
+ * - Floating circular play button on hover (bottom-right of artwork)
+ * - Bold title (white, text-xs sm:text-sm, truncated)
+ * - Muted 2-line subtitle / description (text-[11px] sm:text-xs text-[#b3b3b3])
  */
 export default function PlaylistCard({
   playlist,
@@ -70,6 +71,7 @@ export default function PlaylistCard({
   };
 
   const coverUrl =
+    playlist.customCover ||
     playlist.coverUrl ||
     playlist.image ||
     (Array.isArray(playlist.images) && playlist.images[0]?.url) ||
@@ -83,13 +85,13 @@ export default function PlaylistCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`w-[135px] sm:w-[150px] md:w-[165px] lg:w-[175px] xl:w-[195px] 2xl:w-[215px] 3xl:w-[240px] p-2 rounded-xl flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-200 hover:bg-[#1A1A1A] hover:-translate-y-0.5 hover:shadow-md ${className}`}
+      className={`w-[135px] sm:w-[145px] md:w-[155px] lg:w-[165px] xl:w-[175px] 2xl:w-[185px] 3xl:w-[195px] p-1.5 sm:p-2 md:p-2.5 rounded-lg sm:rounded-xl bg-[#181818]/60 hover:bg-[#282828] border border-transparent hover:border-white/5 flex-shrink-0 group flex flex-col cursor-pointer select-none relative transition-all duration-300 hover:shadow-xl ${className}`}
     >
-      {/* Square Artwork (Refined Rounded-[10px]) */}
+      {/* Square Artwork */}
       <div
-        className={`relative aspect-square w-full rounded-[10px] overflow-hidden bg-[#181818] shadow-md transition-all duration-200 ${
+        className={`relative aspect-square w-full rounded-md overflow-hidden bg-[#121212] shadow-[0_8px_24px_rgba(0,0,0,0.5)] transition-all duration-200 ${
           isPlaylistPlaying
-            ? "ring-2 ring-primary shadow-[0_0_14px_rgba(var(--color-primary-rgb),0.35)]"
+            ? "ring-2 ring-primary shadow-[0_0_16px_rgba(var(--color-primary-rgb),0.4)]"
             : "ring-1 ring-white/5 group-hover:ring-white/10"
         }`}
       >
@@ -98,54 +100,52 @@ export default function PlaylistCard({
           coverUrl={playlist.customCover || playlist.coverUrl || coverUrl}
           fallbackUrl={coverUrl}
           alt={playlist.title}
-          className="w-full h-full object-cover rounded-[10px] group-hover:scale-105 transition-transform duration-500"
+          className="w-full h-full object-cover rounded-md group-hover:scale-105 transition-transform duration-500"
         />
 
-        {/* Floating Play Button on Hover */}
+        {/* Floating Spotify-Style Circular Play Button */}
         <div
-          className={`absolute inset-0 bg-black/35 flex items-end justify-end p-1.5 sm:p-2 transition-all duration-200 ${
-            isPlaylistPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          className={`absolute right-2 bottom-2 transition-all duration-300 transform ${
+            isPlaylistPlaying
+              ? "opacity-100 translate-y-0 scale-100"
+              : "opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 scale-95 group-hover:scale-100"
           }`}
         >
           <button
             type="button"
             onClick={handlePlayButtonClick}
-            className={`w-8 h-8 sm:w-8.5 sm:h-8.5 2xl:w-10 2xl:h-10 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_4px_14px_rgba(0,0,0,0.6)] transform transition-all duration-200 hover:scale-110 active:scale-95 ${
-              isPlaylistPlaying
-                ? "translate-y-0 scale-100 shadow-[0_0_14px_rgba(var(--color-primary-rgb),0.6)]"
-                : "translate-y-2 group-hover:translate-y-0 scale-95 group-hover:scale-100"
-            }`}
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_8px_16px_rgba(0,0,0,0.6)] hover:scale-105 active:scale-95 transition-transform cursor-pointer"
             title={isPlaylistPlaying ? "Pause Playlist" : "Play Playlist"}
             aria-label={isPlaylistPlaying ? "Pause Playlist" : "Play Playlist"}
           >
-            <span className="material-symbols-outlined text-[18px] sm:text-[20px] 2xl:text-[22px]">
+            <span className="material-symbols-outlined text-[20px] sm:text-[22px] font-bold">
               {isPlaylistPlaying ? "pause" : "play_arrow"}
             </span>
           </button>
         </div>
 
-        {/* Animated equalizer if playing */}
+        {/* Animated Equalizer if Playing */}
         {isPlaylistPlaying && (
-          <div className="absolute top-1.5 left-1.5 px-1 py-0.5 rounded-sm bg-black/80 backdrop-blur-md border border-[#282828] flex items-center gap-0.5">
-            <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse" />
-            <span className="w-0.5 h-3 bg-primary rounded-full animate-pulse delay-75" />
-            <span className="w-0.5 h-1.5 bg-primary rounded-full animate-pulse delay-150" />
+          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-0.5">
+            <span className="w-0.5 h-2.5 bg-primary rounded-full animate-pulse" />
+            <span className="w-0.5 h-3.5 bg-primary rounded-full animate-pulse delay-75" />
+            <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse delay-150" />
           </div>
         )}
       </div>
 
-      {/* Details: Title & 2-Line Truncated Description */}
-      <div className="flex flex-col min-w-0 mt-1.5">
+      {/* Details: Title & Subtitle */}
+      <div className="flex flex-col min-w-0 mt-2.5 sm:mt-3">
         <h3
-          className={`text-xs sm:text-[13px] 2xl:text-sm font-bold truncate transition-colors leading-tight ${
-            isPlaylistPlaying ? "text-primary font-extrabold" : "text-white group-hover:text-primary"
+          className={`text-xs sm:text-sm font-semibold truncate transition-colors leading-tight ${
+            isPlaylistPlaying ? "text-primary font-bold" : "text-white group-hover:text-primary"
           }`}
           title={playlist.title}
         >
           {playlist.title}
         </h3>
         <p
-          className="text-[10px] sm:text-[11px] 2xl:text-xs text-[#B3B3B3] line-clamp-2 leading-snug mt-0.5"
+          className="text-[11px] sm:text-xs text-[#B3B3B3] line-clamp-2 leading-snug mt-1 font-normal"
           title={descriptionText}
         >
           {descriptionText}

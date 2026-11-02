@@ -21,7 +21,7 @@ export default function SongOptionsMenu({
   playlistId = null,
   buttonClassName = "",
   iconClassName = "text-[20px]",
-  iconName = "more_vert",
+  iconName = "more_horiz",
   title = "More options",
 }) {
   const {
@@ -40,7 +40,7 @@ export default function SongOptionsMenu({
   } = useMusic();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [currentView, setCurrentView] = useState("main"); // "main" | "playlists"
+  const [currentView, setCurrentView] = useState("main"); // "main" | "playlists" | "download"
   const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0, openUpwards: false });
   const [isMounted, setIsMounted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -260,7 +260,7 @@ export default function SongOptionsMenu({
     setIsOpen(false);
   };
 
-  const handleDirectDownload = async (e) => {
+  const handleDirectDownload = async (e, chosenQuality = "premium") => {
     e.stopPropagation();
     if (isDirectDownloading || !track) return;
     setIsDirectDownloading(true);
@@ -278,7 +278,8 @@ export default function SongOptionsMenu({
         album: track.album || "",
         year: track.year ? String(track.year) : "",
         coverUrl: track.coverUrl || track.thumbnail || track.image || "",
-        quality: "premium",
+        quality: chosenQuality || "premium",
+        format: "mp3",
       });
 
       const dlRes = await fetch(`/api/audio/download?${params.toString()}`);
@@ -315,9 +316,9 @@ export default function SongOptionsMenu({
     } finally {
       setIsDirectDownloading(false);
       setIsOpen(false);
+      setCurrentView("main");
     }
   };
-
   const handleRemoveFromThisPlaylist = (e) => {
     e.stopPropagation();
     if (playlistId && removeTrackFromPlaylist) {
@@ -404,6 +405,51 @@ export default function SongOptionsMenu({
                 )}
               </div>
             </div>
+          ) : currentView === "download" ? (
+            /* Drill-down: Download Quality Options */
+            <div className="flex flex-col py-0.5">
+              <div className="flex items-center gap-2 px-2 py-1.5 border-b border-[#282828] mb-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentView("main")}
+                  className="p-1 rounded-lg text-outline hover:text-white hover:bg-white/10 transition-colors flex items-center justify-center cursor-pointer"
+                  title="Back"
+                >
+                  <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                </button>
+                <span className="text-xs font-bold text-white tracking-wide">
+                  Download Audio (MP3)
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-0.5">
+                {[
+                  { id: "premium", label: "Premium (320 kbps)", tag: "Full HD", desc: "Studio Master Quality" },
+                  { id: "high", label: "High (160 kbps)", tag: "160k", desc: "Crisp Audio • ~50% smaller" },
+                  { id: "medium", label: "Medium (96 kbps)", tag: "96k", desc: "Balanced Sound • ~70% smaller" },
+                  { id: "low", label: "Data Saver (48 kbps)", tag: "48k", desc: "Minimal Size" },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={(e) => handleDirectDownload(e, opt.id)}
+                    className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left hover:bg-white/10 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <span className="text-xs font-semibold text-white group-hover:text-primary transition-colors">
+                        {opt.label}
+                      </span>
+                      <span className="text-[10.5px] text-neutral-400 truncate">
+                        {opt.desc}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-white/10 text-neutral-300 flex-shrink-0">
+                      {opt.tag}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : (
             /* Main Menu View */
             <>
@@ -470,24 +516,29 @@ export default function SongOptionsMenu({
                 </span>
               </button>
 
-              {/* Download (Save audio file to device) */}
+              {/* Download (Save audio file to device with quality submenu) */}
               <button
                 type="button"
-                onClick={handleDirectDownload}
+                onClick={() => setCurrentView("download")}
                 disabled={isDirectDownloading}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-left hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
               >
-                {isDirectDownloading ? (
-                  <div className="w-5 h-5 flex items-center justify-center">
-                    <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : (
-                  <span className="material-symbols-outlined text-[20px] text-neutral-400 group-hover:text-primary transition-colors">
-                    download
+                <div className="flex items-center gap-3">
+                  {isDirectDownloading ? (
+                    <div className="w-5 h-5 flex items-center justify-center">
+                      <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : (
+                    <span className="material-symbols-outlined text-[20px] text-neutral-400 group-hover:text-primary transition-colors">
+                      download
+                    </span>
+                  )}
+                  <span className="font-medium text-[13px]">
+                    {isDirectDownloading ? "Downloading file..." : "Download"}
                   </span>
-                )}
-                <span className="font-medium text-[13px]">
-                  {isDirectDownloading ? "Downloading file..." : "Download"}
+                </div>
+                <span className="material-symbols-outlined text-[16px] text-neutral-400 group-hover:text-white transition-transform group-hover:translate-x-0.5">
+                  chevron_right
                 </span>
               </button>
 
@@ -519,7 +570,6 @@ export default function SongOptionsMenu({
                     : "Download Offline"}
                 </span>
               </button>
-
               {/* Optional: Remove from this playlist (if in custom playlist) */}
               {playlistId && (
                 <>

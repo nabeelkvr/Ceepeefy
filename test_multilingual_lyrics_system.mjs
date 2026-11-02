@@ -120,6 +120,32 @@ describe("Complete Multilingual Multi-Provider Lyrics System Test Suite", () => 
       assert.equal(result.displayScript, SCRIPT_TYPES.LATIN);
       assert.equal(result.displayLyrics, englishLyrics);
     });
+
+    it("1.8: Arabic Kuthu mixed script regression test: converts embedded Devanagari in Romanized line to pure Latin", () => {
+      const mixedLine = "होली, होली barkadul srikum rangoli";
+      const result = processLyricsLanguageAndScript(mixedLine, [{ time: 56.28, text: mixedLine }], {
+        language: "tamil",
+        title: "Arabic Kuthu",
+      });
+
+      assert.equal(result.displayScript, SCRIPT_TYPES.LATIN);
+      assert.ok(!/[\u0900-\u097F]/.test(result.displayLyrics), "Must eliminate all Devanagari characters");
+      assert.ok(result.displayLyrics.toLowerCase().includes("holi, holi"), "Must accurately romanize 'होली, होली' to 'holi, holi'");
+      assert.ok(result.displayLyrics.includes("barkadul srikum rangoli"), "Must preserve surrounding Latin words");
+    });
+
+    it("1.9: Multi-script synced line test with timestamps and mixed Indic scripts", () => {
+      const line = "होली, होली பக்கத்துல சிரிக்கும் ரங்கோலி";
+      const result = processLyricsLanguageAndScript(line, [{ time: 56.28, text: line }], {
+        language: "tamil",
+        title: "Arabic Kuthu",
+      });
+
+      assert.equal(result.displayScript, SCRIPT_TYPES.LATIN);
+      assert.ok(!/[\u0900-\u097F]/.test(result.displayLyrics), "Zero Devanagari in Latin mode");
+      assert.ok(!/[\u0B80-\u0BFF]/.test(result.displayLyrics), "Zero Tamil script in Latin mode");
+      assert.equal(result.lines[0].time, 56.28, "Timestamp must be strictly preserved");
+    });
   });
 
   // ==========================================
@@ -234,6 +260,15 @@ describe("Complete Multilingual Multi-Provider Lyrics System Test Suite", () => 
       assert.equal(result.success, true);
       assert.equal(result.provider, PROVIDER_NAMES.MOCK);
       assert.ok(result.lines.length > 0, "Mock provider must deliver lines");
+    });
+
+    it("3.5: Strict provider order: Musixmatch (1) -> LRCLIB (2) -> JioSaavn (3) -> Mock (4)", () => {
+      const providerNames = lyricsService.providers.map((p) => p.name);
+      assert.deepEqual(providerNames, ["musixmatch", "lrclib", "jiosaavn", "mock"]);
+      assert.equal(lyricsService.providers[0].priority, 1);
+      assert.equal(lyricsService.providers[1].priority, 2);
+      assert.equal(lyricsService.providers[2].priority, 3);
+      assert.equal(lyricsService.providers[3].priority, 4);
     });
   });
 });

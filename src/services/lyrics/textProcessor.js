@@ -337,6 +337,118 @@ export function transliterateKannadaToLatin(text) {
   return result;
 }
 
+const MALAYALAM_MAP = {
+  vowels: {
+    "അ": "a", "ആ": "aa", "ഇ": "i", "ഈ": "ee", "ഉ": "u", "ഊ": "oo",
+    "ഋ": "ri", "എ": "e", "ഏ": "ae", "ഐ": "ai", "ഒ": "o", "ഓ": "oa", "ഔ": "au",
+  },
+  matras: {
+    "ാ": "aa", "ി": "i", "ീ": "ee", "ു": "u", "ൂ": "oo", "ൃ": "ri",
+    "െ": "e", "േ": "ae", "ൈ": "ai", "ൊ": "o", "ോ": "oa", "ൌ": "au", "ൗ": "au", "ം": "m", "്": "",
+  },
+  chillus: {
+    "ൺ": "n", "ൻ": "n", "ർ": "r", "ൽ": "l", "ൾ": "l", "ൿ": "k",
+  },
+  consonants: {
+    "ക": "k", "ഖ": "kh", "ഗ": "g", "ഘ": "gh", "ങ": "ng",
+    "ച": "ch", "ഛ": "chh", "ജ": "j", "ഝ": "jh", "ഞ": "ny",
+    "ട": "t", "ഠ": "th", "ഡ": "d", "ഢ": "dh", "ണ": "n",
+    "ത": "th", "ഥ": "th", "ദ": "d", "ധ": "dh", "ന": "n",
+    "പ": "p", "ഫ": "ph", "ബ": "b", "ഭ": "bh", "മ": "m",
+    "യ": "y", "ര": "r", "ല": "l", "വ": "v",
+    "ശ": "sh", "ഷ": "sh", "സ": "s", "ഹ": "h",
+    "ള": "l", "ഴ": "zh", "റ": "r",
+  }
+};
+
+export function transliterateMalayalamToLatin(text) {
+  if (!text) return "";
+  let result = "";
+  const len = text.length;
+
+  for (let i = 0; i < len; i++) {
+    const ch = text[i];
+    const nextCh = i + 1 < len ? text[i + 1] : "";
+
+    if (MALAYALAM_MAP.vowels[ch]) {
+      result += MALAYALAM_MAP.vowels[ch];
+      continue;
+    }
+    if (MALAYALAM_MAP.matras[ch] !== undefined) {
+      result += MALAYALAM_MAP.matras[ch];
+      continue;
+    }
+    if (MALAYALAM_MAP.chillus[ch]) {
+      result += MALAYALAM_MAP.chillus[ch];
+      continue;
+    }
+    if (MALAYALAM_MAP.consonants[ch]) {
+      const rom = MALAYALAM_MAP.consonants[ch];
+      if (nextCh === "്") {
+        result += rom;
+        i++;
+      } else if (MALAYALAM_MAP.matras[nextCh] !== undefined) {
+        result += rom;
+      } else if (nextCh === "" || /\s|[.,!?;:()\[\]"\'-]/.test(nextCh)) {
+        result += rom;
+      } else {
+        result += rom + "a";
+      }
+      continue;
+    }
+    result += ch;
+  }
+  return result;
+}
+
+export const COMMON_INDIC_WORDS = {
+  "होली": "holi",
+  "दीवाली": "diwali",
+  "दिवाली": "diwali",
+  "जिंदगी": "zindagi",
+  "प्यार": "pyaar",
+  "दिल": "dil",
+  "इश्क": "ishq",
+  "रंगोली": "rangoli",
+  "ரங்கோலி": "rangoli",
+  "ஹோலி": "holi",
+  "दीवाना": "deewana",
+};
+
+/**
+ * Universal multi-script transliterator
+ * Detects any Indic Unicode blocks (Devanagari, Tamil, Telugu, Kannada, Malayalam)
+ * and safely converts them to Latin script, leaving English words, punctuation,
+ * and LRC timestamps untouched.
+ */
+export function transliterateAnyIndicToLatin(text) {
+  if (!text || typeof text !== "string") return "";
+
+  const indicRegex = /[\u0900-\u097F\u0980-\u09FF\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]+/g;
+
+  return text.replace(indicRegex, (match) => {
+    if (COMMON_INDIC_WORDS[match]) {
+      return COMMON_INDIC_WORDS[match];
+    }
+    if (/[\u0900-\u097F]/.test(match)) {
+      return transliterateDevanagariToLatin(match);
+    }
+    if (/[\u0B80-\u0BFF]/.test(match)) {
+      return transliterateTamilToLatin(match);
+    }
+    if (/[\u0C00-\u0C7F]/.test(match)) {
+      return transliterateTeluguToLatin(match);
+    }
+    if (/[\u0C80-\u0CFF]/.test(match)) {
+      return transliterateKannadaToLatin(match);
+    }
+    if (/[\u0D00-\u0D7F]/.test(match)) {
+      return transliterateMalayalamToLatin(match);
+    }
+    return match;
+  });
+}
+
 const MANGLISH_CONSONANTS = [
   { rom: "nch", mal: "ഞ്ച" },
   { rom: "njnj", mal: "ഞ്ഞ" },
@@ -528,49 +640,48 @@ export function processLyricsLanguageAndScript(rawLyricsText, rawLines = [], tra
   let targetScript = SCRIPT_TYPES.LATIN;
   let transformFn = (str) => str;
 
-  switch (detectedLang) {
-    case "malayalam":
-      targetScript = SCRIPT_TYPES.MALAYALAM;
-      if (origScript === SCRIPT_TYPES.LATIN) {
-        // Romanized Manglish -> convert to Malayalam script
-        transformFn = transliterateManglishToMalayalam;
-      }
-      break;
+  if (detectedLang === "malayalam") {
+    targetScript = SCRIPT_TYPES.MALAYALAM;
+    if (origScript === SCRIPT_TYPES.LATIN) {
+      // Romanized Manglish -> convert to Malayalam script
+      transformFn = transliterateManglishToMalayalam;
+    } else {
+      // Primarily Malayalam script: convert any stray Manglish lines or stray foreign Indic characters
+      transformFn = (str) => {
+        if (!str) return "";
+        const lineScript = detectScript(str);
+        if (lineScript === SCRIPT_TYPES.LATIN) {
+          return transliterateManglishToMalayalam(str);
+        }
+        if (/[\u0900-\u097F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF]/.test(str)) {
+          const latinized = transliterateAnyIndicToLatin(str);
+          return transliterateManglishToMalayalam(latinized);
+        }
+        return str;
+      };
+    }
+  } else {
+    // All other songs (Tamil, Hindi, Telugu, Kannada, English, Punjabi, etc.)
+    // MUST display in English / Latin script!
+    targetScript = SCRIPT_TYPES.LATIN;
 
-    case "hindi":
-    case "marathi":
-      targetScript = SCRIPT_TYPES.LATIN;
-      if (origScript === SCRIPT_TYPES.DEVANAGARI) {
-        transformFn = transliterateDevanagariToLatin;
+    transformFn = (str) => {
+      if (!str) return "";
+      let processed = str;
+      if (/[\u0900-\u097F]/.test(processed) && (detectedLang === "hindi" || detectedLang === "marathi")) {
+        processed = transliterateDevanagariToLatin(processed);
+      } else if (/[\u0B80-\u0BFF]/.test(processed) && detectedLang === "tamil") {
+        processed = transliterateTamilToLatin(processed);
+      } else if (/[\u0C00-\u0C7F]/.test(processed) && detectedLang === "telugu") {
+        processed = transliterateTeluguToLatin(processed);
+      } else if (/[\u0C80-\u0CFF]/.test(processed) && detectedLang === "kannada") {
+        processed = transliterateKannadaToLatin(processed);
       }
-      break;
 
-    case "tamil":
-      targetScript = SCRIPT_TYPES.LATIN;
-      if (origScript === SCRIPT_TYPES.TAMIL) {
-        transformFn = transliterateTamilToLatin;
-      }
-      break;
-
-    case "telugu":
-      targetScript = SCRIPT_TYPES.LATIN;
-      if (origScript === SCRIPT_TYPES.TELUGU) {
-        transformFn = transliterateTeluguToLatin;
-      }
-      break;
-
-    case "kannada":
-      targetScript = SCRIPT_TYPES.LATIN;
-      if (origScript === SCRIPT_TYPES.KANNADA) {
-        transformFn = transliterateKannadaToLatin;
-      }
-      break;
-
-    case "english":
-    default:
-      targetScript = SCRIPT_TYPES.LATIN;
-      transformFn = (str) => str;
-      break;
+      // Universal multi-script transliteration:
+      // Eliminates any embedded Indic characters (such as Devanagari 'होली, होली' in Tamil/English lines)
+      return transliterateAnyIndicToLatin(processed);
+    };
   }
 
   // Transform display lyrics while strictly preserving original text

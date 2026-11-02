@@ -31,6 +31,25 @@ export function normalizeSongTitle(title) {
 }
 
 /**
+ * Strips soundtrack markers, featured artists, and version noise from titles
+ * for clean, high-precision search query generation while preserving original words.
+ * E.g. 'Sundara Ravanan (From "Athimanoharam")' -> 'Sundara Ravanan'
+ */
+export function cleanSearchTitle(title) {
+  if (!title || typeof title !== "string") return "";
+  return title
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\s*[\(\[](?:from|feat\.?|ft\.?|with|original|soundtrack|version|remix|acoustic|live|cover|official|lyric|audio|video|ost)[^\)\]]*[\)\]]/gi, "")
+    .replace(/\s*-\s*(?:from|remix|acoustic|live|cover|soundtrack|ost|extended|version).*/gi, "")
+    .replace(/["'“”‘’]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Normalizes primary artist name
  */
 export function normalizeArtistName(artist) {
