@@ -1,40 +1,29 @@
 import { NextResponse } from "next/server";
-import {
-  OWNER_USERNAME,
-  verifySessionToken,
-  SESSION_COOKIE_NAME,
-} from "../../../../server/auth.js";
+import { createSupabaseServerClient } from "../../../../services/supabaseServer.js";
+import { DEFAULT_USER_ID } from "../../../../config/authConfig.js";
 
 export async function GET(request) {
   try {
-    const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const supabase = await createSupabaseServerClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-    if (!sessionCookie) {
+    if (error || !user) {
       return NextResponse.json({ authenticated: false, user: null });
     }
 
-    const session = verifySessionToken(sessionCookie);
-    if (!session) {
-      // Clear invalid cookie
-      const res = NextResponse.json({ authenticated: false, user: null });
-      res.cookies.set({
-        name: SESSION_COOKIE_NAME,
-        value: "",
-        path: "/",
-        maxAge: 0,
-      });
-      return res;
-    }
+    const username = user.user_metadata?.username || DEFAULT_USER_ID;
 
     return NextResponse.json({
       authenticated: true,
       user: {
-        username: session.username || OWNER_USERNAME,
-        name: session.username || OWNER_USERNAME,
-        email: `${session.username || OWNER_USERNAME}@ceepeefy.audio`,
+        id: user.id,
+        uid: user.id,
+        username,
+        name: user.user_metadata?.full_name || username,
+        email: user.email,
         plan: "Owner / Studio Master",
         isLoggedIn: true,
-        activeUser: session.username || OWNER_USERNAME,
+        activeUser: username,
       },
     });
   } catch (err) {
