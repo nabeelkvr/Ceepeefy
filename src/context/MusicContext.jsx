@@ -79,6 +79,7 @@ import {
   classifySongMood,
 } from "../utils/recommendationEngine";
 import { classifySongDetailed } from "../utils/songClassifier";
+import { invalidateRecommendationCache } from "../services/recommendationEngine/index";
 
 export const DEFAULT_MOCK_TRACK_IDS = new Set([
   "track-midnight-pulse",
@@ -4079,6 +4080,13 @@ export const MusicProvider = ({ children }) => {
       }
     }
 
+    // Invalidate recommendation cache on skip or song completion
+    try {
+      invalidateRecommendationCache(user?.id);
+    } catch (e) {
+      // ignore
+    }
+
     const mQ = manualQueueRef.current || [];
     const aQ = autoQueueRef.current || [];
 
@@ -4172,6 +4180,13 @@ export const MusicProvider = ({ children }) => {
   const playFromQueue = (track, index) => {
     if (!track) return;
     const tid = String(track.id);
+    // Invalidate recommendation cache on skip or song completion
+    try {
+      invalidateRecommendationCache(user?.id);
+    } catch (e) {
+      // ignore
+    }
+
     const mQ = manualQueueRef.current || [];
     const aQ = autoQueueRef.current || [];
 
@@ -4587,6 +4602,13 @@ export const MusicProvider = ({ children }) => {
     }
 
     const isCurrentlyLiked = likedSongIds.includes(targetId);
+
+    // Invalidate recommendation cache so likes immediately refresh personalized suggestions
+    try {
+      invalidateRecommendationCache(user?.id);
+    } catch (e) {
+      // ignore
+    }
 
     setLikedSongIds((prev) => {
       if (prev.includes(targetId)) {

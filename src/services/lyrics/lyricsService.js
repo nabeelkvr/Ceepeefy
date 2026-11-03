@@ -16,6 +16,7 @@ import { MusixmatchProvider } from "./providers/musixmatchProvider.js";
 import { MockProvider } from "./providers/mockProvider.js";
 import { processLyricsLanguageAndScript } from "./textProcessor.js";
 import { lyricsCorrectionService } from "./lyricsCorrectionService.js";
+import { transliterateSynchronizedLyrics } from "./lyricsTransliterationEngine.js";
 import { createNormalizedLyrics, CACHE_STATUS } from "./types.js";
 import { normalizeSongTitle } from "./songMatcher.js";
 
@@ -145,6 +146,24 @@ class LyricsService {
         options
       );
 
+      // Apply resilient LLM transliteration pipeline with chunking, retries & fallback
+      let finalLines = correctionResult.lines;
+      if (options.transliterate !== false && Array.isArray(finalLines) && finalLines.length > 0) {
+        try {
+          const transResult = await transliterateSynchronizedLyrics(finalLines, {
+            language: langScriptResult.detectedLanguage,
+            songId: String(trackSeed.id || trackSeed.title || ""),
+            bypassCache: options.bypassCache,
+            llmCaller: options.llmCaller,
+          });
+          if (transResult && Array.isArray(transResult.lines) && transResult.lines.length > 0) {
+            finalLines = transResult.lines;
+          }
+        } catch (e) {
+          console.warn("[LyricsService] Transliteration fallback to corrected lines:", e.message);
+        }
+      }
+
       const normalizedResponse = createNormalizedLyrics({
         success: true,
         trackId: String(trackSeed.id || ""),
@@ -159,7 +178,7 @@ class LyricsService {
         matchConfidence: acceptedResult.matchConfidence || 90,
         isInstrumental: Boolean(trackSeed.isInstrumental || trackSeed.isBgm),
         synced: Boolean(acceptedResult.synced),
-        lines: correctionResult.lines,
+        lines: finalLines,
         originalLyrics: langScriptResult.originalLyrics || acceptedResult.rawLyrics,
         displayLyrics: correctionResult.displayLyrics,
         correctedLyrics: correctionResult.correctedLyrics,

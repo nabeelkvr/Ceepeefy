@@ -26,6 +26,8 @@ import SpotifyArtistCard from "../components/SpotifyArtistCard";
 import SpotifyBadge, { SpotifyIcon } from "../components/SpotifyBadge";
 import Footer from "../components/Footer";
 import RecommendationCard from "../components/RecommendationCard";
+import SuggestedForYouCard from "../components/SuggestedForYouCard";
+import { getRecommendations } from "../services/recommendationEngine/index";
 import { getPersonalizedRecommendations } from "../utils/personalizedRecommendations";
 import {
   SPOTIFY_STYLE_PLAYLISTS,
@@ -106,6 +108,7 @@ export default function HomePage() {
     isLiked,
     formatTime,
     recentlyPlayedTracks,
+    likedTracks,
     customPlaylists,
     addedPlaylists,
     selfMixes,
@@ -191,11 +194,13 @@ export default function HomePage() {
   }, [customPlaylists, addedPlaylists]);
 
   const recommendedTracks = useMemo(() => {
-    return getPersonalizedRecommendations(recentlyPlayedTracks, {
-      limit: 12,
-      refreshSeed: recommendationSeed,
+    return getRecommendations(user?.id || user?.username || "user", 8, {
+      recentlyPlayed: recentlyPlayedTracks,
+      likedTracks: likedTracks || [],
+      customPlaylists: customPlaylists || [],
+      seed: recommendationSeed,
     });
-  }, [recentlyPlayedTracks, recommendationSeed]);
+  }, [user, recentlyPlayedTracks, likedTracks, customPlaylists, recommendationSeed]);
 
   useEffect(() => {
     let isMounted = true;
@@ -763,18 +768,19 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Section 3: Redesigned Recommended for You (Horizontal Compact Cards: 3/row Desktop, 2/row Mobile) */}
-      <section className="flex flex-col gap-3.5 md:gap-4.5">
+      {/* Section 3: Suggested for You (Image 2 layout: 2 cols x 4 rows = 8 songs) */}
+      <section className="flex flex-col gap-3 sm:gap-3.5">
         <div className="flex items-center justify-between">
-          <h2 className="font-headline-lg text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight">
-            Recommended for You
+          <h2 className="text-xl sm:text-2xl font-bold text-[#f1f3f4] tracking-tight">
+            Suggested for You
           </h2>
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={() => setRecommendationSeed((prev) => prev + 1)}
-              className="flex items-center gap-1 text-xs font-semibold text-outline hover:text-white hover:border-white/20 transition-all px-2.5 py-1 rounded-lg bg-surface-container/60 hover:bg-surface-container border border-white/5 cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#9aa0a6] hover:text-white hover:border-white/20 transition-all px-2.5 py-1 rounded-lg bg-surface-container/60 hover:bg-surface-container border border-white/5 cursor-pointer active:scale-95"
               title="Refresh recommendations"
+              aria-label="Refresh recommendations"
             >
               <span className="material-symbols-outlined text-[15px]">refresh</span>
               <span className="hidden sm:inline">Refresh</span>
@@ -791,41 +797,41 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Responsive Grid: 4 rows on mobile (8 items, 2 cols), 4 rows on desktop (12 items, 3-4 cols) */}
+        {/* Responsive Grid: 2 columns x 4 rows = 8 songs; on mobile (<640px) 1 column */}
         {isPageLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-2.5 lg:gap-3.5 2xl:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
             {Array.from({ length: 8 }).map((_, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-2.5 sm:gap-3 p-1.5 sm:p-2 rounded-xl bg-[#141414] animate-pulse border border-white/5 select-none"
+                className="flex items-center p-2 rounded-[10px] bg-transparent animate-pulse select-none"
               >
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-[#222222] flex-shrink-0" />
-                <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                  <div className="h-3.5 w-3/4 bg-[#262626] rounded" />
-                  <div className="h-2.5 w-1/2 bg-[#1f1f1f] rounded" />
+                <div className="w-[56px] h-[56px] rounded-[8px] bg-[#1f1f1f] flex-shrink-0" />
+                <div className="flex-1 flex flex-col justify-center gap-1.5 min-w-0 ml-3.5">
+                  <div className="h-2.5 w-1/3 bg-[#2a2a2a] rounded" />
+                  <div className="h-5 w-3/5 bg-[#333333] rounded" />
                 </div>
               </div>
             ))}
           </div>
+        ) : recommendedTracks.length === 0 ? (
+          <div className="p-8 text-center text-[#9aa0a6] text-sm bg-white/[0.02] rounded-xl border border-white/5">
+            No suggestions available right now. Play a few songs to get personalized recommendations!
+          </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-2.5 lg:gap-3.5 2xl:gap-4">
-            {recommendedTracks.map((track, index) => (
-              <div
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
+            {recommendedTracks.slice(0, 8).map((track) => (
+              <SuggestedForYouCard
                 key={track.id}
-                className={index >= 8 ? "hidden lg:block min-w-0" : "block min-w-0"}
-              >
-                <RecommendationCard
-                  track={track}
-                  trackList={recommendedTracks}
-                  onPlay={() => {
-                    if (currentTrack?.id === track.id) {
-                      togglePlay();
-                    } else {
-                      playTrack(track, recommendedTracks);
-                    }
-                  }}
-                />
-              </div>
+                track={track}
+                trackList={recommendedTracks}
+                onPlay={() => {
+                  if (currentTrack?.id === track.id) {
+                    togglePlay();
+                  } else {
+                    playTrack(track, recommendedTracks);
+                  }
+                }}
+              />
             ))}
           </div>
         )}
