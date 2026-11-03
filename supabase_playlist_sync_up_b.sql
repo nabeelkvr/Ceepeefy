@@ -23,6 +23,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.playlist_tracks TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.liked_songs TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.recently_played TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.self_mixes TO authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
 -- ------------------------------------------------------------------------------
 -- 3. ENABLE ROW LEVEL SECURITY (RLS) ON ALL 5 TABLES

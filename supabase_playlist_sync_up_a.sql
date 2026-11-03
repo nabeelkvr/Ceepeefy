@@ -46,12 +46,12 @@ CREATE INDEX IF NOT EXISTS idx_user_playlists_auth_active
 
 -- ------------------------------------------------------------------------------
 -- 2. EXPAND: public.playlist_tracks
--- Add deterministic track_key and unique constraint safely
+-- Add deterministic track_key safely WITHOUT deleting any existing rows
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.playlist_tracks
   ADD COLUMN IF NOT EXISTS track_key TEXT;
 
--- Backfill track_key from track_data JSONB snapshot, track_id, or row id
+-- Non-destructive backfill: populates track_key from JSON metadata, track_id, or row id
 UPDATE public.playlist_tracks
 SET track_key = COALESCE(
   NULLIF(track_data->>'track_key', ''),
@@ -62,28 +62,13 @@ SET track_key = COALESCE(
 )
 WHERE track_key IS NULL OR track_key = '';
 
--- Deduplicate any pre-existing duplicate (playlist_id, track_key) rows safely
-DELETE FROM public.playlist_tracks a
-USING public.playlist_tracks b
-WHERE a.playlist_id = b.playlist_id
-  AND a.track_key = b.track_key
-  AND a.id > b.id;
-
--- Set track_key NOT NULL after safe backfill
+-- Set track_key NOT NULL after backfill
 ALTER TABLE public.playlist_tracks
   ALTER COLUMN track_key SET NOT NULL;
 
--- Unique constraint on (playlist_id, track_key) for atomic upserting
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'uq_playlist_tracks_key'
-  ) THEN
-    ALTER TABLE public.playlist_tracks
-      ADD CONSTRAINT uq_playlist_tracks_key UNIQUE (playlist_id, track_key);
-  END IF;
-END $$;
+-- Fast index on track_key for lightning-fast lookups and track joins
+CREATE INDEX IF NOT EXISTS idx_playlist_tracks_key
+  ON public.playlist_tracks (playlist_id, track_key);
 
 CREATE INDEX IF NOT EXISTS idx_playlist_tracks_position
   ON public.playlist_tracks (playlist_id, position ASC);

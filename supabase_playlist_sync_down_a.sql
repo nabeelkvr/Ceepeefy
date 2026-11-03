@@ -7,6 +7,7 @@ BEGIN;
 
 -- Drop constraints & indexes
 ALTER TABLE public.playlist_tracks DROP CONSTRAINT IF EXISTS uq_playlist_tracks_key;
+DROP INDEX IF EXISTS idx_playlist_tracks_key;
 DROP INDEX IF EXISTS idx_playlist_tracks_position;
 DROP INDEX IF EXISTS idx_user_playlists_cloud_archive;
 DROP INDEX IF EXISTS idx_user_playlists_auth_active;
