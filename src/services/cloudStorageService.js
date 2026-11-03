@@ -19,6 +19,10 @@ import { supabase, isSupabaseConfigured } from "./supabaseClient.js";
 import { DEFAULT_USER_ID } from "../config/authConfig.js";
 import { formatPlaylistDuration } from "../utils/playlistUtils.js";
 
+const isUuid = (str) =>
+  typeof str === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
 /**
  * Derives a stable, deterministic track_key from track properties (D4)
  * Uses storage bucket + object path or audio URL; never Date.now() or random
@@ -243,10 +247,11 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
     const isCloudArchive = playlist.id === "cloud-archive-playlist";
     const kind = isCloudArchive ? "cloud_archive" : (isSelfMix ? "mix" : "user");
 
-    // Full expanded record
+    const authUid = isUuid(userId) ? userId : (isUuid(playlist.auth_user_id) ? playlist.auth_user_id : null);
     const fullRecord = {
       id: String(playlist.id),
       user_id: String(userId),
+      ...(authUid ? { auth_user_id: authUid } : {}),
       title: playlist.title || "Untitled Playlist",
       description: playlist.description || "",
       cover_url: playlist.coverUrl || playlist.cover_url || null,
@@ -258,6 +263,9 @@ export const savePlaylistToCloud = async (playlist, userId = DEFAULT_USER_ID) =>
       fidelity: playlist.fidelity || "Personal Playlist • Hi-Res Lossless",
       spec: playlist.spec || "24-Bit • 192kHz",
       kind,
+      tracks: Array.isArray(playlist.tracks) ? playlist.tracks : [],
+      source: playlist.source || (isSelfMix ? "self_mix" : "custom"),
+      source_meta: playlist.sourceMeta || {},
       updated_at: new Date().toISOString(),
     };
 
@@ -490,16 +498,31 @@ export const saveLikedSongToCloud = async (track, userId = DEFAULT_USER_ID) => {
   if (!supabase || !isSupabaseConfigured() || !track?.id) return false;
 
   try {
+    const authUid = isUuid(userId) ? userId : null;
     const record = {
-      user_id: userId,
+      user_id: String(userId),
+      ...(authUid ? { auth_user_id: authUid } : {}),
       track_id: String(track.id),
       track_data: track,
       created_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from("liked_songs")
       .upsert(record, { onConflict: "user_id,track_id" });
+
+    if (error && (error.code === "42703" || error.message?.includes("auth_user_id"))) {
+      const fallbackRecord = {
+        user_id: String(userId),
+        track_id: String(track.id),
+        track_data: track,
+        created_at: new Date().toISOString(),
+      };
+      const fallback = await supabase
+        .from("liked_songs")
+        .upsert(fallbackRecord, { onConflict: "user_id,track_id" });
+      error = fallback.error;
+    }
 
     if (error) {
       console.error("[CloudService] Failed to save liked song:", error.message);
@@ -551,14 +574,28 @@ export const recordRecentlyPlayedToCloud = async (track, userId = DEFAULT_USER_I
   if (!supabase || !isSupabaseConfigured() || !track?.id) return false;
 
   try {
+    const authUid = isUuid(userId) ? userId : null;
     const record = {
-      user_id: userId,
+      user_id: String(userId),
+      ...(authUid ? { auth_user_id: authUid } : {}),
       track_id: String(track.id),
       track_data: track,
       played_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("recently_played").insert([record]);
+    let { error } = await supabase.from("recently_played").insert([record]);
+
+    if (error && (error.code === "42703" || error.message?.includes("auth_user_id"))) {
+      const fallbackRecord = {
+        user_id: String(userId),
+        track_id: String(track.id),
+        track_data: track,
+        played_at: new Date().toISOString(),
+      };
+      const fallback = await supabase.from("recently_played").insert([fallbackRecord]);
+      error = fallback.error;
+    }
+
     return !error;
   } catch (err) {
     return false;

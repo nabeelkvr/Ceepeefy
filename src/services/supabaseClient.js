@@ -192,11 +192,17 @@ export const saveSelfMixToCloud = async (mixData) => {
     throw new Error("Supabase is not configured.");
   }
 
+  const isUuid = (str) =>
+    typeof str === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+  const authUid = isUuid(mixData.owner) ? mixData.owner : (isUuid(mixData.auth_user_id) ? mixData.auth_user_id : null);
   const record = {
     id: mixData.id || `cloud-mix-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     title: mixData.title || "Untitled Self Mix",
     audio_url: mixData.audioUrl || mixData.audio_url,
     owner: mixData.owner || DEFAULT_USER_ID,
+    ...(authUid ? { auth_user_id: authUid } : {}),
     duration: typeof mixData.duration === "number" ? Math.round(mixData.duration) : 180,
     duration_formatted: mixData.durationFormatted || mixData.duration_formatted || "3:00",
     file_name: mixData.fileName || mixData.file_name || "",
@@ -208,11 +214,23 @@ export const saveSelfMixToCloud = async (mixData) => {
     created_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("self_mixes")
     .insert([record])
     .select()
     .single();
+
+  if (error && (error.code === "42703" || error.message?.includes("auth_user_id"))) {
+    const fallbackRecord = { ...record };
+    delete fallbackRecord.auth_user_id;
+    const fallback = await supabase
+      .from("self_mixes")
+      .insert([fallbackRecord])
+      .select()
+      .single();
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     console.error("Supabase database insert error:", error);
