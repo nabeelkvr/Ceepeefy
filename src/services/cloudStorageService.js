@@ -192,6 +192,42 @@ export const fetchUserPlaylistsFromCloud = async (userId = DEFAULT_USER_ID) => {
 };
 
 /**
+ * Fetches tracks for a specific playlist from Supabase (playlist_tracks)
+ * @param {string} playlistId
+ * @returns {Promise<Array>}
+ */
+export const fetchPlaylistTracksFromCloud = async (playlistId) => {
+  if (!supabase || !isSupabaseConfigured() || !playlistId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from("playlist_tracks")
+      .select("*")
+      .eq("playlist_id", playlistId)
+      .order("position", { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map((row) => {
+      const rawData = row.track_data && typeof row.track_data === "object" ? row.track_data : {};
+      const trackKey = row.track_key || rawData.id || row.track_id;
+
+      return {
+        ...rawData,
+        id: trackKey,
+        track_key: trackKey,
+        position: row.position,
+        title: rawData.title || row.title || "Untitled Track",
+        artist: rawData.artist || row.artist || "Unknown Artist",
+      };
+    });
+  } catch (err) {
+    console.error("[CloudService] Error fetching playlist tracks:", err);
+    return [];
+  }
+};
+
+/**
  * Saves or updates playlist metadata in Supabase (user_playlists)
  * D3.d: Saving playlist metadata NEVER touches playlist_tracks!
  * Resilient to missing schema columns before and after migration.
