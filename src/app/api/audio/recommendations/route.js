@@ -18,6 +18,7 @@ import {
   areTracksEqual,
 } from "../../../../utils/trackIdentity.js";
 import { buildAdaptiveQueue } from "../../../../utils/adaptiveRecommendationLayer.js";
+import { buildSmartQueue, QueueSessionManager, SMART_QUEUE_CONFIG } from "../../../../services/smartQueue/index.js";
 
 // In-memory cache for recommendation queries
 const recoCache = new Map();
@@ -197,6 +198,12 @@ export async function GET(request) {
     let movieName = searchParams.get("movieName") || searchParams.get("movie") || "";
     const excludeIdsParam = searchParams.get("excludeIds") || "";
     const recentQueueIdsParam = searchParams.get("recentQueueTrackIds") || searchParams.get("recentQueueIds") || "";
+    const quickSkippedIdsParam = searchParams.get("quickSkippedIds") || "";
+    let parsedSkippedProfiles = [];
+    try {
+      const qp = searchParams.get("quickSkippedProfiles");
+      if (qp) parsedSkippedProfiles = JSON.parse(qp);
+    } catch (_) { }
 
     // Extract movie name from title if present, e.g. "Song (From "Movie")"
     if (!movieName && title) {
@@ -633,13 +640,31 @@ export async function GET(request) {
 
     const candidatePool = Array.from(rawCandidateMap.values());
 
-    // Apply transparent 100-Point Queue Algorithm & Sequencing Layer via Adaptive Layer
-    const rankedQueue = buildAdaptiveQueue(seedDetails, candidatePool, {
-      excludeIds: excludeIdSet,
-      recentQueueTrackIds: recentQueueSet,
-      recentlyRecommendedIds: recentQueueSet,
-      maxResults: 20,
+    // Build session manager to enforce strict rules (no repeats, language relaxation, MMR diversity)
+    const queueSession = new QueueSessionManager();
+    excludeIdSet.forEach((id) => queueSession.playedTrackIds.add(String(id)));
+    if (quickSkippedIdsParam) {
+      quickSkippedIdsParam.split(",").map((s) => s.trim()).filter(Boolean).forEach((id) => {
+        queueSession.quickSkippedTrackIds.add(id);
+      });
+    }
+    if (Array.isArray(parsedSkippedProfiles)) {
+      queueSession.quickSkippedProfiles = parsedSkippedProfiles;
+    }
+
+    const smartQueueRes = buildSmartQueue(seedDetails, candidatePool, {
+      sessionManager: queueSession,
+      targetQueueSize: 20,
     });
+
+    const rankedQueue = smartQueueRes.queue.length > 0
+      ? smartQueueRes.queue
+      : buildAdaptiveQueue(seedDetails, candidatePool, {
+          excludeIds: excludeIdSet,
+          recentQueueTrackIds: recentQueueSet,
+          recentlyRecommendedIds: recentQueueSet,
+          maxResults: 20,
+        });
 
     const responseData = {
       success: true,

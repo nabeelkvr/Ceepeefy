@@ -3,6 +3,8 @@
  * Resolves song title and artist to a direct, raw audio streaming URL via open-source music search.
  */
 
+import { rankSongs, normalizeText } from "./searchRanking/index.js";
+
 // Cache resolved audio streams in client memory to avoid repeated network calls
 const clientAudioCache = new Map();
 const clientAlbumCache = new Map();
@@ -355,6 +357,21 @@ export function assignTrackTier(track, cleanQuery, activeEntity, specificMovieTi
  *    using Recency (newest release year first) as a tie-breaker.
  */
 export function rankSearchResults(songs, rawQuery, activeEntity) {
+  if (!Array.isArray(songs) || songs.length === 0) return [];
+  const artistHint = (
+    activeEntity?.artist ||
+    activeEntity?.name ||
+    activeEntity?.more_info?.primary_artists ||
+    activeEntity?.music ||
+    ""
+  );
+  return rankSongs(songs, rawQuery, {
+    matchedArtistName: normalizeText(artistHint),
+    activeEntity,
+  });
+}
+
+function legacyRankSearchResults(songs, rawQuery, activeEntity) {
   if (!Array.isArray(songs) || songs.length === 0) return [];
   const q = (rawQuery || "").toLowerCase().trim();
   const cleanQ = cleanStr(q);

@@ -216,6 +216,8 @@ export const MusicProvider = ({ children }) => {
   const isPrefetchingRef = useRef(false);
   const sessionPlayedTrackIdsRef = useRef(new Set());
   const sessionPlayedKeysRef = useRef(new Set());
+  const quickSkippedTrackIdsRef = useRef(new Set());
+  const quickSkippedProfilesRef = useRef([]);
   const originalPlaylistTracksRef = useRef([]);
 
   // Pinned Playlists State
@@ -3390,6 +3392,13 @@ export const MusicProvider = ({ children }) => {
         const excludeList = Array.from(excludeSet).join(",");
         if (excludeList) params.set("excludeIds", excludeList);
 
+        if (quickSkippedTrackIdsRef.current.size > 0) {
+          params.set("quickSkippedIds", Array.from(quickSkippedTrackIdsRef.current).join(","));
+        }
+        if (quickSkippedProfilesRef.current.length > 0) {
+          params.set("quickSkippedProfiles", JSON.stringify(quickSkippedProfilesRef.current.slice(-10)));
+        }
+
         // Pass rolling session recommendation history for anti-repetition frequency damping (Section 15)
         const recentRecos = Array.from(recentRecommendedTrackIdsRef.current).slice(-40).join(",");
         if (recentRecos) params.set("recentQueueTrackIds", recentRecos);
@@ -4050,6 +4059,26 @@ export const MusicProvider = ({ children }) => {
 
   // Next track: Strict Manual Queue Priority over Automatic Priority Queue
   const handleNextTrack = () => {
+    // Quick skip detection (< 30 seconds): Blacklist and dampen similar songs in this session
+    const curTrack = currentTrackRef.current;
+    const playDuration = audioRef.current?.currentTime ?? currentTime ?? 0;
+    if (curTrack && playDuration < 30) {
+      const tid = String(curTrack.id || "").replace(/^track-/, "").trim();
+      if (tid) {
+        quickSkippedTrackIdsRef.current.add(tid);
+        sessionPlayedTrackIdsRef.current.add(tid);
+        quickSkippedProfilesRef.current.push({
+          id: tid,
+          primaryArtist: curTrack.artist || curTrack.primary_artist || "",
+          mood: curTrack.mood || "",
+          genre: curTrack.genre || "",
+        });
+        if (quickSkippedProfilesRef.current.length > 10) {
+          quickSkippedProfilesRef.current.shift();
+        }
+      }
+    }
+
     const mQ = manualQueueRef.current || [];
     const aQ = autoQueueRef.current || [];
 

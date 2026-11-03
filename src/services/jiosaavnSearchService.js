@@ -1,6 +1,7 @@
 import CryptoJS from "crypto-js";
 import { NOCTURNE_TRACKS } from "../data/nocturneData.js";
 import { getGenreByName } from "../data/genreData.js";
+import { rankAllSearchEntities, rankSongs, normalizeText } from "./searchRanking/index.js";
 
 // In-memory cache for search queries
 const searchCache = new Map();
@@ -103,145 +104,8 @@ export function formatPlayCount(count) {
 
 export function rankAndDeduplicateSongs(songs, rawQuery, topArtistHint = "") {
   if (!Array.isArray(songs) || songs.length === 0) return [];
-  const q = (rawQuery || "").toLowerCase().trim();
-  const qNorm = normalizeSongTitle(q);
-  const qClean = cleanStr(q);
-  const hintClean = cleanStr(topArtistHint);
-
-  const isExplicitRemix = /\b(remix|mix|mashup)\b/i.test(q);
-  const isExplicitAcoustic = /\b(acoustic|unplugged)\b/i.test(q);
-  const isExplicitCover = /\b(cover|tribute|piano|karaoke|instrumental)\b/i.test(q);
-  const isExplicitLive = /\b(live|concert|tour)\b/i.test(q);
-  const isMovieSearch = /\bmovie\b/i.test(rawQuery);
-  const movieTarget = cleanStr((rawQuery || "").replace(/\bmovie\b/gi, "").trim());
-
-  // 1. Deduplicate identical tracks (retaining version with audioUrl and highest play count)
-  const dedupMap = new Map();
-  for (const s of songs) {
-    if (!s || !s.title) continue;
-    const titleKey = cleanStr(normalizeSongTitle(s.title) || s.title);
-    const artistKey = cleanStr(s.artist);
-    const isSpecialVariant = /\b(remix|mix|acoustic|unplugged|live|cover|karaoke|instrumental|version|edit)\b/i.test(s.title);
-    const variantTag = isSpecialVariant ? `:::${cleanStr(s.title)}` : "";
-    const key = `${titleKey}:::${artistKey}${variantTag}`;
-
-    const trackPlays = parsePlayCount(s.playCount ?? s.play_count ?? s.plays ?? s.ctr ?? 0);
-    const existing = dedupMap.get(key);
-
-    if (!existing) {
-      dedupMap.set(key, { ...s, playCount: trackPlays });
-    } else {
-      const existingPlays = existing.playCount || 0;
-      const higherPlays = Math.max(trackPlays, existingPlays);
-      const winner = trackPlays >= existingPlays ? s : existing;
-      dedupMap.set(key, {
-        ...winner,
-        audioUrl: winner.audioUrl || existing.audioUrl || s.audioUrl,
-        playCount: higherPlays,
-        ctr: higherPlays,
-        ctrFormatted: formatPlayCount(higherPlays),
-        isMovieTrack: Boolean(s.isMovieTrack || existing.isMovieTrack),
-        movieName: s.movieName || existing.movieName || winner.movieName,
-      });
-    }
-  }
-
-  const deduped = Array.from(dedupMap.values());
-
-  // 2. Multi-factor intelligent relevance scoring
-  const scored = deduped.map((s) => {
-    let score = 0;
-    const title = (s.title || "").toLowerCase();
-    const titleNorm = normalizeSongTitle(title);
-    const titleClean = cleanStr(title);
-    const artist = (s.artist || "").toLowerCase();
-    const artistClean = cleanStr(artist);
-    const albumClean = cleanStr(s.album);
-    const movieClean = cleanStr(s.movieName);
-
-    if (isMovieSearch && movieTarget) {
-      if (
-        s.isMovieTrack ||
-        (albumClean && (albumClean.includes(movieTarget) || movieTarget.includes(albumClean))) ||
-        (movieClean && movieClean.includes(movieTarget)) ||
-        (titleClean && (titleClean.includes(movieTarget) || movieTarget.includes(titleClean)))
-      ) {
-        score += 2000;
-      }
-    }
-
-    if (titleClean === qClean || titleNorm === qNorm) {
-      score += 1200;
-    } else if (titleClean.startsWith(qClean) || titleNorm.startsWith(qNorm)) {
-      score += 650;
-    } else if (titleClean.includes(qClean) || titleNorm.includes(qNorm)) {
-      score += 350;
-    }
-
-    if (artistClean && (artistClean === titleClean || artistClean === qClean)) {
-      score -= 800;
-    }
-
-    if (hintClean && (artistClean.includes(hintClean) || hintClean.includes(artistClean))) {
-      score += 450;
-    }
-
-    const queryTokens = q.split(/\s+/).filter((t) => t.length > 2 && !titleClean.includes(cleanStr(t)));
-    let artistMatchTokens = 0;
-    for (const token of queryTokens) {
-      if (artistClean.includes(cleanStr(token))) artistMatchTokens++;
-    }
-    if (artistMatchTokens > 0) {
-      score += artistMatchTokens * 350;
-    }
-
-    const allQueryTokens = q.split(/\s+/).filter((t) => t.length > 2);
-    for (const token of allQueryTokens) {
-      if (title.includes(token)) score += 60;
-    }
-
-    const isKaraoke = /\b(karaoke|backing track|minus one)\b/i.test(title);
-    const isCover = /\b(cover|tribute to|originally performed|tribute)\b/i.test(title) || /\b(tribute|karaoke|cover)\b/i.test(artist);
-    const isPiano = /\b(piano version|piano cover|guitar cover|instrumental)\b/i.test(title);
-    const isWorkout = /\b(workout|fitness|cardio)\b/i.test(title) || /\b(workout|fitness)\b/i.test(artist);
-    const isRemix = /\b(remix|dj|mix|mashup|slowed|reverb)\b/i.test(title);
-    const isAcoustic = /\b(acoustic)\b/i.test(title);
-    const isLive = /\b(live|tour collection)\b/i.test(title) || /\b(live)\b/i.test(s.album || "");
-
-    if (isKaraoke && !isExplicitCover) score -= 850;
-    if (isCover && !isExplicitCover) score -= 650;
-    if (isPiano && !isExplicitCover) score -= 550;
-    if (isWorkout && !isExplicitCover) score -= 650;
-    if (isRemix && !isExplicitRemix) score -= 250;
-    if (isAcoustic && !isExplicitAcoustic) score -= 200;
-    if (isLive && !isExplicitLive) score -= 150;
-
-    if (!isRemix && !isAcoustic && !isLive && !isCover && !isKaraoke && !isPiano && !isWorkout) {
-      score += 300;
-    }
-
-    if (s.audioUrl) {
-      score += 60;
-    }
-
-    const plays = parsePlayCount(s.playCount ?? s.play_count ?? s.plays ?? s.ctr ?? 0);
-    if (plays > 0) {
-      score += Math.min(Math.log10(plays) * 25, 200);
-    }
-
-    return { ...s, relevanceScore: score, playCount: plays };
-  });
-
-  return scored.sort((a, b) => {
-    if (b.relevanceScore !== a.relevanceScore) {
-      return b.relevanceScore - a.relevanceScore;
-    }
-    if ((b.playCount || 0) !== (a.playCount || 0)) {
-      return (b.playCount || 0) - (a.playCount || 0);
-    }
-    const yearA = parseInt(a.year || "0", 10) || 0;
-    const yearB = parseInt(b.year || "0", 10) || 0;
-    return yearB - yearA;
+  return rankSongs(songs, rawQuery, {
+    matchedArtistName: normalizeText(topArtistHint),
   });
 }
 
@@ -823,17 +687,31 @@ export async function searchJioSaavnCatalog(rawQuery, options = {}) {
       };
     }
 
+    const rankedOutput = rankAllSearchEntities(
+      {
+        songs: rawCandidateSongs,
+        artists,
+        albums,
+        playlists,
+        topMatch,
+      },
+      query,
+      {
+        matchedArtistName: normalizeText(rawTopArtist),
+      }
+    );
+
     const result = {
       success: true,
       query,
       page,
-      topMatch,
-      songs,
-      artists,
-      albums,
-      playlists,
-      tracks: songs,
-      results: songs,
+      topMatch: rankedOutput.topMatch || topMatch,
+      songs: rankedOutput.songs,
+      artists: rankedOutput.artists,
+      albums: rankedOutput.albums,
+      playlists: rankedOutput.playlists,
+      tracks: rankedOutput.songs,
+      results: rankedOutput.songs,
     };
 
     searchCache.set(cacheKey, { timestamp: Date.now(), data: result });
