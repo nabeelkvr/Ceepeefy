@@ -58,11 +58,7 @@ import {
   fetchRecentlyPlayedFromCloud,
   recordRecentlyPlayedToCloud,
   clearRecentlyPlayedInCloud,
-  migrateLocalDataToSupabase,
   fetchPlaylistTracksFromCloud,
-  saveAccountDataToCloud,
-  fetchAccountDataFromCloud,
-  subscribeToUserPlaylists,
 } from "../services/cloudStorageService";
 import {
   deleteSelfMixFromCloud,
@@ -282,6 +278,8 @@ export const MusicProvider = ({ children }) => {
   const isSyncingCloudRef = useRef(false);
   const hasCloudSyncedRef = useRef(false);
   const lastTransitionTimeRef = useRef(0);
+  const isCreatingPlaylistRef = useRef(false);
+  const isCreatingSelfMixRef = useRef(false);
 
   // Cloud sync helper to refresh playlists, liked songs, and recently played from backend & Supabase
   const syncAccountDataWithCloud = async (targetUserId = null) => {
@@ -289,61 +287,27 @@ export const MusicProvider = ({ children }) => {
     if (isSyncingCloudRef.current) return;
     isSyncingCloudRef.current = true;
     try {
-      // 1. Run one-time migration if not yet completed
-      await migrateLocalDataToSupabase(currentUserId);
-
-      // 2. Query fresh cloud data from shared backend / Supabase (individual tables + central account snapshot)
-      const [cloudPlaylists, cloudLiked, cloudRecents, cloudSelfMixes, cloudAccountData] = await Promise.all([
+      // 1. Query fresh cloud data from Supabase
+      const [cloudPlaylists, cloudLiked, cloudRecents, cloudSelfMixes] = await Promise.all([
         fetchUserPlaylistsFromCloud(currentUserId),
         fetchLikedSongsFromCloud(currentUserId).catch(() => null),
         fetchRecentlyPlayedFromCloud(currentUserId).catch(() => null),
         fetchSelfMixesFromCloud(currentUserId).catch(() => []),
-        fetchAccountDataFromCloud(currentUserId).catch(() => null),
       ]);
 
-      // Collect all deleted playlist IDs to prevent resurrection
-      const deletedIdsSet = new Set();
-      try {
-        const localDeleted = JSON.parse(localStorage.getItem("ceepeefy_deleted_playlists") || "[]");
-        if (Array.isArray(localDeleted)) localDeleted.forEach((d) => deletedIdsSet.add(String(d)));
-        if (Array.isArray(cloudAccountData?.deletedPlaylistIds)) {
-          cloudAccountData.deletedPlaylistIds.forEach((d) => deletedIdsSet.add(String(d)));
-        }
-      } catch {}
-
-      // Restore category assignments from cloud account snapshot
-      if (cloudAccountData?.playlistCategories && typeof cloudAccountData.playlistCategories === "object") {
-        try {
-          const currentStored = JSON.parse(localStorage.getItem("ceepeefy_playlist_categories") || "{}");
-          const mergedCategories = {
-            ...cloudAccountData.playlistCategories,
-            ...currentStored,
-          };
-          localStorage.setItem("ceepeefy_playlist_categories", JSON.stringify(mergedCategories));
-        } catch {}
-      }
-
-      // 3. Apply state updates non-destructively: NEVER overwrite playlists with tracks by empty playlists
-      if (cloudPlaylists !== null || cloudAccountData?.customPlaylists) {
+      // 2. Apply state updates non-destructively: ONLY update if cloud fetch succeeded (not null)
+      if (cloudPlaylists !== null) {
         setCustomPlaylists((prev) => {
-          const localList = Array.isArray(prev)
-            ? prev.filter((p) => !deletedIdsSet.has(String(p.id)))
-            : [];
+          const localList = Array.isArray(prev) ? prev : [];
           const localMap = new Map(localList.map((p) => [String(p.id), p]));
 
-          const acctList = Array.isArray(cloudAccountData?.customPlaylists)
-            ? cloudAccountData.customPlaylists.filter((p) => !deletedIdsSet.has(String(p.id)))
-            : [];
-          const acctMap = new Map(acctList.map((p) => [String(p.id), p]));
-
           const cloudList = Array.isArray(cloudPlaylists)
-            ? cloudPlaylists.filter((pl) => !pl.isSelfMix && pl.badge !== "SELF MIX" && !deletedIdsSet.has(String(pl.id)))
+            ? cloudPlaylists.filter((pl) => !pl.isSelfMix && pl.badge !== "SELF MIX")
             : [];
           const cloudMap = new Map(cloudList.map((p) => [String(p.id), p]));
 
           const allIds = new Set([
             ...cloudList.map((p) => String(p.id)),
-            ...acctList.map((p) => String(p.id)),
             ...localList.map((p) => String(p.id)),
           ]);
 
@@ -468,40 +432,32 @@ export const MusicProvider = ({ children }) => {
         });
       }
 
-      // 4. Merge self-mixes across cloud tables, central account data, and local storage
+      // 4. Merge self-mixes across cloud tables and local storage
       const selfMixPlaylists = Array.isArray(cloudPlaylists)
-        ? cloudPlaylists.filter((pl) => (pl.isSelfMix || pl.badge === "SELF MIX") && !deletedIdsSet.has(String(pl.id)))
-        : [];
-      const acctMixes = Array.isArray(cloudAccountData?.selfMixes)
-        ? cloudAccountData.selfMixes.filter((m) => !deletedIdsSet.has(String(m.id)))
+        ? cloudPlaylists.filter((pl) => pl.isSelfMix || pl.badge === "SELF MIX")
         : [];
 
       setSelfMixes((prev) => {
         const localList = Array.isArray(prev) ? prev : [];
         const localMap = new Map(localList.map((m) => [String(m.id), m]));
-        const acctMap = new Map(acctMixes.map((m) => [String(m.id), m]));
         const cloudMap = new Map(selfMixPlaylists.map((m) => [String(m.id), m]));
 
         const allMixIds = new Set([
           ...selfMixPlaylists.map((m) => String(m.id)),
-          ...acctMixes.map((m) => String(m.id)),
           ...localList.map((m) => String(m.id)),
         ]);
 
         const mergedMixes = [];
         for (const id of allMixIds) {
           const cl = cloudMap.get(id);
-          const ac = acctMap.get(id);
           const lc = localMap.get(id);
-          const base = cl || ac || lc;
+          const base = cl || lc;
 
           let tracks = (cl?.tracks && cl.tracks.length > 0)
             ? cl.tracks
-            : (ac?.tracks && ac.tracks.length > 0)
-              ? ac.tracks
-              : (lc?.tracks && lc.tracks.length > 0)
-                ? lc.tracks
-                : [];
+            : (lc?.tracks && lc.tracks.length > 0)
+              ? lc.tracks
+              : [];
 
           if (tracks.length > 0 && (!cl?.tracks || cl.tracks.length === 0)) {
             savePlaylistToCloud({ ...base, tracks, isSelfMix: true }, currentUserId).catch(() => {});
@@ -586,11 +542,9 @@ export const MusicProvider = ({ children }) => {
         setRecentlyPlayed(valid.map((t) => t.id));
       }
 
-      // 7. Pinned playlists
-      if (Array.isArray(cloudAccountData?.pinnedPlaylistIds) && cloudAccountData.pinnedPlaylistIds.length > 0) {
-        setPinnedPlaylistIds((prev) => Array.from(new Set([...(prev || []), ...cloudAccountData.pinnedPlaylistIds])));
+      if (cloudPlaylists !== null) {
+        hasCloudSyncedRef.current = true;
       }
-      hasCloudSyncedRef.current = true;
     } catch (err) {
       console.error("[MusicContext] Cloud sync error:", err);
     } finally {
@@ -1266,16 +1220,24 @@ export const MusicProvider = ({ children }) => {
     persistAccountData();
   }, [likedSongIds, likedSongsMap, customPlaylists, recentlyPlayedTracks, selfMixes, user]);
 
-  const createPlaylist = (title, category = "Mixed") => {
+  const createPlaylist = (title, category = "Mixed", preGeneratedId = null) => {
     const currentUserId = getAccountUserId(user);
     if (!user) {
       openAuthModal("login");
       return null;
     }
+
+    // Submit lock to prevent double-click creation (D4, T3)
+    if (isCreatingPlaylistRef.current) return null;
+    isCreatingPlaylistRef.current = true;
+    setTimeout(() => {
+      isCreatingPlaylistRef.current = false;
+    }, 1000);
+
     const count = customPlaylists.length + 1;
     const cleanTitle = title?.trim() || `My Playlist #${count}`;
     const cleanCategory = category?.trim() || "Mixed";
-    const id = `playlist-custom-${Date.now()}`;
+    const id = preGeneratedId || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `playlist-custom-${Date.now()}`);
     const coverOptions = [
       "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80",
       "https://lh3.googleusercontent.com/aida-public/AB6AXuCcDTMe8ntb6aO4tcOQpRPu3QUvWw_EwqggOB0rt2BPCE9RXX9RMOcsu8cCoPX7rxBxCWoxXDvUVZhu4OTJaxyowAQxxZPFA1eJ_Ht3i-NyQPtVuprnz34_7wT6X9aHhhyGYv5_Zr8C2q5BHrpq9uDQOiO54gi7HT64pnABbWyqQYAaqRs0Lwmpg6IgIngc1LiaVSXVOEIrfY4ziVPlkGlPbmpzG-2NL_mmw38az_1R12N95EsPe32N",
@@ -1962,13 +1924,6 @@ export const MusicProvider = ({ children }) => {
     const currentUserId = getAccountUserId(user);
     const idStr = String(id);
 
-    // Save to local deleted playlist IDs to prevent resurrection on refresh or sync
-    try {
-      const storedDeleted = JSON.parse(localStorage.getItem("ceepeefy_deleted_playlists") || "[]");
-      const nextDeleted = Array.from(new Set([...storedDeleted, idStr]));
-      localStorage.setItem("ceepeefy_deleted_playlists", JSON.stringify(nextDeleted));
-    } catch {}
-
     // Safely detach active playback context if this playlist was playing
     if (playbackContextRef.current?.id === idStr) {
       setPlaybackContext(null);
@@ -2273,10 +2228,17 @@ export const MusicProvider = ({ children }) => {
     } catch { }
   };
 
-  const createSelfMix = (title, initialTracks = [], customCover = null) => {
+  const createSelfMix = (title, initialTracks = [], customCover = null, preGeneratedId = null) => {
+    // Submit lock to prevent double-click creation (D4, T3)
+    if (isCreatingSelfMixRef.current) return null;
+    isCreatingSelfMixRef.current = true;
+    setTimeout(() => {
+      isCreatingSelfMixRef.current = false;
+    }, 1000);
+
     const count = selfMixes.length + 1;
     const cleanTitle = title?.trim() || `Self Mix #${count}`;
-    const id = `mix-${Date.now()}`;
+    const id = preGeneratedId || (typeof crypto !== "undefined" && crypto.randomUUID ? `mix-${crypto.randomUUID()}` : `mix-${Date.now()}`);
     const coverOptions = [
       "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
       "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80",
@@ -2457,10 +2419,9 @@ export const MusicProvider = ({ children }) => {
     );
 
     if (updatedCustomPl) {
-      savePlaylistToCloud(updatedCustomPl, currentUserId).catch((err) => {
+      addTrackToPlaylistCloud(playlistId, norm, targetIndex).catch((err) => {
         console.error("[MusicContext] Failed to persist added track to Supabase:", err);
       });
-      addTrackToPlaylistCloud(playlistId, norm, targetIndex).catch(() => {});
     }
   };
 
@@ -2508,10 +2469,9 @@ export const MusicProvider = ({ children }) => {
     );
 
     if (updatedCustomPl) {
-      savePlaylistToCloud(updatedCustomPl, currentUserId).catch((err) => {
+      removeTrackFromPlaylistCloud(playlistId, trackId).catch((err) => {
         console.error("[MusicContext] Failed to persist removed track to Supabase:", err);
       });
-      removeTrackFromPlaylistCloud(playlistId, trackId).catch(() => {});
     }
   };
 
