@@ -27,3 +27,4 @@ CREATE POLICY "Allow all on recently_played" ON public.recently_played FOR ALL T
 CREATE POLICY "Allow all on self_mixes" ON public.self_mixes FOR ALL TO anon USING (true) WITH CHECK (true);
 
 COMMIT;
+

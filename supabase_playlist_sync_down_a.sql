@@ -37,3 +37,4 @@ ALTER TABLE public.self_mixes
   DROP COLUMN IF EXISTS auth_user_id;
 
 COMMIT;
+

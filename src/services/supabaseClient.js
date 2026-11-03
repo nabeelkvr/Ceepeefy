@@ -250,11 +250,21 @@ export const fetchSelfMixesFromCloud = async (owner = DEFAULT_USER_ID) => {
     return [];
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("self_mixes")
     .select("*")
-    .eq("owner", owner)
+    .or(`owner.eq.${owner},auth_user_id.eq.${owner}`)
     .order("created_at", { ascending: false });
+
+  if (error && (error.code === "42703" || error.message?.includes("auth_user_id"))) {
+    const fallback = await supabase
+      .from("self_mixes")
+      .select("*")
+      .eq("owner", owner)
+      .order("created_at", { ascending: false });
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     console.error("Supabase database fetch error:", error);

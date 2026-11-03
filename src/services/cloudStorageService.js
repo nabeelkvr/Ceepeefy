@@ -554,11 +554,21 @@ export const fetchLikedSongsFromCloud = async (userId = DEFAULT_USER_ID) => {
   if (!supabase || !isSupabaseConfigured()) return null;
 
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("liked_songs")
       .select("track_id, track_data")
-      .eq("user_id", userId)
+      .or(`user_id.eq.${userId},auth_user_id.eq.${userId}`)
       .order("created_at", { ascending: false });
+
+    if (error && (error.code === "42703" || error.message?.includes("auth_user_id"))) {
+      const fallback = await supabase
+        .from("liked_songs")
+        .select("track_id, track_data")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) return null;
     return (data || []).map((row) => ({
@@ -606,12 +616,23 @@ export const fetchRecentlyPlayedFromCloud = async (userId = DEFAULT_USER_ID) => 
   if (!supabase || !isSupabaseConfigured()) return null;
 
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("recently_played")
       .select("track_id, track_data, played_at")
-      .eq("user_id", userId)
+      .or(`user_id.eq.${userId},auth_user_id.eq.${userId}`)
       .order("played_at", { ascending: false })
       .limit(30);
+
+    if (error && (error.code === "42703" || error.message?.includes("auth_user_id"))) {
+      const fallback = await supabase
+        .from("recently_played")
+        .select("track_id, track_data, played_at")
+        .eq("user_id", userId)
+        .order("played_at", { ascending: false })
+        .limit(30);
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) return null;
     return (data || []).map((row) => ({

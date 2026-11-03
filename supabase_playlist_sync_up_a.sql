@@ -46,22 +46,30 @@ CREATE INDEX IF NOT EXISTS idx_user_playlists_auth_active
 
 -- ------------------------------------------------------------------------------
 -- 2. EXPAND: public.playlist_tracks
--- Add deterministic track_key and unique constraint
+-- Add deterministic track_key and unique constraint safely
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.playlist_tracks
   ADD COLUMN IF NOT EXISTS track_key TEXT;
 
--- Backfill track_key from track_data JSONB snapshot or track_id
+-- Backfill track_key from track_data JSONB snapshot, track_id, or row id
 UPDATE public.playlist_tracks
 SET track_key = COALESCE(
-  track_data->>'track_key',
-  track_data->>'id',
-  track_data->>'audio_url',
-  track_id
+  NULLIF(track_data->>'track_key', ''),
+  NULLIF(track_data->>'id', ''),
+  NULLIF(track_data->>'audio_url', ''),
+  NULLIF(track_id, ''),
+  id::text
 )
-WHERE track_key IS NULL;
+WHERE track_key IS NULL OR track_key = '';
 
--- Set track_key NOT NULL after backfill
+-- Deduplicate any pre-existing duplicate (playlist_id, track_key) rows safely
+DELETE FROM public.playlist_tracks a
+USING public.playlist_tracks b
+WHERE a.playlist_id = b.playlist_id
+  AND a.track_key = b.track_key
+  AND a.id > b.id;
+
+-- Set track_key NOT NULL after safe backfill
 ALTER TABLE public.playlist_tracks
   ALTER COLUMN track_key SET NOT NULL;
 
@@ -121,3 +129,4 @@ COMMIT;
 -- WHERE table_schema = 'public' 
 --   AND table_name IN ('user_playlists', 'playlist_tracks', 'liked_songs', 'recently_played', 'self_mixes')
 -- ORDER BY table_name, ordinal_position;
+
