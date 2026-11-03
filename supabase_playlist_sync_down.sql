@@ -41,3 +41,4 @@ ALTER TABLE public.recently_played DROP COLUMN IF EXISTS auth_user_id;
 ALTER TABLE public.self_mixes DROP COLUMN IF EXISTS auth_user_id;
 
 COMMIT;
+

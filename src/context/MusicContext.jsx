@@ -518,18 +518,16 @@ export const MusicProvider = ({ children }) => {
       });
 
       // 5. Merge liked songs
-      if (cloudLiked !== null || cloudAccountData?.likedSongIds) {
-        const mergedLikedIds = Array.from(new Set([
-          ...(cloudLiked?.likedSongIds || []),
-          ...(cloudAccountData?.likedSongIds || []),
-        ]));
-        const mergedLikedMap = {
-          ...(cloudAccountData?.likedSongsMap || {}),
-          ...(cloudLiked?.likedSongsMap || {}),
-        };
-        if (mergedLikedIds.length > 0) {
-          setLikedSongIds(mergedLikedIds);
-          setLikedSongsMap(mergedLikedMap);
+      if (Array.isArray(cloudLiked)) {
+        const cloudLikedIds = cloudLiked.map((t) => String(t.id));
+        const cloudLikedMap = {};
+        cloudLiked.forEach((t) => {
+          cloudLikedMap[String(t.id)] = t;
+        });
+
+        if (cloudLikedIds.length > 0) {
+          setLikedSongIds((prevIds) => Array.from(new Set([...(prevIds || []), ...cloudLikedIds])));
+          setLikedSongsMap((prevMap) => ({ ...(prevMap || {}), ...cloudLikedMap }));
         }
       }
 
