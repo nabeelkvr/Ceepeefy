@@ -575,4 +575,45 @@ describe("CEEPEEFY: Integration & Policy Verification Suite", () => {
     assert.equal(setCookie.httpOnly, true, "Cookie must be HttpOnly");
     assert.equal(setCookie.maxAge, 3600, "Cookie maxAge must be preserved");
   });
+
+  // --------------------------------------------------------------------------
+  // 17. Supabase Environment Variable Normalization & Diagnostics
+  // --------------------------------------------------------------------------
+  it("17. getSupabaseEnv normalizes quotes, whitespace, and alternative variable names", async () => {
+    const { getSupabaseEnv } = await import("./src/server/supabaseEnv.js");
+
+    // Save current process.env
+    const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const originalKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    try {
+      // 1. Quoted and padded environment variables (common copy-paste issue in Vercel)
+      process.env.NEXT_PUBLIC_SUPABASE_URL = ' "https://xyzcompany.supabase.co" ';
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = " 'eyJhbGciOiJIUzI1NiJ9.dummy.key' ";
+
+      const resolved = getSupabaseEnv();
+      assert.equal(resolved.url, "https://xyzcompany.supabase.co", "Enclosing quotes and whitespace must be stripped from URL");
+      assert.equal(resolved.key, "eyJhbGciOiJIUzI1NiJ9.dummy.key", "Enclosing quotes and whitespace must be stripped from Key");
+      assert.equal(resolved.isConfigured, true, "Must evaluate as configured after cleaning");
+
+      // 2. Fallback to alternative names (SUPABASE_URL / SUPABASE_ANON_KEY)
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+      delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      process.env.SUPABASE_URL = "https://fallback.supabase.co";
+      process.env.SUPABASE_ANON_KEY = "fallback-key";
+
+      const fallbackResolved = getSupabaseEnv();
+      assert.equal(fallbackResolved.url, "https://fallback.supabase.co", "Must resolve from SUPABASE_URL fallback");
+      assert.equal(fallbackResolved.key, "fallback-key", "Must resolve from SUPABASE_ANON_KEY fallback");
+      assert.equal(fallbackResolved.isConfigured, true);
+    } finally {
+      // Restore original env
+      if (originalUrl !== undefined) process.env.NEXT_PUBLIC_SUPABASE_URL = originalUrl;
+      else delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (originalKey !== undefined) process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = originalKey;
+      else delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      delete process.env.SUPABASE_URL;
+      delete process.env.SUPABASE_ANON_KEY;
+    }
+  });
 });

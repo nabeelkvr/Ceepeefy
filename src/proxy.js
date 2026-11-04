@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { validateRequestOrigin } from "./server/csrf.js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "";
+import { getSupabaseEnv } from "./services/supabaseServer.js";
 
 /**
  * Next.js 16 Proxy Convention (replaces middleware)
@@ -49,11 +47,12 @@ export async function proxy(request) {
     }
   }
 
-  // 3. Allow public authentication API endpoints
+  // 3. Allow public authentication and diagnostic API endpoints
   if (
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/session" ||
-    pathname === "/api/auth/logout"
+    pathname === "/api/auth/logout" ||
+    pathname === "/api/auth/diagnostic"
   ) {
     return NextResponse.next();
   }
@@ -62,7 +61,9 @@ export async function proxy(request) {
   // Do NOT trust mere presence of cookies; validate with Supabase Auth server
   let response = NextResponse.next({ request });
 
-  if (supabaseUrl && supabaseAnonKey) {
+  const { url: supabaseUrl, key: supabaseAnonKey, isConfigured } = getSupabaseEnv();
+
+  if (isConfigured) {
     try {
       const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
         cookies: {
