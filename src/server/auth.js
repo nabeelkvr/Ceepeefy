@@ -1,12 +1,9 @@
 import crypto from "node:crypto";
 
 /**
- * Server-Side Authentication & Session Management
- * Single source of truth for administrative owner access.
- *
- * Credentials Configuration:
- * Default Account: nabeeyl
- * Password: (stored as secure PBKDF2 hash on server)
+ * Server-Side Authentication & Rate Limiting
+ * Central utilities for rate limiting and account identifiers.
+ * All user password authentication is managed exclusively by Supabase Auth.
  */
 
 // Secret used for HMAC signing of internal tokens (set in env or generated securely on boot)
@@ -14,48 +11,8 @@ const SESSION_SECRET =
   process.env.SESSION_SECRET ||
   crypto.randomBytes(32).toString("hex");
 
-// Salt for password hashing
-export const OWNER_PASSWORD_SALT =
-  process.env.OWNER_PASSWORD_SALT || "ceepeefy_salt_9283748192";
-
-/**
- * Derives a cryptographic password hash using PBKDF2 with 100,000 iterations
- * @param {string} password
- * @param {string} salt
- * @returns {string} Hex encoded hash
- */
-export function hashPassword(password, salt = OWNER_PASSWORD_SALT) {
-  return crypto
-    .pbkdf2Sync(password, salt, 100000, 64, "sha512")
-    .toString("hex");
-}
-
 // Single owner account credentials
 export const OWNER_USERNAME = (process.env.OWNER_USERNAME || "nabeeyl").toLowerCase();
-
-// Hash of "963963" with OWNER_PASSWORD_SALT
-export const OWNER_PASSWORD_HASH =
-  process.env.OWNER_PASSWORD_HASH || hashPassword(process.env.OWNER_PASSWORD || "963963", OWNER_PASSWORD_SALT);
-
-/**
- * Timing-safe password verification
- * @param {string} inputPassword
- * @returns {boolean}
- */
-export function verifyPassword(inputPassword) {
-  if (!inputPassword || typeof inputPassword !== "string") return false;
-  try {
-    const trimmed = inputPassword.trim();
-    const inputHash = hashPassword(trimmed, OWNER_PASSWORD_SALT);
-    const expectedBuf = Buffer.from(OWNER_PASSWORD_HASH, "hex");
-    const inputBuf = Buffer.from(inputHash, "hex");
-    if (expectedBuf.length !== inputBuf.length) return false;
-    return crypto.timingSafeEqual(expectedBuf, inputBuf);
-  } catch (err) {
-    console.error("[Auth] Error verifying password:", err);
-    return false;
-  }
-}
 
 /**
  * Rate Limiter for Login Attempts

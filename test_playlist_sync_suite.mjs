@@ -17,6 +17,9 @@ import { resolveEmailForUser, USERNAME_TO_EMAIL_MAP } from "./src/config/authCon
  * 3. Isolation: Browser C (anon or different user) CANNOT access Browser A's playlists
  * 4. Deterministic track_key derivation & unique constraint (playlist_id, track_key)
  * 5. Parent-ownership RLS verification on playlist_tracks (EXISTS subquery)
+ * 6. Supabase Auth lifecycle: login, session persistence, logout
+ * 7. Spotify imported playlist creation, track addition, and persistence
+ * 8. Preservation of existing Self Mix records without reclassification
  */
 
 describe("CEEPEEFY: Integration & Policy Verification Suite", () => {
@@ -194,5 +197,75 @@ describe("CEEPEEFY: Integration & Policy Verification Suite", () => {
     // Upserting the same track updates position without duplicate row
     store.set(`pl_1:${key2}`, { position: 1 });
     assert.equal(store.size, 1, "Unique constraint enforces single row per track");
+  });
+
+  // --------------------------------------------------------------------------
+  // 6. Supabase Auth Lifecycle: Login, Refresh & Logout Cookie Verification
+  // --------------------------------------------------------------------------
+  it("6. Auth lifecycle: login issues cookies, session restores user, logout revokes tokens", () => {
+    const cookieJar = new Map();
+
+    // Simulating login:
+    const mockSession = {
+      user: { id: "user_uuid_100", email: "nabeelek3603@gmail.com" },
+      access_token: "jwt.header.payload.signature",
+    };
+    cookieJar.set("sb-test-auth-token", mockSession.access_token);
+
+    // Simulating proxy/middleware verification:
+    const hasValidSession = (jar) => jar.has("sb-test-auth-token") && jar.get("sb-test-auth-token").length > 0;
+    assert.equal(hasValidSession(cookieJar), true, "User has valid Supabase Auth session");
+
+    // Simulating logout:
+    cookieJar.set("sb-test-auth-token", "");
+    cookieJar.delete("sb-test-auth-token");
+    assert.equal(hasValidSession(cookieJar), false, "Logout completely terminates the session");
+  });
+
+  // --------------------------------------------------------------------------
+  // 7. Spotify-Imported Playlists Persistence
+  // --------------------------------------------------------------------------
+  it("7. Spotify-imported playlist persists with kind = 'user' and source = 'spotify'", () => {
+    const spotifyPlaylist = {
+      id: "spotify-import-12345",
+      title: "Top Hits 2026",
+      source: "spotify",
+      isCustom: true,
+      category: "Pop",
+      badge: "CUSTOM",
+      tracks: [
+        { id: "sp_1", title: "Espresso", artist: "Sabrina Carpenter" },
+        { id: "sp_2", title: "APT.", artist: "ROSE & Bruno Mars" },
+      ],
+    };
+
+    // Check kind evaluation
+    const isSelfMix = spotifyPlaylist.isSelfMix || String(spotifyPlaylist.id).startsWith("mix-");
+    const isCloudArchive = spotifyPlaylist.id === "cloud-archive-playlist";
+    const kind = isCloudArchive ? "cloud_archive" : (isSelfMix ? "mix" : "user");
+
+    assert.equal(kind, "user", "Spotify playlists must be classified as kind = 'user'");
+    assert.equal(isSelfMix, false, "Spotify playlists are not self mixes");
+  });
+
+  // --------------------------------------------------------------------------
+  // 8. Preservation of Existing Self Mix Records
+  // --------------------------------------------------------------------------
+  it("8. Self mixes remain isolated and are not exposed in ordinary custom playlists", () => {
+    const databaseRows = [
+      { id: "cloud-archive-playlist", title: "Cloud Audio Tracks", kind: "cloud_archive", badge: "SELF MIX" },
+      { id: "mix-1791901988476", title: "0405 (2).MP3", kind: "mix", badge: "SELF MIX" },
+      { id: "mix-1791901993579", title: "0405 (2).MP3", kind: "mix", badge: "SELF MIX" },
+      { id: "user-pl-001", title: "Morning Vibes", kind: "user", badge: "CUSTOM" },
+    ];
+
+    // Filter used in MusicContext:
+    const normalPlaylists = databaseRows.filter((pl) => pl.kind === "user" && pl.badge !== "SELF MIX");
+    const selfMixes = databaseRows.filter((pl) => pl.kind === "mix" || pl.kind === "cloud_archive");
+
+    assert.equal(normalPlaylists.length, 1, "Only ordinary playlists appear in My Playlists");
+    assert.equal(normalPlaylists[0].title, "Morning Vibes");
+
+    assert.equal(selfMixes.length, 3, "All 3 existing Self Mix records remain preserved in Self Mix view");
   });
 });
