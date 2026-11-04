@@ -66,12 +66,31 @@ WHERE track_key IS NULL OR track_key = '';
 ALTER TABLE public.playlist_tracks
   ALTER COLUMN track_key SET NOT NULL;
 
--- Fast index on track_key for lightning-fast lookups and track joins
-CREATE INDEX IF NOT EXISTS idx_playlist_tracks_key
-  ON public.playlist_tracks (playlist_id, track_key);
-
+-- Fast index on track ordering
 CREATE INDEX IF NOT EXISTS idx_playlist_tracks_position
   ON public.playlist_tracks (playlist_id, position ASC);
+
+-- ------------------------------------------------------------------------------
+-- PRE-CONSTRAINT CHECK: Duplicate Detection Query
+-- Run this query in Supabase SQL editor before creating uq_playlist_tracks_key
+-- to verify no duplicate (playlist_id, track_key) groups exist.
+-- If duplicates are found, inspect and report them; do not silently delete.
+--
+-- SELECT 
+--   playlist_id, 
+--   track_key, 
+--   COUNT(*) AS duplicate_count,
+--   array_agg(id) AS row_ids,
+--   array_agg(position ORDER BY position) AS positions,
+--   array_agg(track_id) AS track_ids
+-- FROM public.playlist_tracks
+-- GROUP BY playlist_id, track_key
+-- HAVING COUNT(*) > 1;
+-- ------------------------------------------------------------------------------
+
+-- Unique index to support atomic upserts on (playlist_id, track_key)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_playlist_tracks_key
+  ON public.playlist_tracks (playlist_id, track_key);
 
 -- ------------------------------------------------------------------------------
 -- 3. EXPAND: liked_songs, recently_played, self_mixes

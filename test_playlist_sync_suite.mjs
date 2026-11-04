@@ -8,6 +8,8 @@ import {
   deriveStableTrackKey,
 } from "./src/services/cloudStorageService.js";
 import { resolveEmailForUser, USERNAME_TO_EMAIL_MAP } from "./src/config/authConfig.js";
+import { validateAndNormalizeStoragePath } from "./src/server/storageValidator.js";
+import { validateRequestOrigin } from "./src/server/csrf.js";
 
 /**
  * CEEPEEFY: END-TO-END INTEGRATION TEST SUITE
@@ -270,37 +272,141 @@ describe("CEEPEEFY: Integration & Policy Verification Suite", () => {
   });
 
   // --------------------------------------------------------------------------
-  // 9. Storage Path Scoping & Cross-User Deletion Prevention
+  // 9. Storage Path Normalization & Traversal Attack Prevention
   // --------------------------------------------------------------------------
-  it("9. Storage API strictly isolates user directories and forbids cross-user deletions", () => {
-    const userA_id = "550e8400-e29b-41d4-a716-446655440001";
-    const userB_id = "550e8400-e29b-41d4-a716-446655440002";
+  it("9. Storage API strictly rejects directory traversal, absolute paths, backslashes and foreign namespaces", () => {
+    const userA = { id: "550e8400-e29b-41d4-a716-446655440001", email: "userA@ceepeefy.audio" };
+    const userB = { id: "550e8400-e29b-41d4-a716-446655440002", email: "userB@ceepeefy.audio" };
+    const owner = { id: "550e8400-e29b-41d4-a716-446655440099", email: "nabeelek3603@gmail.com" };
 
-    // Simulates the path verification logic in /api/storage
-    const verifyDeletionAccess = (sessionUserId, sessionEmail, requestedPath) => {
-      const decodedPath = decodeURIComponent(requestedPath).replace(/^\/+/, "");
-      const allowedPrefixes = [`${sessionUserId}/`];
-      if (sessionEmail === "nabeelek3603@gmail.com") {
-        allowedPrefixes.push("nabeeyl/");
-      }
-      return allowedPrefixes.some((prefix) => decodedPath.startsWith(prefix));
-    };
+    // 1. Valid paths in own namespace
+    const validRes = validateAndNormalizeStoragePath(`${userA.id}/12345_song.mp3`, userA);
+    assert.equal(validRes.valid, true);
+    assert.equal(validRes.normalizedPath, `${userA.id}/12345_song.mp3`);
 
-    // User A deleting User A's file -> allowed
-    assert.equal(verifyDeletionAccess(userA_id, "userA@ceepeefy.audio", `${userA_id}/12345_song.mp3`), true);
+    // 2. Traversal attempt with ..
+    assert.equal(validateAndNormalizeStoragePath(`${userA.id}/../${userB.id}/file.mp3`, userA).valid, false);
+    assert.equal(validateAndNormalizeStoragePath(`${userA.id}/./file.mp3`, userA).valid, false);
+    assert.equal(validateAndNormalizeStoragePath(`${userA.id}/dir/../../file.mp3`, userA).valid, false);
 
-    // User A attempting to delete User B's file -> forbidden
-    assert.equal(verifyDeletionAccess(userA_id, "userA@ceepeefy.audio", `${userB_id}/12345_song.mp3`), false);
+    // 3. Traversal with URL encoding (%2e%2e)
+    assert.equal(validateAndNormalizeStoragePath(`${userA.id}/%2e%2e/victim.mp3`, userA).valid, false);
 
-    // Legacy file path with nabeeyl prefix -> allowed only for owner email
-    assert.equal(verifyDeletionAccess(userA_id, "nabeelek3603@gmail.com", "nabeeyl/covers/art.jpg"), true);
-    assert.equal(verifyDeletionAccess(userB_id, "other@ceepeefy.audio", "nabeeyl/covers/art.jpg"), false);
+    // 4. Backslash traversal
+    assert.equal(validateAndNormalizeStoragePath(`${userA.id}\\..\\file.mp3`, userA).valid, false);
+    assert.equal(validateAndNormalizeStoragePath(`${userA.id}\\file.mp3`, userA).valid, false);
+
+    // 5. Absolute path or protocol
+    assert.equal(validateAndNormalizeStoragePath(`/etc/passwd`, userA).valid, false);
+    assert.equal(validateAndNormalizeStoragePath(`/${userA.id}/file.mp3`, userA).valid, false);
+    assert.equal(validateAndNormalizeStoragePath(`C:\\file.mp3`, userA).valid, false);
+    assert.equal(validateAndNormalizeStoragePath(`file://${userA.id}/file.mp3`, userA).valid, false);
+
+    // 6. Null byte injection
+    assert.equal(validateAndNormalizeStoragePath(`${userA.id}/file\0.mp3`, userA).valid, false);
+
+    // 7. Malformed percent encoding
+    assert.equal(validateAndNormalizeStoragePath(`${userA.id}/%E0%A4%A`, userA).valid, false);
+
+    // 8. Foreign namespace attempt
+    const foreignRes = validateAndNormalizeStoragePath(`${userB.id}/file.mp3`, userA);
+    assert.equal(foreignRes.valid, false);
+    assert.equal(foreignRes.status, 403);
+
+    // 9. Legacy namespace 'nabeeyl/...'
+    // Permitted ONLY for verified owner account
+    assert.equal(validateAndNormalizeStoragePath("nabeeyl/123_song.mp3", owner).valid, true);
+    assert.equal(validateAndNormalizeStoragePath("nabeeyl/covers/art.jpg", owner).valid, true);
+
+    // Forbidden for any other user
+    const stolenLegacy = validateAndNormalizeStoragePath("nabeeyl/123_song.mp3", userA);
+    assert.equal(stolenLegacy.valid, false);
+    assert.equal(stolenLegacy.status, 403);
   });
 
   // --------------------------------------------------------------------------
-  // 10. Storage Signed-Upload Format Validation
+  // 10. CSRF Request Origin Protection
   // --------------------------------------------------------------------------
-  it("10. Storage signed upload endpoint enforces MIME and extension whitelist", () => {
+  it("10. CSRF protection validates Origin/Referer for mutations and rejects malicious cross-origin requests", () => {
+    const makeReq = (method, headers = {}, nextUrlOrigin = "https://ceepeefy.vercel.app") => ({
+      method,
+      headers: new Map(Object.entries(headers)),
+      nextUrl: { origin: nextUrlOrigin },
+    });
+
+    // GET requests are safe and exempt
+    assert.equal(validateRequestOrigin(makeReq("GET")).valid, true);
+    assert.equal(validateRequestOrigin(makeReq("OPTIONS")).valid, true);
+
+    // Valid Same-Origin POST
+    assert.equal(
+      validateRequestOrigin(
+        makeReq("POST", { origin: "https://ceepeefy.vercel.app", host: "ceepeefy.vercel.app" })
+      ).valid,
+      true
+    );
+
+    // Valid Vercel Preview POST
+    assert.equal(
+      validateRequestOrigin(
+        makeReq("POST", { origin: "https://ceepeefy-git-preview-nabeel.vercel.app" })
+      ).valid,
+      true
+    );
+
+    // Valid Localhost in development
+    assert.equal(
+      validateRequestOrigin(
+        makeReq("POST", { origin: "http://localhost:3000" })
+      ).valid,
+      true
+    );
+
+    // Malicious third-party cross-origin attack -> blocked
+    const attack = validateRequestOrigin(
+      makeReq("POST", { origin: "https://malicious-attacker-site.com" })
+    );
+    assert.equal(attack.valid, false);
+    assert.ok(attack.error.includes("Forbidden"));
+
+    const attackDelete = validateRequestOrigin(
+      makeReq("DELETE", { referer: "https://evil.org/phishing" })
+    );
+    assert.equal(attackDelete.valid, false);
+  });
+
+  // --------------------------------------------------------------------------
+  // 11. Legacy Playlist Ownership Verification
+  // --------------------------------------------------------------------------
+  it("11. Legacy playlist ownership check requires verified Supabase Auth owner account", () => {
+    const verifiedOwner = { id: "550e8400-e29b-41d4-a716-446655440099", email: "nabeelek3603@gmail.com" };
+    const attacker = { id: "550e8400-e29b-41d4-a716-446655440001", email: "attacker@ceepeefy.audio" };
+
+    const legacyRow = { id: "legacy-pl-1", user_id: "nabeeyl", auth_user_id: null };
+    const migratedRow = { id: "pl-2", user_id: "nabeeyl", auth_user_id: verifiedOwner.id };
+
+    const checkAccess = (row, user) => {
+      if (row.auth_user_id) {
+        return row.auth_user_id === user.id;
+      }
+      return user.email === "nabeelek3603@gmail.com" && row.user_id === "nabeeyl";
+    };
+
+    // Verified owner can modify legacy row before backfill
+    assert.equal(checkAccess(legacyRow, verifiedOwner), true);
+
+    // Attacker cannot claim legacy row
+    assert.equal(checkAccess(legacyRow, attacker), false);
+
+    // Migrated row enforces auth_user_id
+    assert.equal(checkAccess(migratedRow, verifiedOwner), true);
+    assert.equal(checkAccess(migratedRow, attacker), false);
+  });
+
+  // --------------------------------------------------------------------------
+  // 12. Storage Signed-Upload Format Validation
+  // --------------------------------------------------------------------------
+  it("12. Storage signed upload endpoint enforces MIME and extension whitelist", () => {
     const validateUploadType = (fileName, fileType, folder) => {
       if (folder === "covers" || fileType?.startsWith("image/")) {
         return /\.(jpe?g|png|webp|gif)$/i.test(fileName) || Boolean(fileType?.startsWith("image/"));

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { validateRequestOrigin } from "./server/csrf.js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "";
@@ -37,7 +38,18 @@ export async function proxy(request) {
     return NextResponse.next();
   }
 
-  // 2. Allow public authentication endpoints
+  // 2. Validate request origin for state-changing API requests (CSRF protection)
+  if (pathname.startsWith("/api/")) {
+    const originCheck = validateRequestOrigin(request);
+    if (!originCheck.valid) {
+      return NextResponse.json(
+        { success: false, error: originCheck.error || "Forbidden: Invalid request origin." },
+        { status: 403 }
+      );
+    }
+  }
+
+  // 3. Allow public authentication endpoints
   if (
     pathname === "/login" ||
     pathname === "/api/auth/login" ||
@@ -47,7 +59,7 @@ export async function proxy(request) {
     return NextResponse.next();
   }
 
-  // 3. Cryptographically verify Supabase Auth session via getUser()
+  // 4. Cryptographically verify Supabase Auth session via getUser()
   // Do NOT trust mere presence of cookies; validate with Supabase Auth server
   let response = NextResponse.next({ request });
 

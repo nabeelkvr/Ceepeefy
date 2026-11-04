@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "../../../services/supabaseServer.js";
+import { validateAndNormalizeStoragePath } from "../../../server/storageValidator.js";
 
 const BUCKET_NAME = "self-mixes";
 
+export { validateAndNormalizeStoragePath };
+
 /**
  * Supabase Storage Deletion API Route
- * Strictly prevents users from deleting files outside their own authenticated `${user.id}/` prefix.
+ * Strictly prevents users from deleting files outside their own authenticated namespace.
  */
 export async function DELETE(request) {
   try {
@@ -27,32 +30,17 @@ export async function DELETE(request) {
       path = body.path;
     }
 
-    if (!path || typeof path !== "string") {
-      return NextResponse.json({ success: false, error: "path is required" }, { status: 400 });
-    }
-
-    // Decode URI component if passed URL-encoded
-    const decodedPath = decodeURIComponent(path).replace(/^\/+/, "");
-
-    // STRICT ISOLATION CHECK: Path must begin with user's UUID
-    // For backward-compatibility with pre-migration records, allow user.id or 'nabeeyl'
-    const allowedPrefixes = [`${user.id}/`];
-    if (user.email === "nabeelek3603@gmail.com") {
-      allowedPrefixes.push("nabeeyl/");
-    }
-
-    const isAuthorized = allowedPrefixes.some((prefix) => decodedPath.startsWith(prefix));
-
-    if (!isAuthorized) {
+    const pathCheck = validateAndNormalizeStoragePath(path, user);
+    if (!pathCheck.valid) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: You may only delete files in your own user directory." },
-        { status: 403 }
+        { success: false, error: pathCheck.error },
+        { status: pathCheck.status || 400 }
       );
     }
 
     const { data, error } = await supabase.storage
       .from(BUCKET_NAME)
-      .remove([decodedPath]);
+      .remove([pathCheck.normalizedPath]);
 
     if (error) {
       console.error("[Storage API] DELETE error:", error.message);
@@ -65,4 +53,3 @@ export async function DELETE(request) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
-

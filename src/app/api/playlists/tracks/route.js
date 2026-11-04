@@ -26,7 +26,7 @@ function deriveStableTrackKey(track) {
 /**
  * Helper to verify that the authenticated user owns the parent playlist
  */
-async function verifyPlaylistOwnership(supabase, playlistId, userId) {
+async function verifyPlaylistOwnership(supabase, playlistId, user) {
   const { data: playlist, error } = await supabase
     .from("user_playlists")
     .select("id, auth_user_id, user_id")
@@ -37,17 +37,21 @@ async function verifyPlaylistOwnership(supabase, playlistId, userId) {
     return { authorized: false, notFound: true };
   }
 
-  // If auth_user_id exists, it MUST match the authenticated user.id
-  if (playlist.auth_user_id && playlist.auth_user_id !== userId) {
-    return { authorized: false, forbidden: true };
+  // 1. Standard verified ownership: auth_user_id matches authenticated user UUID
+  if (playlist.auth_user_id) {
+    if (playlist.auth_user_id !== user.id) {
+      return { authorized: false, forbidden: true };
+    }
+    return { authorized: true, playlist };
   }
 
-  // If legacy user_id exists without auth_user_id, check match
-  if (!playlist.auth_user_id && playlist.user_id && playlist.user_id !== userId && playlist.user_id !== "nabeeyl") {
-    return { authorized: false, forbidden: true };
+  // 2. Temporary legacy ownership check: only verified owner account tied to 'nabeeyl'
+  const isVerifiedLegacyOwner = user.email === "nabeelek3603@gmail.com" && playlist.user_id === "nabeeyl";
+  if (isVerifiedLegacyOwner) {
+    return { authorized: true, playlist };
   }
 
-  return { authorized: true, playlist };
+  return { authorized: false, forbidden: true };
 }
 
 /**
@@ -70,7 +74,7 @@ export async function GET(request) {
       return NextResponse.json({ success: false, error: "playlistId is required" }, { status: 400 });
     }
 
-    const check = await verifyPlaylistOwnership(supabase, playlistId, user.id);
+    const check = await verifyPlaylistOwnership(supabase, playlistId, user);
     if (!check.authorized) {
       return NextResponse.json(
         { success: false, error: check.forbidden ? "Forbidden" : "Playlist not found" },
@@ -131,7 +135,7 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: "playlistId is required" }, { status: 400 });
     }
 
-    const check = await verifyPlaylistOwnership(supabase, playlistId, user.id);
+    const check = await verifyPlaylistOwnership(supabase, playlistId, user);
     if (!check.authorized) {
       return NextResponse.json(
         { success: false, error: check.forbidden ? "Forbidden: You do not own this playlist." : "Playlist not found" },
@@ -261,7 +265,7 @@ export async function DELETE(request) {
       );
     }
 
-    const check = await verifyPlaylistOwnership(supabase, playlistId, user.id);
+    const check = await verifyPlaylistOwnership(supabase, playlistId, user);
     if (!check.authorized) {
       return NextResponse.json(
         { success: false, error: check.forbidden ? "Forbidden: You do not own this playlist." : "Playlist not found" },

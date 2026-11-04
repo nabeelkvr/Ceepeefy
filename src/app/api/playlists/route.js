@@ -148,11 +148,24 @@ export async function POST(request) {
       .eq("id", String(playlist.id))
       .maybeSingle();
 
-    if (existing && existing.auth_user_id && existing.auth_user_id !== user.id) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: You do not have permission to modify this playlist." },
-        { status: 403 }
-      );
+    if (existing) {
+      if (existing.auth_user_id) {
+        if (existing.auth_user_id !== user.id) {
+          return NextResponse.json(
+            { success: false, error: "Forbidden: You do not have permission to modify this playlist." },
+            { status: 403 }
+          );
+        }
+      } else {
+        // Temporary legacy ownership check: only verified owner account tied to 'nabeeyl'
+        const isVerifiedLegacyOwner = user.email === "nabeelek3603@gmail.com" && existing.user_id === "nabeeyl";
+        if (!isVerifiedLegacyOwner) {
+          return NextResponse.json(
+            { success: false, error: "Forbidden: Unrecognized legacy playlist ownership." },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // 2. Whitelist fields and bind to authenticated user.id
@@ -266,11 +279,24 @@ export async function DELETE(request) {
       .eq("id", id)
       .maybeSingle();
 
-    if (existing && existing.auth_user_id && existing.auth_user_id !== user.id) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: You cannot delete another user's playlist." },
-        { status: 403 }
-      );
+    if (existing) {
+      if (existing.auth_user_id) {
+        if (existing.auth_user_id !== user.id) {
+          return NextResponse.json(
+            { success: false, error: "Forbidden: You cannot delete another user's playlist." },
+            { status: 403 }
+          );
+        }
+      } else {
+        // Temporary legacy ownership check: only verified owner account tied to 'nabeeyl'
+        const isVerifiedLegacyOwner = user.email === "nabeelek3603@gmail.com" && existing.user_id === "nabeeyl";
+        if (!isVerifiedLegacyOwner) {
+          return NextResponse.json(
+            { success: false, error: "Forbidden: Unrecognized legacy playlist ownership." },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // Soft delete per D3.e (setting deleted_at)
