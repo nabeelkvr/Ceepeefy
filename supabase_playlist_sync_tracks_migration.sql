@@ -7,7 +7,8 @@
 -- 1. DO NOT EXECUTE AGAINST PRODUCTION WITHOUT EXPLICIT APPROVAL.
 -- 2. Preserves user_playlists.tracks JSONB column intact (does NOT nullify or drop).
 -- 3. Preserves all existing playlists and Self Mix / Cloud Archive records untouched.
--- 4. Idempotent: safe to run multiple times without creating duplicate tracks.
+-- 4. Safe insert-only conflict handling: does NOT overwrite existing normalized rows.
+-- 5. Preserves original track identifiers in track_id while generating safe track_key.
 -- ==============================================================================
 
 BEGIN;
@@ -19,7 +20,6 @@ DO $$
 DECLARE
   v_auth_uid UUID;
 BEGIN
-  -- Retrieve the authoritative Supabase Auth UUID for nabeelek3603@gmail.com directly from auth.users
   SELECT id INTO v_auth_uid
   FROM auth.users
   WHERE lower(email) = 'nabeelek3603@gmail.com'
@@ -63,16 +63,127 @@ ALTER TABLE public.playlist_tracks
   ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0,
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
+-- Non-destructive backfill of track_key on any pre-existing rows in playlist_tracks
+UPDATE public.playlist_tracks
+SET track_key = COALESCE(
+  NULLIF(track_data->>'track_key', ''),
+  NULLIF(track_data->>'id', ''),
+  NULLIF(track_data->>'audio_url', ''),
+  NULLIF(track_id, ''),
+  id::text
+)
+WHERE track_key IS NULL OR track_key = '';
+
 -- ------------------------------------------------------------------------------
--- STEP 3: MIGRATE ALL TRACKS FROM user_playlists.tracks JSONB INTO playlist_tracks
--- Preserves original ordering, metadata, URLs, and handles duplicate keys safely.
+-- STEP 3: CHECK DUPLICATES & CREATE UNIQUE INDEX BEFORE ANY INSERT WITH ON CONFLICT
+-- Guarantees the unique index exists before INSERT ON CONFLICT (Issue 1)
+-- ------------------------------------------------------------------------------
+DO $$
+DECLARE
+  v_dup_count INTEGER;
+  r RECORD;
+BEGIN
+  -- Check for existing duplicate (playlist_id, track_key) across the entire table
+  SELECT COUNT(*) INTO v_dup_count
+  FROM (
+    SELECT playlist_id, track_key
+    FROM public.playlist_tracks
+    GROUP BY playlist_id, track_key
+    HAVING COUNT(*) > 1
+  ) dups;
+
+  IF v_dup_count > 0 THEN
+    FOR r IN (
+      SELECT playlist_id, track_key, COUNT(*) AS count
+      FROM public.playlist_tracks
+      GROUP BY playlist_id, track_key
+      HAVING COUNT(*) > 1
+    ) LOOP
+      RAISE WARNING 'Duplicate found in playlist_tracks before migration: playlist_id=%, track_key=%, count=%',
+        r.playlist_id, r.track_key, r.count;
+    END LOOP;
+    RAISE EXCEPTION 'Detected % duplicate (playlist_id, track_key) entries in playlist_tracks! Resolve before creating unique index.', v_dup_count;
+  END IF;
+
+  RAISE NOTICE 'Zero duplicates in playlist_tracks. Safe to verify/create unique index.';
+END $$;
+
+-- Create unique index on (playlist_id, track_key) so ON CONFLICT can safely target it
+CREATE UNIQUE INDEX IF NOT EXISTS uq_playlist_tracks_key
+  ON public.playlist_tracks (playlist_id, track_key);
+
+CREATE INDEX IF NOT EXISTS idx_playlist_tracks_position
+  ON public.playlist_tracks (playlist_id, position ASC);
+
+-- ------------------------------------------------------------------------------
+-- STEP 4: REPORT EXISTING CONFLICTING RECORDS (FOR INSPECTION)
+-- Reports existing normalized rows matching incoming tracks without overwriting them (Issue 3)
+-- ------------------------------------------------------------------------------
+DO $$
+DECLARE
+  r RECORD;
+  v_existing_conflicts INTEGER := 0;
+BEGIN
+  FOR r IN (
+    SELECT 
+      pt.playlist_id,
+      pt.track_key,
+      pt.track_id AS existing_track_id,
+      pt.title AS existing_title,
+      pt.position AS existing_position
+    FROM public.playlist_tracks pt
+    JOIN (
+      SELECT 
+        p.id AS playlist_id,
+        CASE 
+          WHEN ROW_NUMBER() OVER (
+            PARTITION BY p.id, 
+            COALESCE(NULLIF(elem->>'track_key', ''), NULLIF(elem->>'id', ''), NULLIF(elem->>'track_id', ''), NULLIF(elem->>'spotifyId', ''), 'track_' || (ord - 1)::text) 
+            ORDER BY (ord - 1)::integer
+          ) = 1 
+          THEN COALESCE(NULLIF(elem->>'track_key', ''), NULLIF(elem->>'id', ''), NULLIF(elem->>'track_id', ''), NULLIF(elem->>'spotifyId', ''), 'track_' || (ord - 1)::text)
+          ELSE COALESCE(NULLIF(elem->>'track_key', ''), NULLIF(elem->>'id', ''), NULLIF(elem->>'track_id', ''), NULLIF(elem->>'spotifyId', ''), 'track_' || (ord - 1)::text) || '__pos_' || (ord - 1)::text
+        END AS incoming_track_key
+      FROM public.user_playlists p,
+           jsonb_array_elements(p.tracks) WITH ORDINALITY AS t(elem, ord)
+      WHERE jsonb_typeof(p.tracks) = 'array'
+        AND jsonb_array_length(p.tracks) > 0
+        AND (p.kind IS NULL OR p.kind = 'user')
+        AND p.id NOT LIKE 'mix-%'
+        AND p.id != 'cloud-archive-playlist'
+    ) incoming ON pt.playlist_id = incoming.playlist_id AND pt.track_key = incoming.incoming_track_key
+  ) LOOP
+    v_existing_conflicts := v_existing_conflicts + 1;
+    RAISE NOTICE 'Existing normalized record preserved (not overwritten): playlist_id=%, track_key=%, track_id=%, title=%, position=%',
+      r.playlist_id, r.track_key, r.existing_track_id, r.existing_title, r.existing_position;
+  END LOOP;
+
+  IF v_existing_conflicts > 0 THEN
+    RAISE NOTICE 'Total existing records found and preserved: %', v_existing_conflicts;
+  ELSE
+    RAISE NOTICE 'Zero existing conflicts. All incoming tracks will be cleanly inserted.';
+  END IF;
+END $$;
+
+-- ------------------------------------------------------------------------------
+-- STEP 5: MIGRATE ALL TRACKS SAFELY (INSERT-ONLY CONFLICT HANDLING)
+-- Preserves original music track identifier in track_id (Issue 2)
+-- Uses separate deterministic track_key for per-occurrence uniqueness (Issue 2)
+-- Uses ON CONFLICT DO NOTHING to protect existing normalized data (Issue 3)
 -- ------------------------------------------------------------------------------
 WITH raw_tracks AS (
   SELECT 
     p.id AS playlist_id,
     (ord - 1)::integer AS track_position,
     elem AS track_obj,
-    -- Extract base track key
+    -- Original music track identifier (preserved as track_id)
+    COALESCE(
+      NULLIF(elem->>'id', ''),
+      NULLIF(elem->>'track_id', ''),
+      NULLIF(elem->>'spotifyId', ''),
+      'track_' || (ord - 1)::text
+    ) AS original_track_id,
+    -- Base key for occurrence derivation
     COALESCE(
       NULLIF(elem->>'track_key', ''),
       NULLIF(elem->>'id', ''),
@@ -100,14 +211,13 @@ WITH raw_tracks AS (
     AND p.id != 'cloud-archive-playlist'
 ),
 ranked_tracks AS (
-  -- Handle repeated track keys within the same playlist:
-  -- 1st occurrence keeps base_key
-  -- Subsequent occurrences append __pos_<position> to guarantee uniqueness without dropping songs
   SELECT 
     playlist_id,
     track_position,
     track_obj,
+    original_track_id,
     base_key,
+    -- Occurrence differentiator in track_key only: original_track_id is never changed
     CASE 
       WHEN ROW_NUMBER() OVER (PARTITION BY playlist_id, base_key ORDER BY track_position) = 1 
       THEN base_key
@@ -141,7 +251,7 @@ INSERT INTO public.playlist_tracks (
 )
 SELECT 
   playlist_id,
-  safe_track_key AS track_id,
+  original_track_id AS track_id,
   safe_track_key AS track_key,
   track_position AS position,
   track_title AS title,
@@ -155,49 +265,22 @@ SELECT
   track_obj AS track_data,
   timezone('utc'::text, now()) AS created_at
 FROM ranked_tracks
-ON CONFLICT (playlist_id, track_key) 
-DO UPDATE SET
-  position = EXCLUDED.position,
-  title = EXCLUDED.title,
-  artist = EXCLUDED.artist,
-  album = EXCLUDED.album,
-  duration = EXCLUDED.duration,
-  duration_formatted = EXCLUDED.duration_formatted,
-  audio_url = EXCLUDED.audio_url,
-  cover_url = EXCLUDED.cover_url,
-  source = EXCLUDED.source,
-  track_data = EXCLUDED.track_data;
+ON CONFLICT (playlist_id, track_key) DO NOTHING;
 
 -- ------------------------------------------------------------------------------
--- STEP 4: VERIFY NO DUPLICATE (playlist_id, track_key) GROUPS EXIST
+-- STEP 6: FINAL MIGRATION SUMMARY & VALIDATION
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
-  v_dup_count INTEGER;
+  v_migrated_count INTEGER;
+  v_total_custom_playlists INTEGER;
 BEGIN
-  SELECT COUNT(*) INTO v_dup_count
-  FROM (
-    SELECT playlist_id, track_key
-    FROM public.playlist_tracks
-    GROUP BY playlist_id, track_key
-    HAVING COUNT(*) > 1
-  ) dups;
+  SELECT COUNT(DISTINCT playlist_id), COUNT(*) 
+  INTO v_total_custom_playlists, v_migrated_count
+  FROM public.playlist_tracks;
 
-  IF v_dup_count > 0 THEN
-    RAISE EXCEPTION 'Detected % duplicate (playlist_id, track_key) entries across playlists! Aborting before creating unique index.', v_dup_count;
-  END IF;
-
-  RAISE NOTICE 'Zero duplicates found in playlist_tracks across all migrated playlists.';
+  RAISE NOTICE 'Migration Complete: % total normalized tracks across % playlists in playlist_tracks.',
+    v_migrated_count, v_total_custom_playlists;
 END $$;
 
--- ------------------------------------------------------------------------------
--- STEP 5: CREATE UNIQUE CONSTRAINT / INDEX FOR ATOMIC UPSERTS
--- ------------------------------------------------------------------------------
-CREATE UNIQUE INDEX IF NOT EXISTS uq_playlist_tracks_key
-  ON public.playlist_tracks (playlist_id, track_key);
-
-CREATE INDEX IF NOT EXISTS idx_playlist_tracks_position
-  ON public.playlist_tracks (playlist_id, position ASC);
-
 COMMIT;
-

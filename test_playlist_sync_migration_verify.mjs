@@ -144,8 +144,44 @@ describe("CEEPEEFY: Comprehensive Playlist Persistence & Synchronization Suite",
     }
 
     // ------------------------------------------------------------------------
-    // EXECUTE STEP 2 & 3: MIGRATE ALL PLAYLIST TRACKS
+    // EXECUTE STEP 2 & 3: MIGRATE ALL PLAYLIST TRACKS (SAFE INSERT-ONLY)
     // ------------------------------------------------------------------------
+    const conflictsReported = [];
+
+    // Pre-populate an existing normalized track to test Issue 3 (DO NOT overwrite with older JSONB)
+    playlistTracksDb.push({
+      playlist_id: "playlist-custom-1793791009781",
+      track_id: "malayalam_track_1",
+      track_key: "malayalam_track_1",
+      position: 0,
+      title: "Sad Malayalam Song 1 (Hi-Res Lossless 2026 Remaster)",
+      artist: "K. J. Yesudas",
+      album: "Heartbreak Hits Vol 1",
+      duration: 215,
+      duration_formatted: "3:35",
+      audio_url: "https://storage.supabase.co/audio/track_1_remastered.mp3",
+      cover_url: "https://storage.supabase.co/covers/art_1_remastered.jpg",
+      source: "custom",
+      created_at: "2026-11-04T00:00:00Z",
+    });
+
+    // Verify unique index creation happens BEFORE insert (Issue 1)
+    let uniqueIndexCreated = false;
+    const verifyAndCreateUniqueIndex = () => {
+      // Check duplicates across playlist_tracks
+      const counts = new Map();
+      for (const row of playlistTracksDb) {
+        const k = `${row.playlist_id}__${row.track_key}`;
+        counts.set(k, (counts.get(k) || 0) + 1);
+        if (counts.get(k) > 1) {
+          throw new Error(`Duplicate found before index creation: ${k}`);
+        }
+      }
+      uniqueIndexCreated = true;
+    };
+    verifyAndCreateUniqueIndex();
+    assert.equal(uniqueIndexCreated, true, "Unique index verified/created before INSERT ON CONFLICT");
+
     const executeMigration = () => {
       const normalPlaylists = userPlaylistsDb.filter(
         (p) => (p.kind === null || p.kind === "user") && !p.id.startsWith("mix-") && p.id !== "cloud-archive-playlist"
@@ -157,17 +193,19 @@ describe("CEEPEEFY: Comprehensive Playlist Persistence & Synchronization Suite",
 
         for (let ord = 0; ord < rawTracks.length; ord++) {
           const elem = rawTracks[ord];
+          // Issue 2: Preserve original music track identifier in track_id
+          const originalTrackId = elem.id || elem.track_id || elem.spotifyId || `track_${ord}`;
           const baseKey = elem.track_key || elem.id || elem.track_id || elem.spotifyId || `track_${ord}`;
           const occCount = (baseKeyOccurrences.get(baseKey) || 0) + 1;
           baseKeyOccurrences.set(baseKey, occCount);
 
-          // Safe track key: 1st occurrence keeps baseKey; subsequent append __pos_<ord>
+          // Issue 2: Safe deterministic track_key per occurrence
           const safeTrackKey = (occCount === 1) ? baseKey : `${baseKey}__pos_${ord}`;
 
           const record = {
             playlist_id: targetPl.id,
-            track_id: safeTrackKey,
-            track_key: safeTrackKey,
+            track_id: originalTrackId, // PRESERVES TRUE MUSIC TRACK IDENTIFIER
+            track_key: safeTrackKey,   // SEPARATE DETERMINISTIC OCCURRENCE KEY
             position: ord,
             title: elem.title || elem.name || "Untitled Track",
             artist: elem.artist || elem.subtitle || "Unknown Artist",
@@ -181,12 +219,17 @@ describe("CEEPEEFY: Comprehensive Playlist Persistence & Synchronization Suite",
             created_at: new Date().toISOString(),
           };
 
+          // Issue 3: Safe insert-only conflict handling (ON CONFLICT DO NOTHING)
           const existingIdx = playlistTracksDb.findIndex(
             (r) => r.playlist_id === record.playlist_id && r.track_key === record.track_key
           );
 
           if (existingIdx >= 0) {
-            playlistTracksDb[existingIdx] = { ...playlistTracksDb[existingIdx], ...record };
+            // Report conflict and preserve existing normalized record without overwriting
+            conflictsReported.push({
+              existing: playlistTracksDb[existingIdx],
+              incoming: record,
+            });
           } else {
             playlistTracksDb.push(record);
           }
@@ -207,19 +250,28 @@ describe("CEEPEEFY: Comprehensive Playlist Persistence & Synchronization Suite",
     assert.equal(migratedTracks.length, 61, "Must have exactly 61 normalized records in playlist_tracks");
     assert.equal(prePlaylist.tracks.length, 61, "Legacy JSONB tracks column MUST remain untouched");
 
+    // Issue 3 verification: pre-existing normalized track 1 was preserved, not overwritten!
+    const track1 = migratedTracks.find((t) => t.position === 0);
+    assert.equal(track1.title, "Sad Malayalam Song 1 (Hi-Res Lossless 2026 Remaster)");
+    assert.equal(track1.audio_url, "https://storage.supabase.co/audio/track_1_remastered.mp3");
+    assert.ok(conflictsReported.length >= 1, "Conflicting existing record was reported for inspection");
+
     // Verify ordering 0..60
     migratedTracks.sort((a, b) => a.position - b.position);
     for (let i = 0; i < 61; i++) {
       assert.equal(migratedTracks[i].position, i, `Position of track ${i} must be ${i}`);
-      assert.equal(migratedTracks[i].title, `Sad Malayalam Song ${i + 1}`);
       assert.ok(migratedTracks[i].track_key, `Track key must be present for track ${i}`);
       assert.ok(migratedTracks[i].audio_url, `Audio URL must be preserved for track ${i}`);
     }
 
-    // Verify duplicate track at position 35 was preserved with safe key
+    // Issue 2 verification: Track ID preservation
+    // Position 9: original track ID "malayalam_track_10", track_key "malayalam_track_10"
+    assert.equal(migratedTracks[9].track_id, "malayalam_track_10", "Occurrence 1 must preserve original track_id");
     assert.equal(migratedTracks[9].track_key, "malayalam_track_10");
-    assert.equal(migratedTracks[35].track_key, "malayalam_track_10__pos_35");
-    assert.notEqual(migratedTracks[9].track_key, migratedTracks[35].track_key);
+
+    // Position 35: original track ID "malayalam_track_10" PRESERVED, track_key has "__pos_35"
+    assert.equal(migratedTracks[35].track_id, "malayalam_track_10", "Occurrence 2 MUST preserve original track_id");
+    assert.equal(migratedTracks[35].track_key, "malayalam_track_10__pos_35", "Occurrence 2 has distinct track_key");
 
     // Verify unique constraint: zero duplicate track_keys in playlist_tracks
     const keySet = new Set(migratedTracks.map((t) => t.track_key));
