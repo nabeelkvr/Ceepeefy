@@ -555,6 +555,20 @@ describe("CEEPEEFY: Comprehensive Playlist Persistence & Synchronization Suite",
         tracks: JSON.parse(JSON.stringify(trending50Tracks)),
         kind: "user",
       },
+      // Target affected playlist: playlist-custom-1793809138294 ("nabeel")
+      {
+        id: "playlist-custom-1793809138294",
+        title: "nabeel",
+        user_id: "nabeeyl",
+        auth_user_id: null,
+        tracks: Array.from({ length: 6 }, (_, i) => ({
+          id: `nabeel_trk_${i + 1}`,
+          title: `Nabeel Track ${i + 1}`,
+          artist: "Nabeel Artist",
+          duration: 200 + i,
+        })),
+        kind: "user",
+      },
       // Unrelated unassigned playlist: MUST NOT be claimed (Check 1)
       {
         id: "playlist-custom-stranger-999",
@@ -694,6 +708,19 @@ describe("CEEPEEFY: Comprehensive Playlist Persistence & Synchronization Suite",
       (t) => t.playlist_id === "playlist-custom-1793791009781"
     );
     assert.equal(sadMigrated.length, 61, "Sad songs malayalam must still have 61 tracks");
+
+    // Verify playlist-custom-1793809138294 ("nabeel") repaired:
+    const nabeelPl = userPlaylistsDb.find((p) => p.id === "playlist-custom-1793809138294");
+    assert.equal(nabeelPl.auth_user_id, authUser.id, "Nabeel playlist auth_user_id bound to user UUID");
+    assert.equal(nabeelPl.user_id, "nabeeyl", "Nabeel playlist user_id preserved");
+    const nabeelMigrated = playlistTracksDb.filter(
+      (t) => t.playlist_id === "playlist-custom-1793809138294"
+    );
+    assert.equal(nabeelMigrated.length, 6, "All 6 songs normalized into playlist_tracks");
+    assert.equal(nabeelMigrated[0].track_id, "nabeel_trk_1");
+    assert.equal(nabeelMigrated[5].track_id, "nabeel_trk_6");
+    assert.equal(nabeelMigrated[0].position, 0);
+    assert.equal(nabeelMigrated[5].position, 5);
   });
 
   // --------------------------------------------------------------------------

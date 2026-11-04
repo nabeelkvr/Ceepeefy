@@ -48,7 +48,12 @@ async function verifyPlaylistOwnership(supabase, playlistId, user) {
   // 2. Temporary legacy ownership check: only verified owner account tied to 'nabeeyl'
   const isVerifiedLegacyOwner = user.email === "nabeelek3603@gmail.com" && playlist.user_id === "nabeeyl";
   if (isVerifiedLegacyOwner) {
-    return { authorized: true, playlist };
+    // Backfill auth_user_id immediately so future checks are fast and row is permanently claimed
+    await supabase
+      .from("user_playlists")
+      .update({ auth_user_id: user.id, updated_at: new Date().toISOString() })
+      .eq("id", String(playlistId));
+    return { authorized: true, playlist: { ...playlist, auth_user_id: user.id } };
   }
 
   return { authorized: false, forbidden: true };

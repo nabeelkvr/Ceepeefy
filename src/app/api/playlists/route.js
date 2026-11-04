@@ -106,6 +106,14 @@ export async function GET(request) {
         // Auto-sync into playlist_tracks so relational store is populated
         const syncPromise = (async () => {
           try {
+            // If legacy playlist has null auth_user_id, claim it with authenticated user UUID
+            if (!pl.auth_user_id && isOwnerNabeeyl) {
+              await supabase
+                .from("user_playlists")
+                .update({ auth_user_id: user.id, updated_at: new Date().toISOString() })
+                .eq("id", String(pl.id));
+            }
+
             const keyOccurrences = new Map();
             const records = pl.tracks.map((t, idx) => {
               const baseKey = deriveStableTrackKey(t) || `trk_${idx}`;
@@ -264,10 +272,12 @@ export async function POST(request) {
     const isCloudArchive = playlist.id === "cloud-archive-playlist";
     const kind = isCloudArchive ? "cloud_archive" : (isSelfMix ? "mix" : (playlist.kind || "user"));
 
+    const existingUserId = existing?.user_id || (user.email === "nabeelek3603@gmail.com" ? (playlist.user_id || "nabeeyl") : user.id);
+
     const payload = {
       id: String(playlist.id),
       auth_user_id: user.id,
-      user_id: user.id,
+      user_id: existingUserId,
       title: String(playlist.title || "Untitled Playlist").slice(0, 150),
       description: String(playlist.description || "").slice(0, 500),
       cover_url: playlist.coverUrl || playlist.cover_url || null,
