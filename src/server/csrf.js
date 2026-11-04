@@ -88,3 +88,4 @@ export function validateRequestOrigin(request) {
     error: `Forbidden: Request origin '${incomingOrigin}' is not authorized.`,
   };
 }
+

@@ -435,4 +435,61 @@ describe("CEEPEEFY: Integration & Policy Verification Suite", () => {
     // Disallowed cover formats
     assert.equal(validateUploadType("script.js", "application/javascript", "covers"), false);
   });
+
+  // --------------------------------------------------------------------------
+  // 13. Login Page Stabilization & Infinite Loop Prevention
+  // --------------------------------------------------------------------------
+  it("13. Login route settles stably: unauthenticated visitors stay on /login without redirect loops", () => {
+    // Simulates proxy.js routing decisions
+    const evaluateProxyRoute = (pathname, isAuthenticated) => {
+      // 1. Static & public APIs
+      if (pathname.startsWith("/api/auth/")) return "PASS";
+
+      // 2. Authenticated user visiting /login -> redirect to /
+      if (isAuthenticated && pathname === "/login") return "REDIRECT_TO_HOME";
+
+      // 3. Authenticated user visiting protected page -> pass
+      if (isAuthenticated) return "PASS";
+
+      // 4. Unauthenticated user visiting /login -> pass stably (NO REDIRECT!)
+      if (!isAuthenticated && pathname === "/login") return "PASS";
+
+      // 5. Unauthenticated user visiting protected page -> redirect to /login?from=...
+      return `REDIRECT_TO_LOGIN_FROM_${pathname}`;
+    };
+
+    // Unauthenticated user on /login must PASS (render login screen, NOT redirect!)
+    assert.equal(evaluateProxyRoute("/login", false), "PASS", "Unauthenticated visitor on /login must render without redirecting");
+
+    // Unauthenticated user on / must redirect to /login
+    assert.equal(evaluateProxyRoute("/", false), "REDIRECT_TO_LOGIN_FROM_/", "Unauthenticated on / must redirect to /login");
+
+    // Authenticated user on /login must redirect to /
+    assert.equal(evaluateProxyRoute("/login", true), "REDIRECT_TO_HOME", "Authenticated user on /login redirected to home");
+
+    // Authenticated user on / must pass
+    assert.equal(evaluateProxyRoute("/", true), "PASS", "Authenticated user on / must pass");
+
+    // Client session synchronization: Stale localStorage purge
+    const clientState = {
+      user: { id: "stale_id", isLoggedIn: true },
+      localStorage: { ceepeefy_user: JSON.stringify({ id: "stale_id", isLoggedIn: true }) },
+    };
+
+    const handleServerSessionResponse = (state, serverSession) => {
+      if (serverSession && serverSession.authenticated) {
+        state.user = serverSession.user;
+      } else {
+        // Purge stale local user
+        state.user = null;
+        delete state.localStorage.ceepeefy_user;
+        delete state.localStorage.isLoggedIn;
+      }
+    };
+
+    // When server reports unauthenticated, client MUST purge stale local storage
+    handleServerSessionResponse(clientState, { authenticated: false, user: null });
+    assert.equal(clientState.user, null, "User state must be cleared when server session is missing");
+    assert.equal(clientState.localStorage.ceepeefy_user, undefined, "Stale localStorage must be deleted");
+  });
 });

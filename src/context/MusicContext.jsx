@@ -257,16 +257,7 @@ export const MusicProvider = ({ children }) => {
 
   // User Authentication State (Strict Personal Instance: centralized account identity)
   const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("ceepeefy_user");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed?.isLoggedIn) setUser(parsed);
-      }
-    } catch {}
-  }, []);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   // Playback Context State (tracks active playlist/album source)
   const [playbackContext, setPlaybackContext] = useState(null);
@@ -1058,15 +1049,18 @@ export const MusicProvider = ({ children }) => {
             const sessionUserId = getAccountUserId(data.user);
             syncAccountDataWithCloud(sessionUserId);
           } else {
-            // Only clear if localStorage has no active logged-in user
-            const localUser = localStorage.getItem("ceepeefy_user");
-            if (!localUser) {
-              setUser(null);
-              localStorage.removeItem("isLoggedIn");
-            }
+            // Server confirmed unauthenticated: purge any stale local user state
+            setUser(null);
+            localStorage.removeItem("ceepeefy_user");
+            localStorage.removeItem("isLoggedIn");
           }
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.warn("[MusicContext] Session check notice:", err?.message || err);
+        })
+        .finally(() => {
+          setIsAuthChecking(false);
+        });
 
       // Instant local cache hydration for zero UI flicker
       const accountStorageKey = getAccountStorageKey("userData", storedActiveUser);
@@ -4668,6 +4662,7 @@ export const MusicProvider = ({ children }) => {
         setAuthModalTab,
         openAuthModal,
         user,
+        isAuthChecking,
         login,
         signUp,
         logout,

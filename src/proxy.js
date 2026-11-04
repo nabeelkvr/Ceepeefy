@@ -49,9 +49,8 @@ export async function proxy(request) {
     }
   }
 
-  // 3. Allow public authentication endpoints
+  // 3. Allow public authentication API endpoints
   if (
-    pathname === "/login" ||
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/session" ||
     pathname === "/api/auth/logout"
@@ -83,7 +82,10 @@ export async function proxy(request) {
       const { data: { user }, error } = await supabase.auth.getUser();
 
       if (user && !error) {
-        // Authenticated user verified by Supabase Auth
+        // Authenticated user verified by Supabase Auth: redirect away from /login to home
+        if (pathname === "/login") {
+          return NextResponse.redirect(new URL("/", request.url));
+        }
         return response;
       }
     } catch (err) {
@@ -91,7 +93,12 @@ export async function proxy(request) {
     }
   }
 
-  // 4. Handle unauthenticated requests
+  // 5. Handle unauthenticated requests
+  // Allow unauthenticated visitors to view /login stably without looping
+  if (pathname === "/login") {
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith("/api/")) {
     return NextResponse.json(
       {
@@ -103,7 +110,7 @@ export async function proxy(request) {
     );
   }
 
-  // If it's a page navigation: redirect to /login
+  // If unauthenticated navigation: redirect to /login
   const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set("from", pathname);
   return NextResponse.redirect(loginUrl);

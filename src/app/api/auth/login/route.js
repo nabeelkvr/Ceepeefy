@@ -99,11 +99,16 @@ export async function POST(request) {
       },
     });
 
-    // Explicitly mirror all Supabase Auth SSR session cookies into the outgoing response
+    // Explicitly mirror all Supabase Auth SSR session cookies into the outgoing response with root path
     try {
       const cookieStore = await cookies();
       cookieStore.getAll().forEach((c) => {
-        response.cookies.set(c.name, c.value);
+        response.cookies.set(c.name, c.value, {
+          path: "/",
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          httpOnly: true,
+        });
       });
     } catch (cookieErr) {
       console.warn("[Auth API] Notice copying cookieStore:", cookieErr.message);

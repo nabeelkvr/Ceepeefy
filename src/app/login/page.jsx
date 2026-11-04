@@ -14,24 +14,6 @@ export default function LoginPage() {
   const [feedback, setFeedback] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // If already logged in, redirect to destination
-  useEffect(() => {
-    if (user && user.isLoggedIn && !isLoading) {
-      const searchParams =
-        typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search)
-          : null;
-      const from = searchParams?.get("from");
-      const destination =
-        from && from.startsWith("/") && from !== "/login" ? from : "/";
-      if (typeof window !== "undefined") {
-        window.location.replace(destination);
-      } else {
-        router.replace(destination);
-      }
-    }
-  }, [user, isLoading, router]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFeedback(null);
