@@ -19,7 +19,7 @@ ALTER TABLE public.user_playlists
   ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'user'
     CHECK (kind IN ('user', 'mix', 'cloud_archive')),
   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID;
 
 -- Ensure default timestamp columns exist if not already present
 ALTER TABLE public.user_playlists
@@ -75,23 +75,51 @@ CREATE INDEX IF NOT EXISTS idx_playlist_tracks_position
 
 -- ------------------------------------------------------------------------------
 -- 3. EXPAND: liked_songs, recently_played, self_mixes
--- Add auth_user_id referencing auth.users(id)
+-- Ensure auth_user_id column exists
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.liked_songs
-  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID;
 
 ALTER TABLE public.recently_played
-  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID;
 
 ALTER TABLE public.self_mixes
-  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID;
 
 CREATE INDEX IF NOT EXISTS idx_liked_songs_auth_user ON public.liked_songs (auth_user_id);
 CREATE INDEX IF NOT EXISTS idx_recently_played_auth_user ON public.recently_played (auth_user_id);
 CREATE INDEX IF NOT EXISTS idx_self_mixes_auth_user ON public.self_mixes (auth_user_id);
 
 -- ------------------------------------------------------------------------------
--- 4. BACKFILL DATA (Link existing 'nabeeyl' data to your new Supabase Auth UID)
+-- 4. ENFORCE FOREIGN KEYS WITH ON DELETE SET NULL (Idempotent)
+-- Safely drops any prior constraint (e.g. CASCADE) and guarantees ON DELETE SET NULL
+-- ------------------------------------------------------------------------------
+DO $$
+DECLARE
+  r RECORD;
+  t TEXT;
+BEGIN
+  FOR t IN SELECT unnest(ARRAY['user_playlists', 'liked_songs', 'recently_played', 'self_mixes']) LOOP
+    -- Drop any existing foreign key constraint on auth_user_id referencing auth.users
+    FOR r IN (
+      SELECT c.conname
+      FROM pg_constraint c
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+      WHERE c.conrelid = ('public.' || t)::regclass
+        AND c.contype = 'f'
+        AND a.attname = 'auth_user_id'
+    ) LOOP
+      EXECUTE 'ALTER TABLE public.' || quote_ident(t) || ' DROP CONSTRAINT ' || quote_ident(r.conname);
+    END LOOP;
+
+    -- Add guaranteed ON DELETE SET NULL constraint
+    EXECUTE 'ALTER TABLE public.' || quote_ident(t) || 
+            ' ADD CONSTRAINT fk_' || t || '_auth_user FOREIGN KEY (auth_user_id) REFERENCES auth.users(id) ON DELETE SET NULL';
+  END LOOP;
+END $$;
+
+-- ------------------------------------------------------------------------------
+-- 5. OPTIONAL BACKFILL DATA (Link existing 'nabeeyl' data to your new Supabase Auth UID)
 -- Replace the placeholder UUID below with your actual User UID from the dashboard
 -- ------------------------------------------------------------------------------
 -- DO $$
@@ -107,11 +135,17 @@ CREATE INDEX IF NOT EXISTS idx_self_mixes_auth_user ON public.self_mixes (auth_u
 COMMIT;
 
 -- ------------------------------------------------------------------------------
--- VERIFICATION QUERY (Run to confirm columns added)
+-- VERIFICATION QUERY (Run to confirm columns and FK constraints)
 -- ------------------------------------------------------------------------------
--- SELECT table_name, column_name, data_type 
--- FROM information_schema.columns 
--- WHERE table_schema = 'public' 
---   AND table_name IN ('user_playlists', 'playlist_tracks', 'liked_songs', 'recently_played', 'self_mixes')
--- ORDER BY table_name, ordinal_position;
-
+-- SELECT 
+--   tc.table_name, 
+--   kcu.column_name, 
+--   c.confdeltype AS delete_rule -- 'n' means SET NULL, 'c' means CASCADE
+-- FROM information_schema.table_constraints tc
+-- JOIN information_schema.key_column_usage kcu 
+--   ON tc.constraint_name = kcu.constraint_name
+-- JOIN pg_constraint c 
+--   ON c.conname = tc.constraint_name
+-- WHERE tc.table_schema = 'public' 
+--   AND tc.constraint_type = 'FOREIGN KEY'
+--   AND kcu.column_name = 'auth_user_id';
