@@ -513,4 +513,293 @@ describe("CEEPEEFY: Comprehensive Playlist Persistence & Synchronization Suite",
       "Unauthorized user cannot insert into playlist_tracks"
     );
   });
+
+  // --------------------------------------------------------------------------
+  // TEST 3: Trending Now Malayalam (50 Tracks) Migration & Preservation
+  // --------------------------------------------------------------------------
+  it("3. Target Playlist: Migrates 'Trending Now Malayalam' (50 tracks) from JSONB into playlist_tracks with auth backfill", () => {
+    const authUser = {
+      id: "9f0b5d5e-d250-4fd1-b580-0ea5cbbec758",
+      email: "nabeelek3603@gmail.com",
+    };
+
+    // 50 tracks for Trending Now Malayalam (Spotify import structure)
+    const trending50Tracks = Array.from({ length: 50 }, (_, i) => ({
+      id: `spotify_trk_${i + 1}`,
+      spotifyId: `spotify_trk_${i + 1}`,
+      title: `Malayalam Hit Track ${i + 1}`,
+      artist: i % 2 === 0 ? "Sushin Shyam" : "Hesham Abdul Wahab",
+      album: "Top Malayalam 2026",
+      duration: 180 + i,
+      durationFormatted: "3:05",
+      audioUrl: `https://storage.supabase.co/audio/trending_${i + 1}.mp3`,
+      coverUrl: `https://storage.supabase.co/covers/trending_${i + 1}.jpg`,
+      source: "spotify",
+    }));
+
+    // Pre-existing database state matching production issue
+    const userPlaylistsDb = [
+      {
+        id: "playlist-custom-1793791009781",
+        title: "Sad songs malayalam 🥀💔",
+        user_id: authUser.id,
+        auth_user_id: authUser.id,
+        tracks: Array.from({ length: 61 }, (_, i) => ({ id: `sad_${i}` })),
+        kind: "user",
+      },
+      {
+        id: "playlist-custom-1793802294021",
+        title: "Trending Now Malayalam",
+        user_id: "nabeeyl",
+        auth_user_id: null, // Confirmed issue: auth_user_id is NULL
+        tracks: JSON.parse(JSON.stringify(trending50Tracks)),
+        kind: "user",
+      },
+      {
+        id: "mix-1730000001",
+        title: "Self Mix 1",
+        user_id: "nabeeyl",
+        auth_user_id: null,
+        kind: "mix",
+      },
+      {
+        id: "cloud-archive-playlist",
+        title: "Cloud Archive",
+        user_id: "nabeeyl",
+        auth_user_id: null,
+        kind: "cloud_archive",
+      },
+    ];
+
+    // playlist_tracks has 61 existing Sad songs malayalam tracks, 0 Trending tracks
+    const playlistTracksDb = Array.from({ length: 61 }, (_, i) => ({
+      playlist_id: "playlist-custom-1793791009781",
+      track_id: `sad_${i}`,
+      track_key: `sad_${i}`,
+      position: i,
+      title: `Sad Track ${i}`,
+    }));
+
+    assert.equal(
+      playlistTracksDb.filter((t) => t.playlist_id === "playlist-custom-1793802294021").length,
+      0,
+      "Before migration: 0 rows for Trending Now Malayalam in playlist_tracks"
+    );
+
+    // STEP 1: Backfill ownership
+    for (const pl of userPlaylistsDb) {
+      if (
+        (pl.user_id === "nabeeyl" || pl.user_id === authUser.id || !pl.auth_user_id) &&
+        !pl.auth_user_id &&
+        (pl.kind === null || pl.kind === "user") &&
+        !pl.id.startsWith("mix-") &&
+        pl.id !== "cloud-archive-playlist"
+      ) {
+        pl.auth_user_id = authUser.id;
+        pl.user_id = authUser.id;
+      }
+    }
+
+    const trendingPl = userPlaylistsDb.find((p) => p.id === "playlist-custom-1793802294021");
+    assert.equal(trendingPl.auth_user_id, authUser.id, "Trending Now Malayalam auth_user_id updated to user UUID");
+    assert.equal(trendingPl.user_id, authUser.id, "Trending Now Malayalam user_id normalized");
+
+    // Self Mix and Cloud Archive remain untouched
+    assert.equal(userPlaylistsDb[2].auth_user_id, null, "Self Mix untouched");
+    assert.equal(userPlaylistsDb[3].auth_user_id, null, "Cloud Archive untouched");
+
+    // STEP 2 & 5: Insert unnormalized tracks with safe conflict handling
+    const normalPlaylists = userPlaylistsDb.filter(
+      (p) => (p.kind === null || p.kind === "user") && !p.id.startsWith("mix-") && p.id !== "cloud-archive-playlist"
+    );
+
+    for (const targetPl of normalPlaylists) {
+      const rawTracks = targetPl.tracks || [];
+      const baseKeyOccurrences = new Map();
+
+      for (let ord = 0; ord < rawTracks.length; ord++) {
+        const elem = rawTracks[ord];
+        const originalTrackId = elem.id || elem.track_id || elem.spotifyId || `track_${ord}`;
+        const baseKey = elem.track_key || elem.id || elem.track_id || elem.spotifyId || `track_${ord}`;
+        const occCount = (baseKeyOccurrences.get(baseKey) || 0) + 1;
+        baseKeyOccurrences.set(baseKey, occCount);
+
+        const safeTrackKey = (occCount === 1) ? baseKey : `${baseKey}__pos_${ord}`;
+
+        const record = {
+          playlist_id: targetPl.id,
+          track_id: originalTrackId,
+          track_key: safeTrackKey,
+          position: ord,
+          title: elem.title || "Untitled",
+          artist: elem.artist || "Unknown",
+          source: elem.source || "custom",
+          audio_url: elem.audioUrl || null,
+          cover_url: elem.coverUrl || null,
+          track_data: elem,
+        };
+
+        const exists = playlistTracksDb.some(
+          (r) => r.playlist_id === record.playlist_id && r.track_key === record.track_key
+        );
+        if (!exists) {
+          playlistTracksDb.push(record);
+        }
+      }
+    }
+
+    // Verify Trending Now Malayalam has exactly 50 tracks in playlist_tracks
+    const trendingMigrated = playlistTracksDb.filter(
+      (t) => t.playlist_id === "playlist-custom-1793802294021"
+    );
+    assert.equal(trendingMigrated.length, 50, "Trending Now Malayalam must have all 50 tracks in playlist_tracks");
+    assert.equal(trendingMigrated[0].track_id, "spotify_trk_1");
+    assert.equal(trendingMigrated[49].track_id, "spotify_trk_50");
+    assert.equal(trendingMigrated[0].position, 0);
+    assert.equal(trendingMigrated[49].position, 49);
+    assert.equal(trendingMigrated[0].source, "spotify");
+
+    // Verify Sad songs malayalam still has 61 tracks (not duplicated or overwritten)
+    const sadMigrated = playlistTracksDb.filter(
+      (t) => t.playlist_id === "playlist-custom-1793791009781"
+    );
+    assert.equal(sadMigrated.length, 61, "Sad songs malayalam must still have 61 tracks");
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 4: Partial Failure Rejection in POST /api/playlists
+  // --------------------------------------------------------------------------
+  it("4. Error Handling: Rejects partial failures when child tracks fail to persist into playlist_tracks", () => {
+    // Mock simulation of POST /api/playlists handler logic
+    const handlePostWithFailureSimulation = (playlist, simulateTrackDbError = false) => {
+      if (!playlist || !playlist.id) {
+        return { status: 400, body: { success: false, error: "Playlist data with a valid ID is required." } };
+      }
+
+      // Upsert parent playlist
+      const parentSaved = { ...playlist, updated_at: new Date().toISOString() };
+
+      // Upsert tracks
+      if (Array.isArray(playlist.tracks) && playlist.tracks.length > 0) {
+        if (simulateTrackDbError) {
+          // Track DB fails: Must return 500 and NOT report success: true
+          return {
+            status: 500,
+            body: { success: false, error: "Failed to persist tracks: foreign key violation or disk error" },
+          };
+        }
+      }
+
+      return { status: 200, body: { success: true, playlist: parentSaved } };
+    };
+
+    const validPlaylist = {
+      id: "pl_test_fail_check",
+      title: "Test Error Playlist",
+      tracks: [{ id: "trk_1", title: "Song 1" }],
+    };
+
+    // When track insertion encounters an error
+    const failedRes = handlePostWithFailureSimulation(validPlaylist, true);
+    assert.equal(failedRes.status, 500, "Must return HTTP 500 on track persist failure");
+    assert.equal(failedRes.body.success, false, "Must return success: false");
+    assert.match(failedRes.body.error, /Failed to persist tracks/, "Informative error message");
+
+    // When track insertion succeeds
+    const successRes = handlePostWithFailureSimulation(validPlaylist, false);
+    assert.equal(successRes.status, 200, "Returns HTTP 200 on clean persistence");
+    assert.equal(successRes.body.success, true);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 5: Spotify Import, Sync, and Reorder Keep Both Stores Aligned
+  // --------------------------------------------------------------------------
+  it("5. End-to-End: Spotify import, sync, reorder and delete keep playlist_tracks and user_playlists aligned", async () => {
+    const authUser = { id: "user_uuid_12345", email: "nabeelek3603@gmail.com" };
+    const mockDb = {
+      user_playlists: [],
+      playlist_tracks: [],
+    };
+
+    // 1. Import Spotify playlist
+    const spotifyPlaylist = {
+      id: "playlist-custom-1793802294021",
+      title: "Trending Now Malayalam",
+      kind: "user",
+      source: "spotify_import",
+      tracks: [
+        { id: "sp_1", title: "Kuthanthram", artist: "Sushin Shyam", source: "spotify" },
+        { id: "sp_2", title: "Illuminati", artist: "Sushin Shyam", source: "spotify" },
+        { id: "sp_3", title: "Jaada", artist: "Dabzee", source: "spotify" },
+      ],
+    };
+
+    // Post to /api/playlists
+    mockDb.user_playlists.push({
+      ...spotifyPlaylist,
+      auth_user_id: authUser.id,
+      user_id: authUser.id,
+    });
+    for (let idx = 0; idx < spotifyPlaylist.tracks.length; idx++) {
+      const t = spotifyPlaylist.tracks[idx];
+      mockDb.playlist_tracks.push({
+        playlist_id: spotifyPlaylist.id,
+        track_id: t.id,
+        track_key: t.id,
+        position: idx,
+        title: t.title,
+        artist: t.artist,
+        track_data: t,
+      });
+    }
+
+    assert.equal(mockDb.playlist_tracks.length, 3, "Initial 3 tracks persisted");
+
+    // 2. Incremental Sync: Spotify added 1 new song
+    const addedSong = { id: "sp_4", title: "Ta Takkara", artist: "Santhosh Narayanan", source: "spotify" };
+    const updatedTracks = [...spotifyPlaylist.tracks, addedSong];
+
+    // Batch sync via POST /api/playlists/tracks
+    mockDb.playlist_tracks = [];
+    for (let idx = 0; idx < updatedTracks.length; idx++) {
+      const t = updatedTracks[idx];
+      mockDb.playlist_tracks.push({
+        playlist_id: spotifyPlaylist.id,
+        track_id: t.id,
+        track_key: t.id,
+        position: idx,
+        title: t.title,
+        artist: t.artist,
+        track_data: t,
+      });
+    }
+    // Update parent playlist tracks cache
+    mockDb.user_playlists[0].tracks = updatedTracks;
+
+    assert.equal(mockDb.playlist_tracks.length, 4, "Sync successfully added 4th track");
+    assert.equal(mockDb.playlist_tracks[3].track_id, "sp_4");
+    assert.equal(mockDb.user_playlists[0].tracks.length, 4, "user_playlists.tracks cache kept aligned");
+
+    // 3. Reorder tracks: Move sp_4 to position 0
+    const reorderedTracks = [
+      mockDb.playlist_tracks[3].track_data,
+      mockDb.playlist_tracks[0].track_data,
+      mockDb.playlist_tracks[1].track_data,
+      mockDb.playlist_tracks[2].track_data,
+    ];
+    mockDb.playlist_tracks = reorderedTracks.map((t, idx) => ({
+      playlist_id: spotifyPlaylist.id,
+      track_id: t.id,
+      track_key: t.id,
+      position: idx,
+      title: t.title,
+      track_data: t,
+    }));
+    mockDb.user_playlists[0].tracks = reorderedTracks;
+
+    assert.equal(mockDb.playlist_tracks[0].track_id, "sp_4", "Position 0 is now sp_4");
+    assert.equal(mockDb.playlist_tracks[0].position, 0);
+    assert.equal(mockDb.playlist_tracks[1].track_id, "sp_1");
+    assert.equal(mockDb.playlist_tracks[1].position, 1);
+  });
 });

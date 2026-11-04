@@ -95,6 +95,7 @@ export async function GET(request) {
     }
 
     // 3. Assemble UI-compatible playlist records
+    const syncPromises = [];
     const assembled = playlists.map((pl) => {
       let plTracks = tracksByPlaylist[pl.id] || [];
 
@@ -103,13 +104,18 @@ export async function GET(request) {
         plTracks = pl.tracks;
 
         // Auto-sync into playlist_tracks so relational store is populated
-        (async () => {
+        const syncPromise = (async () => {
           try {
+            const keyOccurrences = new Map();
             const records = pl.tracks.map((t, idx) => {
-              const trackKey = deriveStableTrackKey(t) || `trk_${idx}`;
+              const baseKey = deriveStableTrackKey(t) || `trk_${idx}`;
+              const occCount = (keyOccurrences.get(baseKey) || 0) + 1;
+              keyOccurrences.set(baseKey, occCount);
+              const trackKey = occCount === 1 ? baseKey : `${baseKey}__pos_${idx}`;
+              const originalTrackId = String(t.id || t.track_id || t.spotifyId || baseKey);
               return {
                 playlist_id: String(pl.id),
-                track_id: String(t.id || trackKey),
+                track_id: originalTrackId,
                 track_key: trackKey,
                 position: idx,
                 title: String(t.title || t.name || "Untitled Track"),
@@ -148,6 +154,7 @@ export async function GET(request) {
             console.warn("[Playlists API] Auto-sync to playlist_tracks error:", syncErr);
           }
         })();
+        syncPromises.push(syncPromise);
       }
 
       const isSelfMix =
@@ -183,6 +190,10 @@ export async function GET(request) {
         updatedAt: pl.updated_at,
       };
     });
+
+    if (syncPromises.length > 0) {
+      await Promise.all(syncPromises);
+    }
 
     return NextResponse.json({
       success: true,
@@ -287,11 +298,16 @@ export async function POST(request) {
 
     // If initial tracks provided on playlist creation, save them to playlist_tracks safely
     if (Array.isArray(playlist.tracks) && playlist.tracks.length > 0) {
+      const keyOccurrences = new Map();
       const records = playlist.tracks.map((t, idx) => {
-        const trackKey = deriveStableTrackKey(t) || `trk_${idx}`;
+        const baseKey = deriveStableTrackKey(t) || `trk_${idx}`;
+        const occCount = (keyOccurrences.get(baseKey) || 0) + 1;
+        keyOccurrences.set(baseKey, occCount);
+        const trackKey = occCount === 1 ? baseKey : `${baseKey}__pos_${idx}`;
+        const originalTrackId = String(t.id || t.track_id || t.spotifyId || baseKey);
         return {
           playlist_id: String(playlist.id),
-          track_id: String(t.id || trackKey),
+          track_id: originalTrackId,
           track_key: String(trackKey),
           position: idx,
           title: String(t.title || t.name || "Untitled Track"),
@@ -310,7 +326,7 @@ export async function POST(request) {
       const CHUNK_SIZE = 50;
       for (let i = 0; i < records.length; i += CHUNK_SIZE) {
         const chunk = records.slice(i, i + CHUNK_SIZE);
-        const { error: trkErr } = await supabase
+        let { error: trkErr } = await supabase
           .from("playlist_tracks")
           .upsert(chunk, { onConflict: "playlist_id,track_key" });
 
@@ -322,8 +338,15 @@ export async function POST(request) {
               .delete()
               .eq("playlist_id", String(playlist.id))
               .eq("track_id", item.track_id);
-            await supabase.from("playlist_tracks").insert([item]);
+            const { error: insErr } = await supabase.from("playlist_tracks").insert([item]);
+            if (insErr) {
+              console.error("[Playlists API] Fallback insert error:", insErr.message);
+              return NextResponse.json({ success: false, error: `Failed to persist tracks: ${insErr.message}` }, { status: 500 });
+            }
           }
+        } else if (trkErr) {
+          console.error("[Playlists API] Chunk upsert error:", trkErr.message);
+          return NextResponse.json({ success: false, error: `Failed to persist tracks: ${trkErr.message}` }, { status: 500 });
         }
       }
     }

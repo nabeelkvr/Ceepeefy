@@ -52,6 +52,7 @@ import {
   deletePlaylistFromCloud,
   addTrackToPlaylistCloud,
   removeTrackFromPlaylistCloud,
+  syncPlaylistTracksToCloud,
   fetchLikedSongsFromCloud,
   saveLikedSongToCloud,
   removeLikedSongFromCloud,
@@ -1384,7 +1385,16 @@ export const MusicProvider = ({ children }) => {
 
     // Authoritative persistence in Supabase PostgreSQL (both user_playlists and playlist_tracks)
     try {
-      await savePlaylistToCloud(newPlaylist, currentUserId);
+      const saved = await savePlaylistToCloud(newPlaylist, currentUserId);
+      if (!saved) {
+        console.warn("[MusicContext] savePlaylistToCloud returned false for imported playlist.");
+      }
+      if (safeTracks.length > 0) {
+        const synced = await syncPlaylistTracksToCloud(newPlaylist.id, safeTracks);
+        if (!synced) {
+          console.warn("[MusicContext] syncPlaylistTracksToCloud returned false for imported playlist.");
+        }
+      }
     } catch (cloudErr) {
       console.warn("[MusicContext] Could not persist imported playlist to cloud:", cloudErr);
     }
@@ -1628,10 +1638,12 @@ export const MusicProvider = ({ children }) => {
       return next;
     });
 
-    // Save to Supabase cloud
-    savePlaylistToCloud(updatedPlaylist, currentUserId).catch((err) => {
-      console.warn("[MusicContext] Failed to persist synced playlist to Supabase:", err);
-    });
+    // Save to Supabase cloud (user_playlists and playlist_tracks)
+    savePlaylistToCloud(updatedPlaylist, currentUserId)
+      .then(() => syncPlaylistTracksToCloud(playlistId, planOutput.updatedTracks))
+      .catch((err) => {
+        console.warn("[MusicContext] Failed to persist synced playlist to Supabase:", err);
+      });
 
     return {
       success: true,
@@ -1873,9 +1885,10 @@ export const MusicProvider = ({ children }) => {
         return next;
       });
 
-      // Persist to Supabase Cloud
+      // Persist to Supabase Cloud (user_playlists and playlist_tracks)
       try {
         await savePlaylistToCloud(updatedPlaylist, currentUserId);
+        await syncPlaylistTracksToCloud(playlistId, updatedTracks);
       } catch (cloudErr) {
         console.warn("[MusicContext] Cloud sync notice during playlist update:", cloudErr);
       }
@@ -2404,6 +2417,9 @@ export const MusicProvider = ({ children }) => {
       addTrackToPlaylistCloud(playlistId, norm, targetIndex).catch((err) => {
         console.error("[MusicContext] Failed to persist added track to Supabase:", err);
       });
+      savePlaylistToCloud(updatedCustomPl, currentUserId).catch((err) => {
+        console.error("[MusicContext] Failed to persist updated playlist JSON to Supabase:", err);
+      });
     }
   };
 
@@ -2454,6 +2470,9 @@ export const MusicProvider = ({ children }) => {
       removeTrackFromPlaylistCloud(playlistId, trackId).catch((err) => {
         console.error("[MusicContext] Failed to persist removed track to Supabase:", err);
       });
+      savePlaylistToCloud(updatedCustomPl, currentUserId).catch((err) => {
+        console.error("[MusicContext] Failed to persist updated playlist JSON to Supabase:", err);
+      });
     }
   };
 
@@ -2481,7 +2500,9 @@ export const MusicProvider = ({ children }) => {
     });
 
     if (updatedPl) {
-      return await savePlaylistToCloud(updatedPl, currentUserId);
+      const saved = await savePlaylistToCloud(updatedPl, currentUserId);
+      const synced = await syncPlaylistTracksToCloud(idStr, newOrderedTracks);
+      return saved && synced;
     }
     return false;
   };

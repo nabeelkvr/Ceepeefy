@@ -36,9 +36,21 @@ BEGIN
   UPDATE public.user_playlists
   SET 
     auth_user_id = v_auth_uid,
+    user_id = v_auth_uid::text,
     updated_at = timezone('utc'::text, now())
-  WHERE user_id = 'nabeeyl'
+  WHERE (user_id = 'nabeeyl' OR user_id = v_auth_uid::text OR auth_user_id IS NULL)
     AND auth_user_id IS NULL
+    AND (kind IS NULL OR kind = 'user')
+    AND id NOT LIKE 'mix-%'
+    AND id != 'cloud-archive-playlist';
+
+  -- Normalize user_id to UUID on any custom playlists that already had auth_user_id set
+  UPDATE public.user_playlists
+  SET 
+    user_id = v_auth_uid::text,
+    updated_at = timezone('utc'::text, now())
+  WHERE auth_user_id = v_auth_uid
+    AND user_id = 'nabeeyl'
     AND (kind IS NULL OR kind = 'user')
     AND id NOT LIKE 'mix-%'
     AND id != 'cloud-archive-playlist';
