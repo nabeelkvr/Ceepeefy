@@ -19,7 +19,7 @@ ALTER TABLE public.user_playlists
   ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'user'
     CHECK (kind IN ('user', 'mix', 'cloud_archive')),
   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
 
 -- Ensure default timestamp columns exist if not already present
 ALTER TABLE public.user_playlists
@@ -78,13 +78,13 @@ CREATE INDEX IF NOT EXISTS idx_playlist_tracks_position
 -- Add auth_user_id referencing auth.users(id)
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.liked_songs
-  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
 
 ALTER TABLE public.recently_played
-  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
 
 ALTER TABLE public.self_mixes
-  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_liked_songs_auth_user ON public.liked_songs (auth_user_id);
 CREATE INDEX IF NOT EXISTS idx_recently_played_auth_user ON public.recently_played (auth_user_id);
