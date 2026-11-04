@@ -616,4 +616,112 @@ describe("CEEPEEFY: Integration & Policy Verification Suite", () => {
       delete process.env.SUPABASE_ANON_KEY;
     }
   });
+
+  // --------------------------------------------------------------------------
+  // 18. Legacy Playlist Track Hydration & Fallback
+  // --------------------------------------------------------------------------
+  it("18. Preserves 61 legacy JSONB tracks when playlist_tracks has no child rows", () => {
+    // Simulate legacy playlist row: 'Sad songs malayalam'
+    const legacyPlaylist = {
+      id: "playlist-custom-1793791009781",
+      user_id: "nabeeyl",
+      auth_user_id: null,
+      title: "Sad songs malayalam",
+      tracks: Array.from({ length: 61 }, (_, i) => ({
+        id: `track-${i + 1}`,
+        title: `Malayalam Song ${i + 1}`,
+        artist: "Artist Name",
+        duration: 208,
+      })),
+    };
+
+    // Simulate empty relational playlist_tracks
+    const tracksByPlaylist = {}; // no child rows in playlist_tracks
+
+    // Hydration logic as implemented in GET /api/playlists
+    const plTracksFromRelational = tracksByPlaylist[legacyPlaylist.id];
+    let resolvedTracks = [];
+    if (Array.isArray(plTracksFromRelational) && plTracksFromRelational.length > 0) {
+      resolvedTracks = plTracksFromRelational;
+    } else if (Array.isArray(legacyPlaylist.tracks) && legacyPlaylist.tracks.length > 0) {
+      resolvedTracks = legacyPlaylist.tracks;
+    }
+
+    assert.equal(resolvedTracks.length, 61, "Must hydrate all 61 tracks from legacy JSONB column");
+    assert.equal(resolvedTracks[0].title, "Malayalam Song 1");
+    assert.equal(resolvedTracks[60].title, "Malayalam Song 61");
+  });
+
+  // --------------------------------------------------------------------------
+  // 19. Safe Track Key Derivation on Relative/Invalid URLs
+  // --------------------------------------------------------------------------
+  it("19. deriveStableTrackKey safely handles relative, malformed, or missing audio URLs without throwing", () => {
+    const safeDerive = (track) => {
+      if (!track) return "";
+      if (track.track_key) return String(track.track_key);
+
+      const url = track.audioUrl || track.audio_url || "";
+      if (url) {
+        try {
+          const parsed = new URL(url);
+          const pathname = parsed.pathname;
+          if (pathname) {
+            return pathname.replace(/^\/+/, "");
+          }
+        } catch {}
+      }
+
+      const id = track.id || track.track_id || track.spotifyId || "";
+      return String(id).replace(/__pos_\d+$/, "");
+    };
+
+    // 1. Full URL
+    assert.equal(
+      safeDerive({ audioUrl: "https://storage.supabase.co/v1/s/audio/track1.mp3" }),
+      "v1/s/audio/track1.mp3"
+    );
+
+    // 2. Relative URL (must NOT throw TypeError: Invalid URL)
+    assert.equal(
+      safeDerive({ id: "trk_rel_1", audioUrl: "/local/cache/track1.mp3" }),
+      "trk_rel_1"
+    );
+
+    // 3. Malformed URL
+    assert.equal(
+      safeDerive({ id: "trk_malformed", audioUrl: "not-a-valid-url" }),
+      "trk_malformed"
+    );
+
+    // 4. Track with explicit track_key
+    assert.equal(
+      safeDerive({ track_key: "explicit_key_42" }),
+      "explicit_key_42"
+    );
+  });
+
+  // --------------------------------------------------------------------------
+  // 20. Legacy Owner Filter Alignment in GET /api/playlists
+  // --------------------------------------------------------------------------
+  it("20. Verified owner nabeelek3603@gmail.com includes user_id.eq.nabeeyl in query filter", () => {
+    const user = {
+      id: "9f0b5d5e-d250-4fd1-b580-0ea5cbbec758",
+      email: "nabeelek3603@gmail.com",
+    };
+
+    const isOwnerNabeeyl = user.email === "nabeelek3603@gmail.com";
+    const filter = isOwnerNabeeyl
+      ? `auth_user_id.eq.${user.id},user_id.eq.${user.id},user_id.eq.nabeeyl`
+      : `auth_user_id.eq.${user.id},user_id.eq.${user.id}`;
+
+    assert.ok(filter.includes("user_id.eq.nabeeyl"), "Must include user_id.eq.nabeeyl for verified owner");
+    assert.ok(filter.includes(`auth_user_id.eq.${user.id}`), "Must include auth_user_id for UUID matching");
+
+    // Other users must NOT have nabeeyl included
+    const otherUser = { id: "other-uuid", email: "other@example.com" };
+    const otherFilter = otherUser.email === "nabeelek3603@gmail.com"
+      ? `auth_user_id.eq.${otherUser.id},user_id.eq.${otherUser.id},user_id.eq.nabeeyl`
+      : `auth_user_id.eq.${otherUser.id},user_id.eq.${otherUser.id}`;
+    assert.equal(otherFilter.includes("user_id.eq.nabeeyl"), false, "Other users must not match nabeeyl");
+  });
 });

@@ -310,19 +310,17 @@ export const MusicProvider = ({ children }) => {
           const merged = [];
           for (const id of allIds) {
             const cl = cloudMap.get(id);
-            const ac = acctMap.get(id);
             const lc = localMap.get(id);
 
             // Compare timestamps to not overwrite newer backend data with stale local data
             const clTime = new Date(cl?.updated_at || cl?.updatedAt || 0).getTime();
             const lcTime = new Date(lc?.updated_at || lc?.updatedAt || 0).getTime();
             const backendIsNewer = cl && (!lc || clTime >= lcTime);
-            const base = backendIsNewer ? (cl || ac || lc) : (lc || cl || ac);
+            const base = backendIsNewer ? (cl || lc) : (lc || cl);
 
             // Prioritize tracks: NEVER let a device with partial tracks overwrite a complete backend collection
             const clTracksCount = Array.isArray(cl?.tracks) ? cl.tracks.length : 0;
             const lcTracksCount = Array.isArray(lc?.tracks) ? lc.tracks.length : 0;
-            const acTracksCount = Array.isArray(ac?.tracks) ? ac.tracks.length : 0;
 
             let rawTracks = [];
             if (clTracksCount >= lcTracksCount && clTracksCount > 0) {
@@ -331,8 +329,6 @@ export const MusicProvider = ({ children }) => {
               rawTracks = lc.tracks;
             } else if (clTracksCount > 0) {
               rawTracks = cl.tracks;
-            } else if (acTracksCount > 0) {
-              rawTracks = ac.tracks;
             } else if (lcTracksCount > 0) {
               rawTracks = lc.tracks;
             }
@@ -368,26 +364,20 @@ export const MusicProvider = ({ children }) => {
             const resolvedCategory =
               explicitStoredCat ||
               base.category ||
-              ac?.category ||
               lc?.category ||
               base.sourceMeta?.category ||
-              ac?.sourceMeta?.category ||
               lc?.sourceMeta?.category ||
               "Mixed";
             const resolvedSpotifyId =
               base.spotifyId ||
-              ac?.spotifyId ||
               lc?.spotifyId ||
               base.sourceMeta?.spotifyId ||
-              ac?.sourceMeta?.spotifyId ||
               lc?.sourceMeta?.spotifyId ||
               null;
             const resolvedSpotifyUrl =
               base.spotifyUrl ||
-              ac?.spotifyUrl ||
               lc?.spotifyUrl ||
               base.sourceMeta?.spotifyUrl ||
-              ac?.sourceMeta?.spotifyUrl ||
               lc?.sourceMeta?.spotifyUrl ||
               null;
 
@@ -397,9 +387,9 @@ export const MusicProvider = ({ children }) => {
               songsCount: tracks.length,
               duration: formatPlaylistDuration(tracks),
               subtitle: base.subtitle?.replace(/\d+\s+tracks/, `${tracks.length} tracks`) || `By ${base.curator || "You"} • ${tracks.length} tracks`,
-              source: base.source || ac?.source || lc?.source || (base.badge === "SPOTIFY" ? "spotify_import" : "custom"),
+              source: base.source || lc?.source || (base.badge === "SPOTIFY" ? "spotify_import" : "custom"),
               sourceMeta: {
-                ...(base.sourceMeta || ac?.sourceMeta || lc?.sourceMeta || {}),
+                ...(base.sourceMeta || lc?.sourceMeta || {}),
                 ...(resolvedSpotifyId ? { spotifyId: resolvedSpotifyId } : {}),
                 ...(resolvedSpotifyUrl ? { spotifyUrl: resolvedSpotifyUrl } : {}),
                 ...(resolvedCategory ? { category: resolvedCategory } : {}),
@@ -407,8 +397,8 @@ export const MusicProvider = ({ children }) => {
               category: resolvedCategory,
               spotifyId: resolvedSpotifyId,
               spotifyUrl: resolvedSpotifyUrl,
-              coverUrl: base.coverUrl || ac?.coverUrl || lc?.coverUrl,
-              customCover: base.customCover || ac?.customCover || lc?.customCover || base.coverUrl,
+              coverUrl: base.coverUrl || lc?.coverUrl,
+              customCover: base.customCover || lc?.customCover || base.coverUrl,
               isCustom: true,
             });
           }

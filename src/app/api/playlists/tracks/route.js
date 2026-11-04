@@ -29,7 +29,7 @@ function deriveStableTrackKey(track) {
 async function verifyPlaylistOwnership(supabase, playlistId, user) {
   const { data: playlist, error } = await supabase
     .from("user_playlists")
-    .select("id, auth_user_id, user_id")
+    .select("id, auth_user_id, user_id, tracks")
     .eq("id", String(playlistId))
     .maybeSingle();
 
@@ -93,7 +93,7 @@ export async function GET(request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    const tracks = (data || []).map((row) => {
+    let tracks = (data || []).map((row) => {
       const rawData = row.track_data && typeof row.track_data === "object" ? row.track_data : {};
       const trackKey = row.track_key || rawData.id || row.track_id;
 
@@ -106,6 +106,53 @@ export async function GET(request) {
         artist: rawData.artist || row.artist || "Unknown Artist",
       };
     });
+
+    // Fallback: If playlist_tracks has no rows, check if parent playlist row in user_playlists has tracks
+    if (tracks.length === 0 && Array.isArray(check.playlist?.tracks) && check.playlist.tracks.length > 0) {
+      tracks = check.playlist.tracks;
+
+      // Auto-migrate to playlist_tracks so subsequent reads hit playlist_tracks
+      (async () => {
+        try {
+          const records = tracks.map((t, idx) => {
+            const trackKey = deriveStableTrackKey(t) || `trk_${idx}`;
+            return {
+              playlist_id: String(playlistId),
+              track_id: String(t.id || trackKey),
+              track_key: trackKey,
+              position: idx,
+              title: String(t.title || t.name || "Untitled Track"),
+              artist: String(t.artist || t.subtitle || t.artistName || "Unknown Artist"),
+              album: String(t.album || t.albumName || ""),
+              duration: typeof t.duration === "number" ? t.duration : 0,
+              duration_formatted: t.durationFormatted || null,
+              audio_url: t.audioUrl || t.audio_url || null,
+              cover_url: t.coverUrl || t.cover_url || null,
+              source: t.source || "custom",
+              track_data: t,
+              added_at: new Date().toISOString(),
+            };
+          });
+
+          const CHUNK_SIZE = 50;
+          for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+            const chunk = records.slice(i, i + CHUNK_SIZE);
+            const { error: trkErr } = await supabase
+              .from("playlist_tracks")
+              .upsert(chunk, { onConflict: "playlist_id,track_key" });
+            if (trkErr && (trkErr.code === "42703" || trkErr.message?.includes("track_key") || trkErr.code === "42P10")) {
+              const baselineChunk = chunk.map(({ track_key, ...rest }) => rest);
+              for (const item of baselineChunk) {
+                await supabase.from("playlist_tracks").delete().eq("playlist_id", playlistId).eq("track_id", item.track_id);
+                await supabase.from("playlist_tracks").insert([item]);
+              }
+            }
+          }
+        } catch (syncErr) {
+          console.warn("[Playlists Tracks API] Auto-migrate error:", syncErr);
+        }
+      })();
+    }
 
     return NextResponse.json({ success: true, tracks });
   } catch (err) {
@@ -152,6 +199,14 @@ export async function POST(request) {
           track_id: String(t.id || trackKey),
           track_key: trackKey,
           position: idx,
+          title: String(t.title || t.name || "Untitled Track"),
+          artist: String(t.artist || t.subtitle || t.artistName || "Unknown Artist"),
+          album: String(t.album || t.albumName || ""),
+          duration: typeof t.duration === "number" ? t.duration : 0,
+          duration_formatted: t.durationFormatted || null,
+          audio_url: t.audioUrl || t.audio_url || null,
+          cover_url: t.coverUrl || t.cover_url || null,
+          source: t.source || "custom",
           track_data: t,
           added_at: new Date().toISOString(),
         };
@@ -181,6 +236,12 @@ export async function POST(request) {
         }
       }
 
+      // Update parent playlist updated_at
+      await supabase
+        .from("user_playlists")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", String(playlistId));
+
       return NextResponse.json({ success: true, count: records.length });
     }
 
@@ -192,6 +253,14 @@ export async function POST(request) {
         track_id: String(track.id || trackKey),
         track_key: trackKey,
         position: Number(position) || 0,
+        title: String(track.title || track.name || "Untitled Track"),
+        artist: String(track.artist || track.subtitle || track.artistName || "Unknown Artist"),
+        album: String(track.album || track.albumName || ""),
+        duration: typeof track.duration === "number" ? track.duration : 0,
+        duration_formatted: track.durationFormatted || null,
+        audio_url: track.audioUrl || track.audio_url || null,
+        cover_url: track.coverUrl || track.cover_url || null,
+        source: track.source || "custom",
         track_data: track,
         added_at: new Date().toISOString(),
       };
@@ -212,6 +281,14 @@ export async function POST(request) {
           playlist_id: String(playlistId),
           track_id: String(track.id || trackKey),
           position: Number(position) || 0,
+          title: String(track.title || track.name || "Untitled Track"),
+          artist: String(track.artist || track.subtitle || track.artistName || "Unknown Artist"),
+          album: String(track.album || track.albumName || ""),
+          duration: typeof track.duration === "number" ? track.duration : 0,
+          duration_formatted: track.durationFormatted || null,
+          audio_url: track.audioUrl || track.audio_url || null,
+          cover_url: track.coverUrl || track.cover_url || null,
+          source: track.source || "custom",
           track_data: track,
           added_at: new Date().toISOString(),
         };
@@ -223,6 +300,12 @@ export async function POST(request) {
         console.error("[Playlists Tracks API] Track insert error:", error.message);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
       }
+
+      // Update parent playlist updated_at
+      await supabase
+        .from("user_playlists")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", String(playlistId));
 
       return NextResponse.json({ success: true, trackKey });
     }
@@ -284,6 +367,12 @@ export async function DELETE(request) {
       console.error("[Playlists Tracks API] DELETE error:", error.message);
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
+
+    // Update parent playlist updated_at
+    await supabase
+      .from("user_playlists")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", String(playlistId));
 
     return NextResponse.json({ success: true, deletedTrackId: tid });
   } catch (err) {

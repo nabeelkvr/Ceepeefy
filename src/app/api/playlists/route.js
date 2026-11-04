@@ -3,6 +3,28 @@ import { createSupabaseServerClient } from "../../../services/supabaseServer.js"
 import { formatPlaylistDuration } from "../../../utils/playlistUtils.js";
 
 /**
+ * Derives a stable, deterministic track_key from track properties
+ */
+function deriveStableTrackKey(track) {
+  if (!track) return "";
+  if (track.track_key) return String(track.track_key);
+
+  const url = track.audioUrl || track.audio_url || "";
+  if (url) {
+    try {
+      const parsed = new URL(url);
+      const pathname = parsed.pathname;
+      if (pathname) {
+        return pathname.replace(/^\/+/, "");
+      }
+    } catch {}
+  }
+
+  const id = track.id || track.track_id || track.spotifyId || "";
+  return String(id).replace(/__pos_\d+$/, "");
+}
+
+/**
  * Playlists API Route
  * Authoritative Server-Side Playlist Persistence
  * Enforces authenticated Supabase session and scopes operations to auth_user_id.
@@ -20,11 +42,16 @@ export async function GET(request) {
       );
     }
 
-    // 1. Fetch active playlists owned by authenticated user
+    // 1. Fetch active playlists owned by authenticated user (including verified legacy owner 'nabeeyl')
+    const isOwnerNabeeyl = user.email === "nabeelek3603@gmail.com";
+    const filter = isOwnerNabeeyl
+      ? `auth_user_id.eq.${user.id},user_id.eq.${user.id},user_id.eq.nabeeyl`
+      : `auth_user_id.eq.${user.id},user_id.eq.${user.id}`;
+
     const { data: playlistsData, error: plError } = await supabase
       .from("user_playlists")
       .select("*")
-      .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id}`)
+      .or(filter)
       .is("deleted_at", null)
       .order("updated_at", { ascending: false });
 
@@ -69,7 +96,60 @@ export async function GET(request) {
 
     // 3. Assemble UI-compatible playlist records
     const assembled = playlists.map((pl) => {
-      const plTracks = tracksByPlaylist[pl.id] || [];
+      let plTracks = tracksByPlaylist[pl.id] || [];
+
+      // Fallback: If playlist_tracks has no rows for this playlist, hydrate from JSONB tracks column
+      if (plTracks.length === 0 && Array.isArray(pl.tracks) && pl.tracks.length > 0) {
+        plTracks = pl.tracks;
+
+        // Auto-sync into playlist_tracks so relational store is populated
+        (async () => {
+          try {
+            const records = pl.tracks.map((t, idx) => {
+              const trackKey = deriveStableTrackKey(t) || `trk_${idx}`;
+              return {
+                playlist_id: String(pl.id),
+                track_id: String(t.id || trackKey),
+                track_key: trackKey,
+                position: idx,
+                title: String(t.title || t.name || "Untitled Track"),
+                artist: String(t.artist || t.subtitle || t.artistName || "Unknown Artist"),
+                album: String(t.album || t.albumName || ""),
+                duration: typeof t.duration === "number" ? t.duration : 0,
+                duration_formatted: t.durationFormatted || null,
+                audio_url: t.audioUrl || t.audio_url || null,
+                cover_url: t.coverUrl || t.cover_url || null,
+                source: t.source || "custom",
+                track_data: t,
+                added_at: new Date().toISOString(),
+              };
+            });
+
+            const CHUNK_SIZE = 50;
+            for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+              const chunk = records.slice(i, i + CHUNK_SIZE);
+              const { error: trkErr } = await supabase
+                .from("playlist_tracks")
+                .upsert(chunk, { onConflict: "playlist_id,track_key" });
+
+              if (trkErr && (trkErr.code === "42703" || trkErr.message?.includes("track_key") || trkErr.code === "42P10")) {
+                const baselineChunk = chunk.map(({ track_key, ...rest }) => rest);
+                for (const item of baselineChunk) {
+                  await supabase
+                    .from("playlist_tracks")
+                    .delete()
+                    .eq("playlist_id", String(pl.id))
+                    .eq("track_id", item.track_id);
+                  await supabase.from("playlist_tracks").insert([item]);
+                }
+              }
+            }
+          } catch (syncErr) {
+            console.warn("[Playlists API] Auto-sync to playlist_tracks error:", syncErr);
+          }
+        })();
+      }
+
       const isSelfMix =
         pl.kind === "mix" ||
         pl.badge === "SELF MIX" ||
@@ -208,12 +288,20 @@ export async function POST(request) {
     // If initial tracks provided on playlist creation, save them to playlist_tracks safely
     if (Array.isArray(playlist.tracks) && playlist.tracks.length > 0) {
       const records = playlist.tracks.map((t, idx) => {
-        const trackKey = t.track_key || (t.audioUrl ? new URL(t.audioUrl).pathname.replace(/^\/+/, "") : null) || t.id || `trk_${idx}`;
+        const trackKey = deriveStableTrackKey(t) || `trk_${idx}`;
         return {
           playlist_id: String(playlist.id),
           track_id: String(t.id || trackKey),
           track_key: String(trackKey),
           position: idx,
+          title: String(t.title || t.name || "Untitled Track"),
+          artist: String(t.artist || t.subtitle || t.artistName || "Unknown Artist"),
+          album: String(t.album || t.albumName || ""),
+          duration: typeof t.duration === "number" ? t.duration : 0,
+          duration_formatted: t.durationFormatted || null,
+          audio_url: t.audioUrl || t.audio_url || null,
+          cover_url: t.coverUrl || t.cover_url || null,
+          source: t.source || "custom",
           track_data: t,
           added_at: new Date().toISOString(),
         };
