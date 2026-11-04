@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { verifySessionToken, SESSION_COOKIE_NAME } from "./server/auth.js";
+import { createServerClient } from "@supabase/ssr";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "";
 
 /**
  * Next.js 16 Proxy Convention (replaces middleware)
- * Protects page routes and sensitive API endpoints against unauthenticated access.
+ * Enforces authoritative authentication via Supabase Auth server verification.
  */
-export function proxy(request) {
+export async function proxy(request) {
   const { pathname } = request.nextUrl;
 
   // 1. Allow public static assets and files
@@ -44,36 +47,54 @@ export function proxy(request) {
     return NextResponse.next();
   }
 
-  // 3. Verify session cookie (supports both Ceepeefy session token and Supabase SSR auth cookies)
-  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const session = verifySessionToken(sessionCookie);
+  // 3. Cryptographically verify Supabase Auth session via getUser()
+  // Do NOT trust mere presence of cookies; validate with Supabase Auth server
+  let response = NextResponse.next({ request });
 
-  const hasSupabaseCookie = request.cookies
-    .getAll()
-    .some((c) => c.name.startsWith("sb-") && c.name.includes("-auth-token") && Boolean(c.value));
-
-  // 4. Handle unauthenticated requests
-  if (!session && !hasSupabaseCookie) {
-    // If it's an API route: return 401 Unauthorized
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized: Private instance. Authentication required.",
-          code: "UNAUTHORIZED",
+  if (supabaseUrl && supabaseAnonKey) {
+    try {
+      const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+            response = NextResponse.next({ request });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options)
+            );
+          },
         },
-        { status: 401 }
-      );
-    }
+      });
 
-    // If it's a page navigation: redirect to /login
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("from", pathname);
-    return NextResponse.redirect(loginUrl);
+      const { data: { user }, error } = await supabase.auth.getUser();
+
+      if (user && !error) {
+        // Authenticated user verified by Supabase Auth
+        return response;
+      }
+    } catch (err) {
+      console.warn("[Proxy] Supabase session verification notice:", err?.message || err);
+    }
   }
 
-  // 5. Authenticated: pass through
-  return NextResponse.next();
+  // 4. Handle unauthenticated requests
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Unauthorized: Private instance. Authentication required.",
+        code: "UNAUTHORIZED",
+      },
+      { status: 401 }
+    );
+  }
+
+  // If it's a page navigation: redirect to /login
+  const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set("from", pathname);
+  return NextResponse.redirect(loginUrl);
 }
 
 export default proxy;

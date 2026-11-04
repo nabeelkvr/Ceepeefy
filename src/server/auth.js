@@ -9,10 +9,10 @@ import crypto from "node:crypto";
  * Password: (stored as secure PBKDF2 hash on server)
  */
 
-// Secret used for HMAC signing of session tokens (set in env or fallback to a stable server secret)
+// Secret used for HMAC signing of internal tokens (set in env or generated securely on boot)
 const SESSION_SECRET =
   process.env.SESSION_SECRET ||
-  "ceepeefy-master-session-secret-key-2026-secure-f83b194d";
+  crypto.randomBytes(32).toString("hex");
 
 // Salt for password hashing
 export const OWNER_PASSWORD_SALT =

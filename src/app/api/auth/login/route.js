@@ -6,9 +6,6 @@ import {
   checkRateLimit,
   recordFailedAttempt,
   resetRateLimit,
-  createSessionToken,
-  SESSION_COOKIE_NAME,
-  SESSION_MAX_AGE_SEC,
 } from "../../../../server/auth.js";
 
 export async function POST(request) {
@@ -63,7 +60,7 @@ export async function POST(request) {
 
     const supabase = await createSupabaseServerClient();
 
-    // Authenticate with Supabase Auth
+    // Authenticate exclusively with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: targetEmail,
       password: rawPass,
@@ -86,7 +83,7 @@ export async function POST(request) {
     const user = authData.user;
     const resolvedUsername = rawUser.includes("@") ? (user.user_metadata?.username || DEFAULT_USER_ID) : rawUser;
 
-    console.log(`[Auth API] Login successful for user "${resolvedUsername}" (Auth UID: ${user.id}). Setting session cookies.`);
+    console.log(`[Auth API] Login successful for user "${resolvedUsername}" (Auth UID: ${user.id}). Issuing Supabase Auth session.`);
 
     const response = NextResponse.json({
       success: true,
@@ -100,13 +97,9 @@ export async function POST(request) {
         plan: "Owner / Studio Master",
         isLoggedIn: true,
       },
-      session: {
-        access_token: authData.session.access_token,
-        expires_at: authData.session.expires_at,
-      },
     });
 
-    // 1. Explicitly mirror all Supabase Auth SSR cookies into the outgoing response
+    // Explicitly mirror all Supabase Auth SSR session cookies into the outgoing response
     try {
       const cookieStore = await cookies();
       cookieStore.getAll().forEach((c) => {
@@ -115,19 +108,6 @@ export async function POST(request) {
     } catch (cookieErr) {
       console.warn("[Auth API] Notice copying cookieStore:", cookieErr.message);
     }
-
-    // 2. Set the Ceepeefy session token cookie for proxy and route protection
-    const token = createSessionToken(resolvedUsername);
-    const isProd = process.env.NODE_ENV === "production";
-    response.cookies.set({
-      name: SESSION_COOKIE_NAME,
-      value: token,
-      httpOnly: true,
-      secure: isProd,
-      sameSite: "lax",
-      path: "/",
-      maxAge: SESSION_MAX_AGE_SEC,
-    });
 
     return response;
   } catch (err) {
