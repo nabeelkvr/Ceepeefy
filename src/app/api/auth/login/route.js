@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createSupabaseServerClient } from "../../../../services/supabaseServer.js";
 import { resolveEmailForUser, DEFAULT_USER_ID } from "../../../../config/authConfig.js";
 import {
   checkRateLimit,
   recordFailedAttempt,
   resetRateLimit,
+  createSessionToken,
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_SEC,
 } from "../../../../server/auth.js";
 
 export async function POST(request) {
@@ -15,6 +19,7 @@ export async function POST(request) {
 
     const rateCheck = checkRateLimit(ip);
     if (!rateCheck.allowed) {
+      console.warn(`[Auth API] Rate limit exceeded for IP: ${ip}`);
       return NextResponse.json(
         {
           success: false,
@@ -54,6 +59,8 @@ export async function POST(request) {
     }
 
     const targetEmail = resolveEmailForUser(rawUser);
+    console.log(`[Auth API] Login attempt for identifier: "${rawUser}" (target email: "${targetEmail}") from IP: ${ip}`);
+
     const supabase = await createSupabaseServerClient();
 
     // Authenticate with Supabase Auth
@@ -63,6 +70,7 @@ export async function POST(request) {
     });
 
     if (authError || !authData?.user) {
+      console.warn(`[Auth API] Supabase login failed for "${rawUser}": ${authError?.message || "User not found"}`);
       recordFailedAttempt(ip);
       return NextResponse.json(
         {
@@ -78,7 +86,9 @@ export async function POST(request) {
     const user = authData.user;
     const resolvedUsername = rawUser.includes("@") ? (user.user_metadata?.username || DEFAULT_USER_ID) : rawUser;
 
-    return NextResponse.json({
+    console.log(`[Auth API] Login successful for user "${resolvedUsername}" (Auth UID: ${user.id}). Setting session cookies.`);
+
+    const response = NextResponse.json({
       success: true,
       message: "Successfully signed in with Supabase Auth.",
       user: {
@@ -95,10 +105,35 @@ export async function POST(request) {
         expires_at: authData.session.expires_at,
       },
     });
+
+    // 1. Explicitly mirror all Supabase Auth SSR cookies into the outgoing response
+    try {
+      const cookieStore = await cookies();
+      cookieStore.getAll().forEach((c) => {
+        response.cookies.set(c.name, c.value);
+      });
+    } catch (cookieErr) {
+      console.warn("[Auth API] Notice copying cookieStore:", cookieErr.message);
+    }
+
+    // 2. Set the Ceepeefy session token cookie for proxy and route protection
+    const token = createSessionToken(resolvedUsername);
+    const isProd = process.env.NODE_ENV === "production";
+    response.cookies.set({
+      name: SESSION_COOKIE_NAME,
+      value: token,
+      httpOnly: true,
+      secure: isProd,
+      sameSite: "lax",
+      path: "/",
+      maxAge: SESSION_MAX_AGE_SEC,
+    });
+
+    return response;
   } catch (err) {
-    console.error("[Auth API] Login exception:", err);
+    console.error("[Auth API] Login exception:", err?.message || err);
     return NextResponse.json(
-      { success: false, error: err.message || "Authentication error occurred." },
+      { success: false, error: "Internal server error during authentication." },
       { status: 500 }
     );
   }

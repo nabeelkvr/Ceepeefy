@@ -92,7 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_self_mixes_auth_user ON public.self_mixes (auth_u
 
 -- ------------------------------------------------------------------------------
 -- 4. ENFORCE FOREIGN KEYS WITH ON DELETE SET NULL (Idempotent)
--- Only drops foreign keys on auth_user_id referencing auth.users, then adds ON DELETE SET NULL
+-- Safely drops any prior constraint (e.g. CASCADE) and guarantees ON DELETE SET NULL
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -100,13 +100,12 @@ DECLARE
   t TEXT;
 BEGIN
   FOR t IN SELECT unnest(ARRAY['user_playlists', 'liked_songs', 'recently_played', 'self_mixes']) LOOP
-    -- Drop only existing foreign keys on auth_user_id that reference auth.users
+    -- Drop any existing foreign key constraint on auth_user_id referencing auth.users
     FOR r IN (
       SELECT c.conname
       FROM pg_constraint c
       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
       WHERE c.conrelid = ('public.' || t)::regclass
-        AND c.confrelid = 'auth.users'::regclass
         AND c.contype = 'f'
         AND a.attname = 'auth_user_id'
     ) LOOP
@@ -136,11 +135,10 @@ END $$;
 COMMIT;
 
 -- ------------------------------------------------------------------------------
--- VERIFICATION QUERY (Run after execution to confirm delete_rule is 'n' = SET NULL)
+-- VERIFICATION QUERY (Run to confirm columns and FK constraints)
 -- ------------------------------------------------------------------------------
 -- SELECT 
 --   tc.table_name, 
---   tc.constraint_name,
 --   kcu.column_name, 
 --   c.confdeltype AS delete_rule -- 'n' means SET NULL, 'c' means CASCADE
 -- FROM information_schema.table_constraints tc

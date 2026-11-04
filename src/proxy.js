@@ -44,12 +44,16 @@ export function proxy(request) {
     return NextResponse.next();
   }
 
-  // 3. Verify session cookie
+  // 3. Verify session cookie (supports both Ceepeefy session token and Supabase SSR auth cookies)
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const session = verifySessionToken(sessionCookie);
 
+  const hasSupabaseCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-") && c.name.includes("-auth-token") && Boolean(c.value));
+
   // 4. Handle unauthenticated requests
-  if (!session) {
+  if (!session && !hasSupabaseCookie) {
     // If it's an API route: return 401 Unauthorized
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(

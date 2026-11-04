@@ -66,7 +66,7 @@ export default function LoginPage() {
 
         setFeedback({
           type: "success",
-          message: `Welcome back, ${data.user.name}!`,
+          message: `Welcome back, ${data.user?.name || data.user?.username || "Master"}!`,
         });
 
         const searchParams =
