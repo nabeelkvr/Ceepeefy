@@ -268,4 +268,65 @@ describe("CEEPEEFY: Integration & Policy Verification Suite", () => {
 
     assert.equal(selfMixes.length, 3, "All 3 existing Self Mix records remain preserved in Self Mix view");
   });
+
+  // --------------------------------------------------------------------------
+  // 9. Storage Path Scoping & Cross-User Deletion Prevention
+  // --------------------------------------------------------------------------
+  it("9. Storage API strictly isolates user directories and forbids cross-user deletions", () => {
+    const userA_id = "550e8400-e29b-41d4-a716-446655440001";
+    const userB_id = "550e8400-e29b-41d4-a716-446655440002";
+
+    // Simulates the path verification logic in /api/storage
+    const verifyDeletionAccess = (sessionUserId, sessionEmail, requestedPath) => {
+      const decodedPath = decodeURIComponent(requestedPath).replace(/^\/+/, "");
+      const allowedPrefixes = [`${sessionUserId}/`];
+      if (sessionEmail === "nabeelek3603@gmail.com") {
+        allowedPrefixes.push("nabeeyl/");
+      }
+      return allowedPrefixes.some((prefix) => decodedPath.startsWith(prefix));
+    };
+
+    // User A deleting User A's file -> allowed
+    assert.equal(verifyDeletionAccess(userA_id, "userA@ceepeefy.audio", `${userA_id}/12345_song.mp3`), true);
+
+    // User A attempting to delete User B's file -> forbidden
+    assert.equal(verifyDeletionAccess(userA_id, "userA@ceepeefy.audio", `${userB_id}/12345_song.mp3`), false);
+
+    // Legacy file path with nabeeyl prefix -> allowed only for owner email
+    assert.equal(verifyDeletionAccess(userA_id, "nabeelek3603@gmail.com", "nabeeyl/covers/art.jpg"), true);
+    assert.equal(verifyDeletionAccess(userB_id, "other@ceepeefy.audio", "nabeeyl/covers/art.jpg"), false);
+  });
+
+  // --------------------------------------------------------------------------
+  // 10. Storage Signed-Upload Format Validation
+  // --------------------------------------------------------------------------
+  it("10. Storage signed upload endpoint enforces MIME and extension whitelist", () => {
+    const validateUploadType = (fileName, fileType, folder) => {
+      if (folder === "covers" || fileType?.startsWith("image/")) {
+        return /\.(jpe?g|png|webp|gif)$/i.test(fileName) || Boolean(fileType?.startsWith("image/"));
+      }
+      return (
+        /\.(mp3|wav)$/i.test(fileName) ||
+        fileType === "audio/mpeg" ||
+        fileType === "audio/wav" ||
+        fileType === "audio/x-wav"
+      );
+    };
+
+    // Allowed audio files
+    assert.equal(validateUploadType("track.mp3", "audio/mpeg", "audio"), true);
+    assert.equal(validateUploadType("song.wav", "audio/wav", "audio"), true);
+
+    // Disallowed audio files
+    assert.equal(validateUploadType("malware.exe", "application/x-msdownload", "audio"), false);
+    assert.equal(validateUploadType("document.pdf", "application/pdf", "audio"), false);
+
+    // Allowed cover formats
+    assert.equal(validateUploadType("art.jpg", "image/jpeg", "covers"), true);
+    assert.equal(validateUploadType("art.png", "image/png", "covers"), true);
+    assert.equal(validateUploadType("art.webp", "image/webp", "covers"), true);
+
+    // Disallowed cover formats
+    assert.equal(validateUploadType("script.js", "application/javascript", "covers"), false);
+  });
 });

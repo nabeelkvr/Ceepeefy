@@ -18,8 +18,19 @@ export const supabase = isSupabaseConfigured()
 
 const BUCKET_NAME = "self-mixes";
 
+const apiFetch = async (endpoint, options = {}) => {
+  const base = typeof window !== "undefined"
+    ? ""
+    : (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+  return fetch(`${base}${endpoint}`, {
+    ...options,
+    credentials: "include",
+  });
+};
+
 /**
- * Uploads an audio file (.mp3 or .wav) directly to the Supabase cloud storage bucket
+ * Uploads an audio file (.mp3 or .wav) using authorized signed upload URLs
+ * Scopes upload destination strictly to authenticated user's namespace
  * @param {File} file - Audio file (.mp3 or .wav)
  * @param {string} owner - Account handle (default DEFAULT_USER_ID)
  * @returns {Promise<{ publicUrl: string, filePath: string }>}
@@ -40,35 +51,44 @@ export const uploadAudioToCloud = async (file, owner = DEFAULT_USER_ID) => {
     throw new Error("Invalid file format. Only .mp3 and .wav audio files are supported.");
   }
 
-  const cleanFileName = file.name
-    .replace(/[^a-zA-Z0-9._-]/g, "_")
-    .toLowerCase();
-  const filePath = `${owner}/${Date.now()}_${cleanFileName}`;
-
   const contentType = file.name.endsWith(".wav")
     ? "audio/wav"
     : file.type || "audio/mpeg";
 
-  const { data, error } = await supabase.storage
-    .from(BUCKET_NAME)
-    .upload(filePath, file, {
-      cacheControl: "3600",
-      upsert: false,
-      contentType,
-    });
+  // 1. Request short-lived signed upload URL from authenticated route handler
+  const signRes = await apiFetch("/api/storage/signed-upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName: file.name,
+      fileType: contentType,
+      folder: "audio",
+    }),
+  });
 
-  if (error) {
-    console.error("Supabase storage upload error:", error);
-    throw error;
+  if (!signRes.ok) {
+    const err = await signRes.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to obtain authorized upload credentials.");
   }
 
-  const { data: urlData } = supabase.storage
+  const { path, token, publicUrl } = await signRes.json();
+
+  // 2. Perform upload via signed URL token
+  const { error: uploadError } = await supabase.storage
     .from(BUCKET_NAME)
-    .getPublicUrl(data.path);
+    .uploadToSignedUrl(path, token, file, {
+      contentType,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    console.error("[Supabase Storage] uploadToSignedUrl failed:", uploadError);
+    throw uploadError;
+  }
 
   return {
-    publicUrl: urlData.publicUrl,
-    filePath: data.path,
+    publicUrl,
+    filePath: path,
   };
 };
 
@@ -89,7 +109,7 @@ const dataUrlToBlob = (dataUrl) => {
 };
 
 /**
- * Uploads a playlist cover image directly to Supabase cloud storage (`self-mixes` bucket)
+ * Uploads a playlist cover image using authorized signed upload URLs
  * Accepts File, Blob, or base64 data URL
  * @param {File|Blob|string} imageFileOrData - Image file, blob, or data URL
  * @param {string} playlistId - Associated playlist ID
@@ -120,28 +140,43 @@ export const uploadPlaylistCoverToCloud = async (imageFileOrData, playlistId, ow
   else if (contentType.includes("gif")) extension = "gif";
 
   const cleanId = String(playlistId || `cover-${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, "_");
-  const filePath = `${owner}/covers/${cleanId}_${Date.now()}.${extension}`;
 
-  const { data, error } = await supabase.storage
-    .from(BUCKET_NAME)
-    .upload(filePath, fileToUpload, {
-      cacheControl: "31536000",
+  // 1. Request short-lived signed upload URL from authenticated route handler
+  const signRes = await apiFetch("/api/storage/signed-upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName: `cover_${cleanId}.${extension}`,
+      fileType: contentType,
+      folder: "covers",
+      playlistId: cleanId,
       upsert: true,
-      contentType,
-    });
+    }),
+  });
 
-  if (error) {
-    console.error("[Supabase Storage] Playlist cover upload error:", error);
-    throw error;
+  if (!signRes.ok) {
+    const err = await signRes.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to obtain cover upload credentials.");
   }
 
-  const { data: urlData } = supabase.storage
+  const { path, token, publicUrl } = await signRes.json();
+
+  // 2. Perform upload via signed URL token
+  const { error: uploadError } = await supabase.storage
     .from(BUCKET_NAME)
-    .getPublicUrl(data.path);
+    .uploadToSignedUrl(path, token, fileToUpload, {
+      contentType,
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.error("[Supabase Storage] Cover uploadToSignedUrl failed:", uploadError);
+    throw uploadError;
+  }
 
   return {
-    publicUrl: urlData.publicUrl,
-    filePath: data.path,
+    publicUrl,
+    filePath: path,
   };
 };
 
@@ -162,12 +197,10 @@ export const mirrorRemoteArtworkToCloud = async (remoteUrl, playlistId, owner = 
   }
 
   try {
-    // Attempt fetching the image; if direct fetch fails on client due to CORS, route through proxy
     let res;
     try {
       res = await fetch(remoteUrl, { cache: "no-store" });
     } catch {
-      // Fallback via our server-side image proxy
       const proxyUrl = `/api/spotify/image-proxy?url=${encodeURIComponent(remoteUrl)}`;
       res = await fetch(proxyUrl, { cache: "no-store" });
     }
@@ -183,125 +216,77 @@ export const mirrorRemoteArtworkToCloud = async (remoteUrl, playlistId, owner = 
 };
 
 /**
- * Saves a Self Mix record to the cloud database
+ * Saves a Self Mix record through authenticated API Route
  * @param {Object} mixData - Self mix details
  * @returns {Promise<Object>}
  */
 export const saveSelfMixToCloud = async (mixData) => {
-  if (!supabase || !isSupabaseConfigured()) {
+  if (!isSupabaseConfigured()) {
     throw new Error("Supabase is not configured.");
   }
 
-  const isUuid = (str) =>
-    typeof str === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  const res = await apiFetch("/api/library/self-mixes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mix: mixData }),
+  });
 
-  const authUid = isUuid(mixData.owner) ? mixData.owner : (isUuid(mixData.auth_user_id) ? mixData.auth_user_id : null);
-  const record = {
-    id: mixData.id || `cloud-mix-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    title: mixData.title || "Untitled Self Mix",
-    audio_url: mixData.audioUrl || mixData.audio_url,
-    owner: mixData.owner || DEFAULT_USER_ID,
-    ...(authUid ? { auth_user_id: authUid } : {}),
-    duration: typeof mixData.duration === "number" ? Math.round(mixData.duration) : 180,
-    duration_formatted: mixData.durationFormatted || mixData.duration_formatted || "3:00",
-    file_name: mixData.fileName || mixData.file_name || "",
-    file_size: mixData.fileSize || mixData.file_size || 0,
-    cover_url:
-      mixData.coverUrl ||
-      mixData.cover_url ||
-      "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-    created_at: new Date().toISOString(),
-  };
-
-  let { data, error } = await supabase
-    .from("self_mixes")
-    .insert([record])
-    .select()
-    .single();
-
-  if (error && (error.code === "42703" || error.message?.includes("auth_user_id"))) {
-    const fallbackRecord = { ...record };
-    delete fallbackRecord.auth_user_id;
-    const fallback = await supabase
-      .from("self_mixes")
-      .insert([fallbackRecord])
-      .select()
-      .single();
-    data = fallback.data;
-    error = fallback.error;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to save self mix.");
   }
 
-  if (error) {
-    console.error("Supabase database insert error:", error);
-    throw error;
-  }
-
-  return data;
+  const data = await res.json();
+  return data.mix;
 };
 
 /**
- * Fetches all Self Mix tracks for the account from Supabase
+ * Fetches all Self Mix tracks for the account from authenticated API Route
  * @param {string} owner - Account handle (default DEFAULT_USER_ID)
  * @returns {Promise<Array>}
  */
 export const fetchSelfMixesFromCloud = async (owner = DEFAULT_USER_ID) => {
-  if (!supabase || !isSupabaseConfigured()) {
+  if (!isSupabaseConfigured()) {
     return [];
   }
 
-  let { data, error } = await supabase
-    .from("self_mixes")
-    .select("*")
-    .or(`owner.eq.${owner},auth_user_id.eq.${owner}`)
-    .order("created_at", { ascending: false });
+  try {
+    const res = await apiFetch("/api/library/self-mixes");
+    if (!res.ok) return [];
 
-  if (error && (error.code === "42703" || error.message?.includes("auth_user_id"))) {
-    const fallback = await supabase
-      .from("self_mixes")
-      .select("*")
-      .eq("owner", owner)
-      .order("created_at", { ascending: false });
-    data = fallback.data;
-    error = fallback.error;
+    const data = await res.json();
+    return Array.isArray(data.mixes) ? data.mixes : [];
+  } catch (err) {
+    console.error("[SupabaseClient] Error fetching self mixes:", err);
+    return [];
   }
-
-  if (error) {
-    console.error("Supabase database fetch error:", error);
-    throw error;
-  }
-
-  return data || [];
 };
 
 /**
- * Deletes a Self Mix track from cloud database and cloud storage
+ * Deletes a Self Mix track from cloud database and cloud storage through authenticated endpoints
  * @param {string} id - Record ID
  * @param {string} audioUrl - Optional audio URL to purge from bucket
  */
 export const deleteSelfMixFromCloud = async (id, audioUrl) => {
-  if (!supabase || !isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured()) return;
 
-  // 1. Delete from database
-  const { error: dbError } = await supabase
-    .from("self_mixes")
-    .delete()
-    .eq("id", id);
+  try {
+    // 1. Delete from database via authenticated API
+    await apiFetch(`/api/library/self-mixes?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
 
-  if (dbError) {
-    console.error("Supabase delete error:", dbError);
-  }
-
-  // 2. Delete storage file if path can be extracted
-  if (audioUrl && audioUrl.includes(BUCKET_NAME)) {
-    try {
+    // 2. Delete storage file if path can be extracted
+    if (audioUrl && audioUrl.includes(BUCKET_NAME)) {
       const parts = audioUrl.split(`/${BUCKET_NAME}/`);
       if (parts[1]) {
         const decodedPath = decodeURIComponent(parts[1]);
-        await supabase.storage.from(BUCKET_NAME).remove([decodedPath]);
+        await apiFetch(`/api/storage?path=${encodeURIComponent(decodedPath)}`, {
+          method: "DELETE",
+        });
       }
-    } catch (e) {
-      console.warn("Could not delete cloud storage file:", e);
     }
+  } catch (e) {
+    console.warn("[SupabaseClient] Notice deleting self mix:", e);
   }
 };
