@@ -555,6 +555,24 @@ describe("CEEPEEFY: Comprehensive Playlist Persistence & Synchronization Suite",
         tracks: JSON.parse(JSON.stringify(trending50Tracks)),
         kind: "user",
       },
+      // Unrelated unassigned playlist: MUST NOT be claimed (Check 1)
+      {
+        id: "playlist-custom-stranger-999",
+        title: "Stranger Jam",
+        user_id: "stranger_account",
+        auth_user_id: null,
+        tracks: [{ id: "stranger_trk_1", title: "Stranger Song" }],
+        kind: "user",
+      },
+      // Corrupt non-array JSONB tracks: MUST NOT throw (Check 3)
+      {
+        id: "playlist-custom-corrupt-obj",
+        title: "Corrupt Playlist",
+        user_id: "nabeeyl",
+        auth_user_id: null,
+        tracks: { error: "not an array" }, // Non-array JSONB object
+        kind: "user",
+      },
       {
         id: "mix-1730000001",
         title: "Self Mix 1",
@@ -586,39 +604,51 @@ describe("CEEPEEFY: Comprehensive Playlist Persistence & Synchronization Suite",
       "Before migration: 0 rows for Trending Now Malayalam in playlist_tracks"
     );
 
-    // STEP 1: Backfill ownership
+    // STEP 1: Strict Ownership Backfill (Check 1 & Check 2)
+    // Only backfill records whose existing user_id is 'nabeeyl' or verified auth UUID.
+    // Preserves existing legacy user_id ('nabeeyl') without converting it to UUID.
     for (const pl of userPlaylistsDb) {
       if (
-        (pl.user_id === "nabeeyl" || pl.user_id === authUser.id || !pl.auth_user_id) &&
+        (pl.user_id === "nabeeyl" || pl.user_id === authUser.id) &&
         !pl.auth_user_id &&
         (pl.kind === null || pl.kind === "user") &&
         !pl.id.startsWith("mix-") &&
         pl.id !== "cloud-archive-playlist"
       ) {
         pl.auth_user_id = authUser.id;
-        pl.user_id = authUser.id;
+        // Check 2: DO NOT mutate user_id; preserve 'nabeeyl'
+        pl.updated_at = new Date().toISOString();
       }
     }
 
     const trendingPl = userPlaylistsDb.find((p) => p.id === "playlist-custom-1793802294021");
     assert.equal(trendingPl.auth_user_id, authUser.id, "Trending Now Malayalam auth_user_id updated to user UUID");
-    assert.equal(trendingPl.user_id, authUser.id, "Trending Now Malayalam user_id normalized");
+    assert.equal(trendingPl.user_id, "nabeeyl", "Check 2: Legacy user_id 'nabeeyl' MUST BE PRESERVED (not converted to UUID)");
+
+    // Check 1: Unrelated unassigned playlist MUST NOT be claimed
+    const strangerPl = userPlaylistsDb.find((p) => p.id === "playlist-custom-stranger-999");
+    assert.equal(strangerPl.auth_user_id, null, "Check 1: Unrelated unassigned playlist was NOT claimed");
 
     // Self Mix and Cloud Archive remain untouched
-    assert.equal(userPlaylistsDb[2].auth_user_id, null, "Self Mix untouched");
-    assert.equal(userPlaylistsDb[3].auth_user_id, null, "Cloud Archive untouched");
+    const selfMix = userPlaylistsDb.find((p) => p.id === "mix-1730000001");
+    const cloudArchive = userPlaylistsDb.find((p) => p.id === "cloud-archive-playlist");
+    assert.equal(selfMix.auth_user_id, null, "Self Mix untouched");
+    assert.equal(cloudArchive.auth_user_id, null, "Cloud Archive untouched");
 
-    // STEP 2 & 5: Insert unnormalized tracks with safe conflict handling
+    // STEP 2 & 5: Insert unnormalized tracks with safe CASE expression on jsonb_array_elements (Check 3)
     const normalPlaylists = userPlaylistsDb.filter(
       (p) => (p.kind === null || p.kind === "user") && !p.id.startsWith("mix-") && p.id !== "cloud-archive-playlist"
     );
 
     for (const targetPl of normalPlaylists) {
-      const rawTracks = targetPl.tracks || [];
+      // Check 3: Simulates CASE WHEN jsonb_typeof(p.tracks) = 'array' THEN p.tracks ELSE '[]'::jsonb END
+      const safeTracks = Array.isArray(targetPl.tracks) ? targetPl.tracks : [];
+      if (safeTracks.length === 0) continue;
+
       const baseKeyOccurrences = new Map();
 
-      for (let ord = 0; ord < rawTracks.length; ord++) {
-        const elem = rawTracks[ord];
+      for (let ord = 0; ord < safeTracks.length; ord++) {
+        const elem = safeTracks[ord];
         const originalTrackId = elem.id || elem.track_id || elem.spotifyId || `track_${ord}`;
         const baseKey = elem.track_key || elem.id || elem.track_id || elem.spotifyId || `track_${ord}`;
         const occCount = (baseKeyOccurrences.get(baseKey) || 0) + 1;

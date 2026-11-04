@@ -9,12 +9,17 @@
 -- 3. Preserves all existing playlists and Self Mix / Cloud Archive records untouched.
 -- 4. Safe insert-only conflict handling: does NOT overwrite existing normalized rows.
 -- 5. Preserves original track identifiers in track_id while generating safe track_key.
+-- 6. Preserves existing legacy user_id ('nabeeyl') without converting it to UUID.
+-- 7. Restricts ownership backfill to user_id = 'nabeeyl' or verified auth UUID.
 -- ==============================================================================
 
 BEGIN;
 
 -- ------------------------------------------------------------------------------
 -- STEP 1: RESOLVE AUTH UUID & BACKFILL PLAYLIST OWNERSHIP
+-- Strict ownership backfill: only backfills records whose existing user_id is
+-- 'nabeeyl' or the verified auth UUID. Never claims unrelated unassigned playlists.
+-- Preserves existing user_id value ('nabeeyl') for backward query compatibility.
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -31,37 +36,28 @@ BEGIN
 
   RAISE NOTICE 'Found Supabase Auth UUID % for nabeelek3603@gmail.com', v_auth_uid;
 
-  -- Backfill auth_user_id on ALL normal custom playlists owned by legacy user 'nabeeyl'
+  -- Backfill auth_user_id on normal custom playlists owned by legacy user 'nabeeyl'
   -- Excludes Self Mixes (kind = 'mix') and Cloud Archive (kind = 'cloud_archive')
+  -- Strictly restricted to user_id = 'nabeeyl' OR user_id = v_auth_uid::text
+  -- Preserves existing user_id ('nabeeyl') untouched
   UPDATE public.user_playlists
   SET 
     auth_user_id = v_auth_uid,
-    user_id = v_auth_uid::text,
     updated_at = timezone('utc'::text, now())
-  WHERE (user_id = 'nabeeyl' OR user_id = v_auth_uid::text OR auth_user_id IS NULL)
+  WHERE (user_id = 'nabeeyl' OR user_id = v_auth_uid::text)
     AND auth_user_id IS NULL
     AND (kind IS NULL OR kind = 'user')
     AND id NOT LIKE 'mix-%'
     AND id != 'cloud-archive-playlist';
 
-  -- Normalize user_id to UUID on any custom playlists that already had auth_user_id set
-  UPDATE public.user_playlists
-  SET 
-    user_id = v_auth_uid::text,
-    updated_at = timezone('utc'::text, now())
-  WHERE auth_user_id = v_auth_uid
-    AND user_id = 'nabeeyl'
-    AND (kind IS NULL OR kind = 'user')
-    AND id NOT LIKE 'mix-%'
-    AND id != 'cloud-archive-playlist';
-
-  RAISE NOTICE 'Successfully updated ownership for legacy custom playlists owned by nabeeyl to %', v_auth_uid;
+  RAISE NOTICE 'Successfully updated auth ownership for legacy custom playlists to % while preserving user_id.', v_auth_uid;
 END $$;
 
 -- ------------------------------------------------------------------------------
--- STEP 2: ENSURE TABLE COLUMNS EXIST IN public.playlist_tracks
+-- STEP 2: ENSURE TABLE COLUMNS & UUID-GENERATING DEFAULT IN public.playlist_tracks
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.playlist_tracks
+  ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid(),
   ADD COLUMN IF NOT EXISTS track_key TEXT,
   ADD COLUMN IF NOT EXISTS track_data JSONB,
   ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT 'Untitled Track',
@@ -75,6 +71,21 @@ ALTER TABLE public.playlist_tracks
   ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0,
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
+-- Verify that playlist_tracks.id has a UUID-generating default
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 
+    FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+      AND table_name = 'playlist_tracks' 
+      AND column_name = 'id'
+  ) THEN
+    ALTER TABLE public.playlist_tracks ALTER COLUMN id SET DEFAULT gen_random_uuid();
+    RAISE NOTICE 'Verified public.playlist_tracks.id has UUID-generating default gen_random_uuid().';
+  END IF;
+END $$;
+
 -- Non-destructive backfill of track_key on any pre-existing rows in playlist_tracks
 UPDATE public.playlist_tracks
 SET track_key = COALESCE(
@@ -87,15 +98,16 @@ SET track_key = COALESCE(
 WHERE track_key IS NULL OR track_key = '';
 
 -- ------------------------------------------------------------------------------
--- STEP 3: CHECK DUPLICATES & CREATE UNIQUE INDEX BEFORE ANY INSERT WITH ON CONFLICT
--- Guarantees the unique index exists before INSERT ON CONFLICT (Issue 1)
+-- STEP 3: CHECK DUPLICATES & VERIFY EXISTING UNIQUE INDEX
+-- Verifies the existing unique index rather than attempting to blindly recreate it
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
   v_dup_count INTEGER;
+  v_index_exists BOOLEAN;
   r RECORD;
 BEGIN
-  -- Check for existing duplicate (playlist_id, track_key) across the entire table
+  -- 1. Check for existing duplicate (playlist_id, track_key) across the entire table
   SELECT COUNT(*) INTO v_dup_count
   FROM (
     SELECT playlist_id, track_key
@@ -114,22 +126,40 @@ BEGIN
       RAISE WARNING 'Duplicate found in playlist_tracks before migration: playlist_id=%, track_key=%, count=%',
         r.playlist_id, r.track_key, r.count;
     END LOOP;
-    RAISE EXCEPTION 'Detected % duplicate (playlist_id, track_key) entries in playlist_tracks! Resolve before creating unique index.', v_dup_count;
+    RAISE EXCEPTION 'Detected % duplicate (playlist_id, track_key) entries in playlist_tracks! Resolve before verifying unique index.', v_dup_count;
   END IF;
 
-  RAISE NOTICE 'Zero duplicates in playlist_tracks. Safe to verify/create unique index.';
-END $$;
+  RAISE NOTICE 'Zero duplicates in playlist_tracks.';
 
--- Create unique index on (playlist_id, track_key) so ON CONFLICT can safely target it
-CREATE UNIQUE INDEX IF NOT EXISTS uq_playlist_tracks_key
-  ON public.playlist_tracks (playlist_id, track_key);
+  -- 2. Verify existing unique index / constraint uq_playlist_tracks_key
+  SELECT EXISTS (
+    SELECT 1 
+    FROM pg_indexes 
+    WHERE schemaname = 'public' 
+      AND tablename = 'playlist_tracks' 
+      AND indexname = 'uq_playlist_tracks_key'
+  ) OR EXISTS (
+    SELECT 1 
+    FROM pg_constraint 
+    WHERE conrelid = 'public.playlist_tracks'::regclass 
+      AND conname = 'uq_playlist_tracks_key'
+  ) INTO v_index_exists;
+
+  IF v_index_exists THEN
+    RAISE NOTICE 'Verified: Unique index/constraint uq_playlist_tracks_key exists on public.playlist_tracks (playlist_id, track_key).';
+  ELSE
+    RAISE NOTICE 'Unique index uq_playlist_tracks_key not found; creating unique index on public.playlist_tracks (playlist_id, track_key)...';
+    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS uq_playlist_tracks_key ON public.playlist_tracks (playlist_id, track_key)';
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_playlist_tracks_position
   ON public.playlist_tracks (playlist_id, position ASC);
 
 -- ------------------------------------------------------------------------------
 -- STEP 4: REPORT EXISTING CONFLICTING RECORDS (FOR INSPECTION)
--- Reports existing normalized rows matching incoming tracks without overwriting them (Issue 3)
+-- Reports existing normalized rows matching incoming tracks without overwriting them
+-- Uses safe CASE expression inside jsonb_array_elements for non-array JSONB safety
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -157,7 +187,12 @@ BEGIN
           ELSE COALESCE(NULLIF(elem->>'track_key', ''), NULLIF(elem->>'id', ''), NULLIF(elem->>'track_id', ''), NULLIF(elem->>'spotifyId', ''), 'track_' || (ord - 1)::text) || '__pos_' || (ord - 1)::text
         END AS incoming_track_key
       FROM public.user_playlists p,
-           jsonb_array_elements(p.tracks) WITH ORDINALITY AS t(elem, ord)
+           jsonb_array_elements(
+             CASE 
+               WHEN jsonb_typeof(p.tracks) = 'array' THEN p.tracks 
+               ELSE '[]'::jsonb 
+             END
+           ) WITH ORDINALITY AS t(elem, ord)
       WHERE jsonb_typeof(p.tracks) = 'array'
         AND jsonb_array_length(p.tracks) > 0
         AND (p.kind IS NULL OR p.kind = 'user')
@@ -179,9 +214,10 @@ END $$;
 
 -- ------------------------------------------------------------------------------
 -- STEP 5: MIGRATE ALL TRACKS SAFELY (INSERT-ONLY CONFLICT HANDLING)
--- Preserves original music track identifier in track_id (Issue 2)
--- Uses separate deterministic track_key for per-occurrence uniqueness (Issue 2)
--- Uses ON CONFLICT DO NOTHING to protect existing normalized data (Issue 3)
+-- Preserves original music track identifier in track_id
+-- Uses separate deterministic track_key for per-occurrence uniqueness
+-- Uses ON CONFLICT DO NOTHING to protect existing normalized data
+-- Uses safe CASE expression inside jsonb_array_elements for non-array JSONB safety
 -- ------------------------------------------------------------------------------
 WITH raw_tracks AS (
   SELECT 
@@ -215,7 +251,12 @@ WITH raw_tracks AS (
     COALESCE(NULLIF(elem->>'coverUrl', ''), NULLIF(elem->>'cover_url', ''), NULLIF(elem->>'thumbnail', '')) AS track_cover_url,
     COALESCE(NULLIF(elem->>'source', ''), 'custom') AS track_source
   FROM public.user_playlists p,
-       jsonb_array_elements(p.tracks) WITH ORDINALITY AS t(elem, ord)
+       jsonb_array_elements(
+         CASE 
+           WHEN jsonb_typeof(p.tracks) = 'array' THEN p.tracks 
+           ELSE '[]'::jsonb 
+         END
+       ) WITH ORDINALITY AS t(elem, ord)
   WHERE jsonb_typeof(p.tracks) = 'array'
     AND jsonb_array_length(p.tracks) > 0
     AND (p.kind IS NULL OR p.kind = 'user')
