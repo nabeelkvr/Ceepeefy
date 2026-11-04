@@ -21,6 +21,9 @@ export const USERNAME_TO_EMAIL_MAP = {
 export const resolveEmailForUser = (usernameOrEmail = "") => {
   if (!usernameOrEmail) return "";
   const clean = String(usernameOrEmail).trim().toLowerCase();
+  if (clean === "nabeeyl" || clean === "nabeeyl@ceepeefy.audio" || clean === "nabeeyl@gmail.com") {
+    return USERNAME_TO_EMAIL_MAP.nabeeyl;
+  }
   if (clean.includes("@")) return clean;
   return USERNAME_TO_EMAIL_MAP[clean] || `${clean}@ceepeefy.audio`;
 };

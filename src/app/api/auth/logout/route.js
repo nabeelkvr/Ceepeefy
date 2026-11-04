@@ -4,8 +4,9 @@ import { createSupabaseServerClient } from "../../../../services/supabaseServer.
 import { SESSION_COOKIE_NAME } from "../../../../server/auth.js";
 
 export async function POST() {
+  const capturedCookies = [];
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient(capturedCookies);
     await supabase.auth.signOut();
   } catch (e) {
     console.warn("[Auth API] Supabase signOut notice:", e?.message || e);
@@ -13,7 +14,18 @@ export async function POST() {
 
   const response = NextResponse.json({ success: true, message: "Logged out successfully." });
 
-  // 1. Clear the Ceepeefy session token
+  // 1. Clear any cookies explicitly captured by Supabase signOut
+  capturedCookies.forEach(({ name, options }) => {
+    response.cookies.set({
+      name,
+      value: "",
+      path: "/",
+      maxAge: 0,
+      ...options,
+    });
+  });
+
+  // 2. Clear the Ceepeefy session token
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
     value: "",

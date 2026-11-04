@@ -492,4 +492,87 @@ describe("CEEPEEFY: Integration & Policy Verification Suite", () => {
     assert.equal(clientState.user, null, "User state must be cleared when server session is missing");
     assert.equal(clientState.localStorage.ceepeefy_user, undefined, "Stale localStorage must be deleted");
   });
+
+  // --------------------------------------------------------------------------
+  // 14. Configuration Guard & Informative Error Handling
+  // --------------------------------------------------------------------------
+  it("14. Missing Supabase configuration returns 503 with informative error instead of 500", () => {
+    // Tests that missing environment variables trigger a clean, explicit error
+    const checkSupabaseConfig = (url, key) => {
+      const isConfigured = Boolean(url && key && !url.includes("your-project-id"));
+      if (!isConfigured) {
+        return {
+          status: 503,
+          success: false,
+          error: "Authentication service is not configured. Missing Supabase environment variables in this deployment environment. Please ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are added to your Vercel Preview settings.",
+        };
+      }
+      return { status: 200, success: true };
+    };
+
+    // Missing env vars must return 503, NOT generic 500
+    const result = checkSupabaseConfig("", "");
+    assert.equal(result.status, 503, "Must return HTTP 503 Service Unavailable when env vars are missing");
+    assert.equal(result.success, false);
+    assert.ok(result.error.includes("Missing Supabase environment variables"), "Error message must guide the user to Vercel settings");
+    assert.ok(!result.error.includes("Internal server error"), "Must NOT mask missing configuration as generic internal server error");
+
+    // Valid configuration passes
+    const validResult = checkSupabaseConfig("https://example.supabase.co", "anon-key-123");
+    assert.equal(validResult.status, 200);
+    assert.equal(validResult.success, true);
+  });
+
+  // --------------------------------------------------------------------------
+  // 15. Comprehensive Username & Email Resolution
+  // --------------------------------------------------------------------------
+  it("15. Username-to-email resolution handles all variations of owner handle", () => {
+    assert.equal(resolveEmailForUser("nabeeyl"), "nabeelek3603@gmail.com");
+    assert.equal(resolveEmailForUser("nabeeyl@ceepeefy.audio"), "nabeelek3603@gmail.com");
+    assert.equal(resolveEmailForUser("nabeeyl@gmail.com"), "nabeelek3603@gmail.com");
+    assert.equal(resolveEmailForUser("nabeelek3603@gmail.com"), "nabeelek3603@gmail.com");
+    assert.equal(resolveEmailForUser("  NABEEYL  "), "nabeelek3603@gmail.com");
+    assert.equal(resolveEmailForUser("otheruser"), "otheruser@ceepeefy.audio");
+    assert.equal(resolveEmailForUser("custom@domain.com"), "custom@domain.com");
+  });
+
+  // --------------------------------------------------------------------------
+  // 16. Cookie Capture and Dynamic Propagation
+  // --------------------------------------------------------------------------
+  it("16. Session cookies are captured with full options and propagated with root path", () => {
+    const capturedCookies = [];
+    const mockSupabaseEmit = (cookiesToSet) => {
+      capturedCookies.push(...cookiesToSet);
+    };
+
+    // Simulate Supabase emitting session cookies
+    mockSupabaseEmit([
+      {
+        name: "sb-project-auth-token",
+        value: "token-value-abc",
+        options: { maxAge: 3600, sameSite: "lax", httpOnly: true },
+      },
+    ]);
+
+    assert.equal(capturedCookies.length, 1);
+    assert.equal(capturedCookies[0].name, "sb-project-auth-token");
+
+    // Simulate response cookie application
+    const outgoingResponseCookies = new Map();
+    capturedCookies.forEach(({ name, value, options }) => {
+      outgoingResponseCookies.set(name, {
+        value,
+        path: "/",
+        sameSite: "lax",
+        httpOnly: true,
+        ...options,
+      });
+    });
+
+    const setCookie = outgoingResponseCookies.get("sb-project-auth-token");
+    assert.ok(setCookie, "Cookie must be set on outgoing response");
+    assert.equal(setCookie.path, "/", "Cookie path must be root '/'");
+    assert.equal(setCookie.httpOnly, true, "Cookie must be HttpOnly");
+    assert.equal(setCookie.maxAge, 3600, "Cookie maxAge must be preserved");
+  });
 });

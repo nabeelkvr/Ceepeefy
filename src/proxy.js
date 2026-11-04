@@ -93,8 +93,7 @@ export async function proxy(request) {
     }
   }
 
-  // 5. Handle unauthenticated requests
-  // Allow unauthenticated visitors to view /login stably without looping
+  // 4. Handle unauthenticated requests: allow unauthenticated visitors to view /login stably
   if (pathname === "/login") {
     return NextResponse.next();
   }
@@ -110,6 +109,7 @@ export async function proxy(request) {
     );
   }
 
+  // If it's a page navigation: redirect to /login
   // If unauthenticated navigation: redirect to /login
   const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set("from", pathname);

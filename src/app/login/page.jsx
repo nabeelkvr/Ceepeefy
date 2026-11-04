@@ -6,13 +6,31 @@ import { useMusic } from "../../context/MusicContext";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, login } = useMusic();
+  const { user, login, isAuthChecking } = useMusic();
 
   // Form states
   const [loginUser, setLoginUser] = useState("");
   const [password, setPassword] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // If already logged in and server check has finished, redirect to destination
+  useEffect(() => {
+    if (user && user.isLoggedIn && !isLoading && !isAuthChecking) {
+      const searchParams =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search)
+          : null;
+      const from = searchParams?.get("from");
+      const destination =
+        from && from.startsWith("/") && from !== "/login" ? from : "/";
+      if (typeof window !== "undefined") {
+        window.location.replace(destination);
+      } else {
+        router.replace(destination);
+      }
+    }
+  }, [user, isLoading, isAuthChecking, router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

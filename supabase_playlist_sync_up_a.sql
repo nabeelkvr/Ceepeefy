@@ -66,6 +66,10 @@ WHERE track_key IS NULL OR track_key = '';
 ALTER TABLE public.playlist_tracks
   ALTER COLUMN track_key SET NOT NULL;
 
+-- Fast index on track_key for lightning-fast lookups and track joins
+CREATE INDEX IF NOT EXISTS idx_playlist_tracks_key
+  ON public.playlist_tracks (playlist_id, track_key);
+
 -- Fast index on track ordering
 CREATE INDEX IF NOT EXISTS idx_playlist_tracks_position
   ON public.playlist_tracks (playlist_id, position ASC);
