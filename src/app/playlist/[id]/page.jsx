@@ -115,6 +115,8 @@ export default function PlaylistPage() {
   const [remotePlaylist, setRemotePlaylist] = useState(null);
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Playlist Offline Download States
   const [isDownloadingOffline, setIsDownloadingOffline] = useState(false);
@@ -1186,34 +1188,62 @@ export default function PlaylistPage() {
               <p className="text-xs text-outline leading-relaxed">
                 Are you sure you want to delete <span className="text-white font-semibold">"{playlist.title}"</span>? This action cannot be undone.
               </p>
+              {deleteError && (
+                <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-left">
+                  {deleteError}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3 mt-2">
               <button
                 type="button"
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="flex-1 py-2.5 rounded-xl border border-white/10 text-outline hover:text-white hover:bg-white/5 text-xs font-bold transition-colors cursor-pointer"
+                disabled={isDeleting}
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeleteError(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-white/10 text-outline hover:text-white hover:bg-white/5 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setIsDeleteModalOpen(false);
-                  if (isSelfMix) {
-                    deleteSelfMix(playlist.id);
-                    router.push("/self-mix");
-                  } else {
-                    if (deletePlaylist) {
-                      deletePlaylist(playlist.id);
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  setDeleteError(null);
+                  try {
+                    if (isSelfMix) {
+                      deleteSelfMix(playlist.id);
+                      setIsDeleteModalOpen(false);
+                      router.push("/self-mix");
                     } else {
-                      deleteCustomPlaylist(playlist.id);
+                      const deleteFn = deletePlaylist || deleteCustomPlaylist;
+                      const res = await deleteFn(playlist.id);
+                      if (res && res.error) {
+                        setDeleteError(res.error);
+                        setIsDeleting(false);
+                        return;
+                      }
+                      setIsDeleteModalOpen(false);
+                      router.push("/playlists");
                     }
-                    router.push("/playlists");
+                  } catch (err) {
+                    setDeleteError(err.message || "Failed to delete playlist");
+                  } finally {
+                    setIsDeleting(false);
                   }
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold shadow-[0_0_15px_rgba(239,68,68,0.4)] transition-all cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold shadow-[0_0_15px_rgba(239,68,68,0.4)] transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
-                Delete
+                {isDeleting ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  "Delete"
+                )}
               </button>
             </div>
           </div>

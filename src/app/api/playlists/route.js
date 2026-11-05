@@ -393,45 +393,73 @@ export async function DELETE(request) {
       );
     }
 
-    // Verify ownership before soft-delete
-    const { data: existing } = await supabase
+    // Verify ownership before delete
+    const { data: existing, error: fetchError } = await supabase
       .from("user_playlists")
-      .select("id, auth_user_id, user_id")
+      .select("id, auth_user_id, user_id, title")
       .eq("id", id)
       .maybeSingle();
 
-    if (existing) {
-      if (existing.auth_user_id) {
-        if (existing.auth_user_id !== user.id) {
-          return NextResponse.json(
-            { success: false, error: "Forbidden: You cannot delete another user's playlist." },
-            { status: 403 }
-          );
-        }
-      } else {
-        // Temporary legacy ownership check: only verified owner account tied to 'nabeeyl'
-        const isVerifiedLegacyOwner = user.email === "nabeelek3603@gmail.com" && existing.user_id === "nabeeyl";
-        if (!isVerifiedLegacyOwner) {
-          return NextResponse.json(
-            { success: false, error: "Forbidden: Unrecognized legacy playlist ownership." },
-            { status: 403 }
-          );
-        }
+    if (fetchError) {
+      return NextResponse.json({ success: false, error: fetchError.message }, { status: 500 });
+    }
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Playlist not found." },
+        { status: 404 }
+      );
+    }
+
+    if (existing.auth_user_id) {
+      if (existing.auth_user_id !== user.id) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden: You cannot delete another user's playlist." },
+          { status: 403 }
+        );
+      }
+    } else {
+      // Temporary legacy ownership check: only verified owner account tied to 'nabeeyl'
+      const isVerifiedLegacyOwner = user.email === "nabeelek3603@gmail.com" && existing.user_id === "nabeeyl";
+      if (!isVerifiedLegacyOwner) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden: Unrecognized legacy playlist ownership." },
+          { status: 403 }
+        );
       }
     }
 
-    // Soft delete per D3.e (setting deleted_at)
-    const { error } = await supabase
+    // Physical delete: PostgreSQL foreign-key ON DELETE CASCADE automatically
+    // removes all corresponding rows from public.playlist_tracks
+    const isOwnerNabeeyl = user.email === "nabeelek3603@gmail.com";
+    let deleteQuery = supabase
       .from("user_playlists")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id)
-      .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id}`);
+      .delete()
+      .eq("id", id);
 
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    if (isOwnerNabeeyl) {
+      deleteQuery = deleteQuery.or(`auth_user_id.eq.${user.id},user_id.eq.${user.id},user_id.eq.nabeeyl`);
+    } else {
+      deleteQuery = deleteQuery.or(`auth_user_id.eq.${user.id},user_id.eq.${user.id}`);
     }
 
-    return NextResponse.json({ success: true, deletedId: id });
+    const { data: deletedRow, error: deleteError } = await deleteQuery
+      .select("id")
+      .maybeSingle();
+
+    if (deleteError) {
+      console.error("[Playlists API] Failed to delete playlist:", deleteError.message);
+      return NextResponse.json({ success: false, error: deleteError.message }, { status: 500 });
+    }
+
+    if (!deletedRow) {
+      return NextResponse.json(
+        { success: false, error: "Playlist not found or already deleted." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true, deletedId: deletedRow.id });
   } catch (err) {
     console.error("[Playlists API] DELETE error:", err);
     return NextResponse.json(

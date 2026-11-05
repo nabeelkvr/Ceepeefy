@@ -1919,12 +1919,24 @@ export const MusicProvider = ({ children }) => {
     const currentUserId = getAccountUserId(user);
     const idStr = String(id);
 
+    // 1. Delete from Supabase cloud FIRST.
+    // If database deletion fails, abort and preserve playlist in the UI.
+    try {
+      const cloudRes = await deletePlaylistFromCloud(idStr, currentUserId);
+      if (cloudRes && cloudRes.success === false) {
+        return { success: false, error: cloudRes.error || "Failed to delete playlist from database." };
+      }
+    } catch (err) {
+      console.error("[MusicContext] Failed to delete playlist from database:", err);
+      return { success: false, error: err.message || "Failed to delete playlist from database." };
+    }
+
     // Safely detach active playback context if this playlist was playing
     if (playbackContextRef.current?.id === idStr) {
       setPlaybackContext(null);
     }
 
-    // 1. Remove from customPlaylists immediately and persist
+    // 2. Update frontend state and persistent storage ONLY after database deletion succeeds
     setCustomPlaylists((prev) => {
       const next = prev.filter((p) => String(p.id) !== idStr);
       try {
@@ -1939,7 +1951,7 @@ export const MusicProvider = ({ children }) => {
       return next;
     });
 
-    // 2. Remove from addedPlaylists immediately and persist
+    // 3. Remove from addedPlaylists
     setAddedPlaylists((prev) => {
       const next = prev.filter((p) => String(p.id) !== idStr);
       try {
@@ -1948,7 +1960,7 @@ export const MusicProvider = ({ children }) => {
       return next;
     });
 
-    // 3. Remove from pinnedPlaylistIds immediately and persist
+    // 4. Remove from pinnedPlaylistIds
     setPinnedPlaylistIds((prev) => {
       const next = prev.filter((pid) => String(pid) !== idStr);
       try {
@@ -1957,7 +1969,7 @@ export const MusicProvider = ({ children }) => {
       return next;
     });
 
-    // 4. Remove from selfMixes in case it was a selfMix
+    // 5. Remove from selfMixes in case it was a selfMix
     setSelfMixes((prev) => {
       const next = prev.filter((m) => String(m.id) !== idStr);
       try {
@@ -1967,7 +1979,7 @@ export const MusicProvider = ({ children }) => {
       return next;
     });
 
-    // 5. Clean up local title/cover/category overrides
+    // 6. Clean up local title/cover/category overrides
     try {
       const titles = JSON.parse(localStorage.getItem("ceepeefy_playlist_titles") || "{}");
       if (titles[idStr]) {
@@ -1985,13 +1997,6 @@ export const MusicProvider = ({ children }) => {
         localStorage.setItem("ceepeefy_playlist_categories", JSON.stringify(cats));
       }
     } catch { }
-
-    // 6. Delete from shared backend & Supabase
-    try {
-      await deletePlaylistFromCloud(idStr, currentUserId);
-    } catch (err) {
-      console.warn("[MusicContext] Notice deleting playlist from backend:", err);
-    }
 
     return { success: true };
   };

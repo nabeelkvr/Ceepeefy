@@ -225,30 +225,32 @@ export const removeTrackFromPlaylistCloud = async (playlistId, trackId) => {
 };
 
 /**
- * Soft deletes a playlist in Supabase
+ * Deletes a playlist and its associated tracks from Supabase cloud
  * @param {string} playlistId
  * @param {string} userId
- * @returns {Promise<boolean>}
+ * @returns {Promise<{ success: boolean, error?: string, deletedId?: string }>}
  */
 export const deletePlaylistFromCloud = async (playlistId, userId = DEFAULT_USER_ID) => {
-  if (!isSupabaseConfigured() || !playlistId) return false;
+  if (!playlistId) return { success: false, error: "Playlist ID required" };
+  if (!isSupabaseConfigured()) return { success: true, deletedId: playlistId };
 
   try {
     const res = await apiFetch(`/api/playlists?id=${encodeURIComponent(playlistId)}`, {
       method: "DELETE",
     });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error("[CloudService] Failed to delete playlist:", err.error || res.statusText);
-      return false;
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.success) {
+      const errorMsg = data.error || `Server error (${res.status}): ${res.statusText}`;
+      console.error("[CloudService] Failed to delete playlist:", errorMsg);
+      return { success: false, error: errorMsg };
     }
 
-    const data = await res.json();
-    return Boolean(data.success);
+    return { success: true, deletedId: data.deletedId || playlistId };
   } catch (err) {
     console.error("[CloudService] Exception in deletePlaylistFromCloud:", err);
-    return false;
+    return { success: false, error: err.message || "Failed to communicate with database." };
   }
 };
 
